@@ -1,0 +1,28 @@
+{
+	"name": "template-terraform",
+	// https://mcr.microsoft.com/en-us/product/devcontainers/base/tags
+	"image": "mcr.microsoft.com/devcontainers/base:dev-ubuntu-24.04",
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	"features": {
+		"ghcr.io/devcontainers/features/azure-cli:latest": {},
+		"ghcr.io/devcontainers/features/github-cli:latest": {},
+		"ghcr.io/devcontainers/features/terraform:latest": {},
+		"ghcr.io/dhoeric/features/trivy:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				// Common
+				"editorconfig.editorconfig",
+				"streetsidesoftware.code-spell-checker",
+				"oderwat.indent-rainbow",
+				// Terraform
+				"hashicorp.terraform",
+				"HashiCorp.HCL",
+				// GitHub
+				"GitHub.copilot",
+				"GitHub.copilot-chat"
+			]
+		}
+	}
+}
