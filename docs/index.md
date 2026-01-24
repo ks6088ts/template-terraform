@@ -9,6 +9,9 @@ make
 # set scenario
 SCENARIO=hello_world
 
+# set variables
+export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+
 # deploy resources
 make deploy SCENARIO=$SCENARIO
 
