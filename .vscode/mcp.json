@@ -1,0 +1,43 @@
+{
+  "servers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "TFE_TOKEN=${input:tfe_token}",
+        "-e",
+        "TFE_ADDRESS=${input:tfe_address}",
+        "hashicorp/terraform-mcp-server:0.4.0"
+      ]
+    },
+    "foundry-mcp-remote": {
+      "type": "http",
+      "url": "https://mcp.ai.azure.com"
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "microsoft-learn": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp"
+    }
+  },
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "tfe_token",
+      "description": "Terraform API Token",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "tfe_address",
+      "description": "Terraform Address",
+      "password": false
+    }
+  ]
+}

@@ -1,5 +1,5 @@
-variable "organization" {
-  description = "Specifies the GitHub organization"
+variable "github_owner" {
+  description = "Specifies the GitHub owner (user or organization) for the provider"
   type        = string
   default     = "ks6088ts"
 }

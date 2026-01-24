@@ -44,6 +44,12 @@ resource "azurerm_role_assignment" "this" {
 
 resource "azuread_service_principal_password" "this" {
   service_principal_id = azuread_service_principal.this.id
+  # Security: Set password expiration to enforce credential rotation (1 year from now)
+  end_date = timeadd(timestamp(), "8760h")
+
+  lifecycle {
+    ignore_changes = [end_date]
+  }
 }
 
 resource "azuread_application_federated_identity_credential" "this" {

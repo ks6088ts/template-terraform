@@ -18,3 +18,8 @@ make deploy SCENARIO=$SCENARIO
 # destroy resources
 make destroy SCENARIO=$SCENARIO
 ```
+
+## References
+
+- [🌟 Microsoft MCP Servers](https://github.com/microsoft/mcp)
+- [Terraform MCP Server](https://github.com/hashicorp/terraform-mcp-server)

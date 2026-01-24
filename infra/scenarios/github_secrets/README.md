@@ -39,7 +39,7 @@ SUBSCRIPTION_ID=$(az account show --query id --output tsv)
 TENANT_ID=$(az account show --query tenantId --output tsv)
 
 cat <<EOF > terraform.tfvars
-organization = "ks6088ts"
+github_owner = "ks6088ts"
 repository_name = "template-terraform"
 environment_name = "dev"
 actions_environment_secrets = [
