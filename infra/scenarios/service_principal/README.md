@@ -47,3 +47,9 @@ terraform output
 # Destroy the deployment
 terraform destroy -auto-approve
 ```
+
+## FAQ
+
+### Error: Listing service principals for filter "appId eq '00000003-0000-0000-c000-000000000000'"
+
+This error may occur if the logged-in user does not have sufficient permissions to list service principals in Microsoft Entra ID. Ensure that the user has at least the "Directory Readers" role assigned in Microsoft Entra ID. You can assign this role using the Azure portal or Azure CLI. Go to the Azure portal, navigate to "App registrations" > "Manage" > "API permissions", and ensure that the necessary permissions are granted.

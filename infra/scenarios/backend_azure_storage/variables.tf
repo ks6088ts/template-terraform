@@ -12,7 +12,7 @@ variable "location" {
 
 variable "tags" {
   description = "Specifies the tags"
-  type        = map(any)
+  type        = map(string)
   default = {
     scenario        = "backend_azure_storage"
     owner           = "ks6088ts"
