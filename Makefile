@@ -4,7 +4,7 @@ GIT_TAG ?= $(shell git describe --tags --abbrev=0 | sed -e s/v//g)
 
 # Azure
 APPLICATION_ID ?= $(shell az ad sp list --display-name $(APPLICATION_NAME) --query "[0].appId" --output tsv)
-APPLICATION_NAME ?= "template-terraform_ci"
+APPLICATION_NAME ?= "template-terraform_dev"
 SUBSCRIPTION_ID ?= $(shell az account show --query id --output tsv)
 SUBSCRIPTION_NAME ?= $(shell az account show --query name --output tsv)
 TENANT_ID ?= $(shell az account show --query tenantId --output tsv)
