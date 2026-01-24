@@ -13,3 +13,4 @@ A GitHub template repository for Terraform
 | [service_principal](./infra/scenarios/service_principal/README.md) | Azure に接続するための Service Principal を作成し、必要な権限を割り当てます。 |
 | [github_secrets](./infra/scenarios/github_secrets/README.md) | GitHub リポジトリの環境シークレットを作成・管理します。GitHub Actions ワークフローで使用できます。 |
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Azure Container Apps をデプロイします。Docker Hub イメージを使用し、外部アクセス可能なコンテナアプリを作成します。 |
+| [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Azure 上に Microsoft Foundry 環境をデプロイします。Microsoft Foundry ワークロードを実行するためのインフラストラクチャをセットアップします。 |
