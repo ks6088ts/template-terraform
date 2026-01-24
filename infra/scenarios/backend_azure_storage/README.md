@@ -1,18 +1,24 @@
-# Hello World Scenario
+# Backend Azure Storage Scenario
 
-Use random provider to generate random string.
+Create Azure Storage Account for Terraform backend.
 
 ## Prerequisites
 
 - Terraform CLI installed
+- Azure CLI installed
+- Azure subscription
 
 ## How to use
 
 ```shell
-# Create variable definitions file
-cat > terraform.tfvars <<EOF
-byte_length = 2
-EOF
+# Log in to Azure
+az login
+
+# (Optional) Confirm the details for the currently logged-in user
+az ad signed-in-user show
+
+# Set environment variables
+export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
 
 # Initialize Terraform
 terraform init
