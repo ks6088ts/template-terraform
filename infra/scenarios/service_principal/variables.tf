@@ -1,7 +1,7 @@
 variable "service_principal_name" {
   description = "Specifies the service principal name"
   type        = string
-  default     = "template-terraform_ci"
+  default     = "template-terraform_dev"
 }
 
 variable "role_definition_name" {
@@ -25,7 +25,7 @@ variable "github_repository" {
 variable "github_environment" {
   description = "Specifies the GitHub environment"
   type        = string
-  default     = "ci"
+  default     = "dev"
 }
 
 variable "resource_access_permissions" {

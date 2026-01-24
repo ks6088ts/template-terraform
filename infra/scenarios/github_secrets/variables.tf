@@ -1,0 +1,26 @@
+variable "organization" {
+  description = "Specifies the GitHub organization"
+  type        = string
+  default     = "ks6088ts"
+}
+
+variable "repository_name" {
+  description = "Specifies the name of the GitHub repository"
+  type        = string
+  default     = "template-terraform"
+}
+
+variable "environment_name" {
+  description = "Specifies the name of the GitHub repository environment"
+  type        = string
+  default     = "ci"
+}
+
+variable "actions_environment_secrets" {
+  description = "Specifies the environment secrets for the GitHub repository"
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default = []
+}
