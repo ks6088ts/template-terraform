@@ -1,6 +1,6 @@
-# Backend Azure Storage Scenario
+# GitHub Secrets and Environment Setup
 
-Create Azure Storage Account for Terraform backend.
+This Terraform scenario demonstrates how to create and manage GitHub repository environment secrets using the GitHub provider. It sets up secrets for a specified GitHub repository environment, which can be used in GitHub Actions workflows.
 
 ## Prerequisites
 

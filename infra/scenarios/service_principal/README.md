@@ -1,6 +1,6 @@
-# Backend Azure Storage Scenario
+# Creating a Service Principal with Terraform
 
-Create Azure Storage Account for Terraform backend.
+This Terraform scenario demonstrates how to create an Azure Service Principal and assign it the necessary permissions to manage resources in your Azure subscription. The created Service Principal can be used for authentication in various scenarios, such as CI/CD pipelines or automated scripts.
 
 ## Prerequisites
 

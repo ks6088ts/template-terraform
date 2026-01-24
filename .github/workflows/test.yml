@@ -2,11 +2,16 @@ name: test
 
 on:
   push:
-    paths:
-      - infra/**
+    branches:
+      - 'main'
+      - 'feature/**'
   schedule:
     - cron: "00 00 * * 3"
   workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   test:
@@ -15,6 +20,12 @@ jobs:
         platform: [ubuntu-latest]
         terraform-version: [1.13.4]
     runs-on: ${{ matrix.platform }}
+    environment: dev
+    env:
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      ARM_USE_OIDC: ${{ secrets.ARM_USE_OIDC }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

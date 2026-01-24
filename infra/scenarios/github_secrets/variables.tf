@@ -13,7 +13,7 @@ variable "repository_name" {
 variable "environment_name" {
   description = "Specifies the name of the GitHub repository environment"
   type        = string
-  default     = "ci"
+  default     = "dev"
 }
 
 variable "actions_environment_secrets" {
