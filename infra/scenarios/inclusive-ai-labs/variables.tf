@@ -177,9 +177,9 @@ variable "genai_azure_openai_endpoint" {
 }
 
 variable "genai_azure_openai_api_key" {
-  description = "Azure OpenAI API key (sensitive)"
+  description = "Azure OpenAI API key"
   type        = string
-  sensitive   = true
+  default     = "api_key"
 }
 
 variable "genai_azure_openai_deployment_name" {
