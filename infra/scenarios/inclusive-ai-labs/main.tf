@@ -113,9 +113,9 @@ resource "azurerm_container_app" "ollama" {
     max_replicas = var.ollama_max_replicas
   }
 
-  # Internal ingress only (accessible within the same Container Apps Environment)
+  # Ingress configuration (internal or external based on variable)
   ingress {
-    external_enabled = false
+    external_enabled = var.ollama_external_enabled
     target_port      = 11434
     traffic_weight {
       percentage      = 100

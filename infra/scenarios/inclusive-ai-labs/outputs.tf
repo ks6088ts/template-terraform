@@ -66,6 +66,16 @@ output "ollama_internal_fqdn" {
   value       = azurerm_container_app.ollama.ingress[0].fqdn
 }
 
+output "ollama_url" {
+  description = "URL to access the Ollama Container App (external URL if enabled, otherwise internal)"
+  value       = var.ollama_external_enabled ? "https://${azurerm_container_app.ollama.ingress[0].fqdn}" : "http://app-ollama (internal only)"
+}
+
+output "ollama_external_enabled" {
+  description = "Whether Ollama is accessible externally"
+  value       = var.ollama_external_enabled
+}
+
 # Storage outputs
 output "ollama_storage_account_name" {
   description = "Name of the Storage Account for Ollama"

@@ -200,6 +200,12 @@ variable "ollama_storage_quota_gb" {
   }
 }
 
+variable "ollama_external_enabled" {
+  description = "Whether Ollama should be accessible externally (true) or internally only (false)"
+  type        = bool
+  default     = false
+}
+
 # -----------------------------------------------------------------------------
 # Application Environment Variables
 # -----------------------------------------------------------------------------
