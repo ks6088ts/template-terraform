@@ -130,6 +130,77 @@ variable "voicevox_max_replicas" {
 }
 
 # -----------------------------------------------------------------------------
+# Ollama Container Settings
+# -----------------------------------------------------------------------------
+
+variable "ollama_image" {
+  description = "Docker Hub image for Ollama"
+  type        = string
+  default     = "ollama/ollama:latest"
+}
+
+variable "ollama_model" {
+  description = "Ollama model to pull on startup"
+  type        = string
+  default     = "gemma3:270m"
+}
+
+variable "ollama_cpu" {
+  description = "CPU cores allocated to Ollama container"
+  type        = number
+  default     = 2.0
+
+  validation {
+    condition     = contains([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], var.ollama_cpu)
+    error_message = "CPU must be one of: 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0."
+  }
+}
+
+variable "ollama_memory" {
+  description = "Memory allocated to Ollama container"
+  type        = string
+  default     = "4Gi"
+
+  validation {
+    condition     = can(regex("^[0-9]+(\\.[0-9]+)?Gi$", var.ollama_memory))
+    error_message = "Memory must be in format like '0.5Gi', '1Gi', '2Gi'."
+  }
+}
+
+variable "ollama_min_replicas" {
+  description = "Minimum number of replicas for Ollama"
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.ollama_min_replicas >= 0 && var.ollama_min_replicas <= 300
+    error_message = "Minimum replicas must be between 0 and 300."
+  }
+}
+
+variable "ollama_max_replicas" {
+  description = "Maximum number of replicas for Ollama"
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.ollama_max_replicas >= 1 && var.ollama_max_replicas <= 300
+    error_message = "Maximum replicas must be between 1 and 300."
+  }
+}
+
+variable "ollama_storage_quota_gb" {
+  description = "Storage quota in GB for Ollama Azure File Share"
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.ollama_storage_quota_gb >= 1 && var.ollama_storage_quota_gb <= 5120
+    error_message = "Storage quota must be between 1 and 5120 GB."
+  }
+}
+
+# -----------------------------------------------------------------------------
 # Application Environment Variables
 # -----------------------------------------------------------------------------
 
@@ -167,7 +238,7 @@ variable "cors_origins" {
 variable "genai_default_provider" {
   description = "Default GenAI provider"
   type        = string
-  default     = "azure-openai"
+  default     = "ollama"
 }
 
 variable "genai_azure_openai_endpoint" {

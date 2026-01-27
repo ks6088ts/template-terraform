@@ -25,6 +25,106 @@ resource "azurerm_container_app_environment" "this" {
 }
 
 # -----------------------------------------------------------------------------
+# Azure Storage for Ollama model persistence
+# -----------------------------------------------------------------------------
+resource "azurerm_storage_account" "ollama" {
+  name                     = "st${replace(var.name, "-", "")}ollama"
+  resource_group_name      = azurerm_resource_group.this.name
+  location                 = azurerm_resource_group.this.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  tags                     = var.tags
+}
+
+resource "azurerm_storage_share" "ollama" {
+  name               = "ollama-data"
+  storage_account_id = azurerm_storage_account.ollama.id
+  quota              = var.ollama_storage_quota_gb
+}
+
+# Mount Azure Files to Container Apps Environment
+resource "azurerm_container_app_environment_storage" "ollama" {
+  name                         = "ollama-storage"
+  container_app_environment_id = azurerm_container_app_environment.this.id
+  account_name                 = azurerm_storage_account.ollama.name
+  share_name                   = azurerm_storage_share.ollama.name
+  access_key                   = azurerm_storage_account.ollama.primary_access_key
+  access_mode                  = "ReadWrite"
+}
+
+# -----------------------------------------------------------------------------
+# Ollama Container App (Internal only)
+# -----------------------------------------------------------------------------
+resource "azurerm_container_app" "ollama" {
+  name                         = "app-ollama"
+  container_app_environment_id = azurerm_container_app_environment.this.id
+  resource_group_name          = azurerm_resource_group.this.name
+  revision_mode                = "Single"
+  tags                         = var.tags
+
+  template {
+    container {
+      name   = "ollama"
+      image  = var.ollama_image
+      cpu    = var.ollama_cpu
+      memory = var.ollama_memory
+
+      # Custom entrypoint to pull model on startup
+      command = ["/bin/sh", "-c"]
+      args    = ["ollama serve & sleep 5 && ollama pull ${var.ollama_model} && wait"]
+
+      # Environment variables
+      env {
+        name  = "OLLAMA_HOST"
+        value = "0.0.0.0"
+      }
+
+      # Mount volume for model persistence
+      volume_mounts {
+        name = "ollama-data"
+        path = "/root/.ollama"
+      }
+
+      # Health check probe
+      liveness_probe {
+        transport        = "HTTP"
+        port             = 11434
+        path             = "/"
+        initial_delay    = 30
+        interval_seconds = 30
+      }
+
+      readiness_probe {
+        transport        = "HTTP"
+        port             = 11434
+        path             = "/"
+        initial_delay    = 30
+        interval_seconds = 10
+      }
+    }
+
+    volume {
+      name         = "ollama-data"
+      storage_name = azurerm_container_app_environment_storage.ollama.name
+      storage_type = "AzureFile"
+    }
+
+    min_replicas = var.ollama_min_replicas
+    max_replicas = var.ollama_max_replicas
+  }
+
+  # Internal ingress only (accessible within the same Container Apps Environment)
+  ingress {
+    external_enabled = false
+    target_port      = 11434
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
 # voicevox Container App (Internal only)
 # -----------------------------------------------------------------------------
 resource "azurerm_container_app" "voicevox" {
@@ -144,6 +244,16 @@ resource "azurerm_container_app" "inclusive_ai_labs" {
         value = var.genai_azure_openai_api_version
       }
 
+      # Ollama Settings (internal communication via Container Apps internal DNS)
+      env {
+        name  = "GENAI_OLLAMA_BASE_URL"
+        value = "http://app-ollama"
+      }
+      env {
+        name  = "GENAI_OLLAMA_MODEL"
+        value = var.ollama_model
+      }
+
       # STT Settings
       env {
         name  = "STT_DEFAULT_PROVIDER"
@@ -200,5 +310,8 @@ resource "azurerm_container_app" "inclusive_ai_labs" {
     }
   }
 
-  depends_on = [azurerm_container_app.voicevox]
+  depends_on = [
+    azurerm_container_app.voicevox,
+    azurerm_container_app.ollama
+  ]
 }
