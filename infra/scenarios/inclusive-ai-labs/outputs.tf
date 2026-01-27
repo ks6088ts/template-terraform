@@ -49,3 +49,40 @@ output "voicevox_internal_fqdn" {
   description = "Internal FQDN of the voicevox Container App (accessible only within the environment)"
   value       = azurerm_container_app.voicevox.ingress[0].fqdn
 }
+
+# Ollama outputs
+output "ollama_id" {
+  description = "ID of the Ollama Container App"
+  value       = azurerm_container_app.ollama.id
+}
+
+output "ollama_name" {
+  description = "Name of the Ollama Container App"
+  value       = azurerm_container_app.ollama.name
+}
+
+output "ollama_internal_fqdn" {
+  description = "Internal FQDN of the Ollama Container App (accessible only within the environment)"
+  value       = azurerm_container_app.ollama.ingress[0].fqdn
+}
+
+output "ollama_url" {
+  description = "URL to access the Ollama Container App (external URL if enabled, otherwise internal)"
+  value       = var.ollama_external_enabled ? "https://${azurerm_container_app.ollama.ingress[0].fqdn}" : "http://app-ollama (internal only)"
+}
+
+output "ollama_external_enabled" {
+  description = "Whether Ollama is accessible externally"
+  value       = var.ollama_external_enabled
+}
+
+# Storage outputs
+output "ollama_storage_account_name" {
+  description = "Name of the Storage Account for Ollama"
+  value       = azurerm_storage_account.ollama.name
+}
+
+output "ollama_storage_share_name" {
+  description = "Name of the Azure File Share for Ollama"
+  value       = azurerm_storage_share.ollama.name
+}
