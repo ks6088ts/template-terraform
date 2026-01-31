@@ -84,6 +84,48 @@ az network bastion ssh \
   --ssh-key vm_key.pem
 ```
 
+### Verify Private Endpoint Connectivity
+
+After connecting to the VM via Bastion, run the following commands to verify that the storage account is accessible via Private Endpoint:
+
+```bash
+# Get storage account name from Terraform output
+STORAGE_ACCOUNT=$(terraform output -raw storage_account_name)
+
+# 1. Verify DNS resolution returns private IP (should return 10.1.1.x)
+nslookup ${STORAGE_ACCOUNT}.blob.core.windows.net
+
+# 2. Verify private endpoint IP matches
+terraform output private_endpoint_blob_ip
+
+# 3. Test connectivity to blob endpoint (should connect on port 443)
+curl -v https://${STORAGE_ACCOUNT}.blob.core.windows.net/ 2>&1 | head -20
+```
+
+**Inside the VM**, run these commands to confirm Private Endpoint is working:
+
+```bash
+# Check DNS resolves to private IP (not public IP)
+nslookup <storage-account-name>.blob.core.windows.net
+
+# Expected output should show private IP like:
+# Address: 10.1.1.4
+
+# Test HTTPS connectivity
+curl -I https://<storage-account-name>.blob.core.windows.net/
+
+# If you have Azure CLI installed on VM, list containers (requires auth)
+az storage container list --account-name <storage-account-name> --auth-mode login
+```
+
+**Quick one-liner to verify (from VM)**:
+
+```bash
+# Replace <storage-account-name> with actual name
+nslookup <storage-account-name>.blob.core.windows.net | grep -E "Address|Name" && \
+echo "✅ DNS resolves to private IP if address is 10.x.x.x"
+```
+
 ## Variables
 
 | Name | Description | Default |
