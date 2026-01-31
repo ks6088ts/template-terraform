@@ -66,7 +66,7 @@ resource "azurerm_subnet_network_security_group_association" "vm" {
 # =============================================================================
 
 resource "azurerm_storage_account" "this" {
-  name                          = "sa${replace(var.name, "-", "")}${substr(md5(azurerm_resource_group.this.id), 0, 8)}"
+  name                          = substr("sa${replace(var.name, "-", "")}${substr(md5(azurerm_resource_group.this.id), 0, 8)}", 0, 24)
   resource_group_name           = azurerm_resource_group.this.name
   location                      = azurerm_resource_group.this.location
   account_tier                  = var.storage_account_tier
