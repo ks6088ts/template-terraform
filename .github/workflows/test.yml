@@ -20,7 +20,7 @@ jobs:
         platform: [ubuntu-latest]
         terraform-version: [1.13.4]
     runs-on: ${{ matrix.platform }}
-    timeout-minutes: 3
+    timeout-minutes: 10
     environment: dev
     env:
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
