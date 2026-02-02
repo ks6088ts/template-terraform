@@ -40,6 +40,7 @@ module "kubernetes_service" {
   node_count          = var.node_count
   os_disk_size_gb     = var.os_disk_size_gb
   network_plugin      = var.network_plugin
+  enable_acr_pull     = true
   acr_id              = module.container_registry.id
   tags                = var.tags
 }

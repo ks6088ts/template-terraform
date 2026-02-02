@@ -94,6 +94,12 @@ variable "network_policy" {
   default     = null
 }
 
+variable "enable_acr_pull" {
+  description = "Enable AcrPull role assignment for the ACR"
+  type        = bool
+  default     = false
+}
+
 variable "acr_id" {
   description = "ID of the Azure Container Registry to grant AcrPull access"
   type        = string
