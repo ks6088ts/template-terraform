@@ -182,7 +182,7 @@ resource "azurerm_container_app" "voicevox" {
 }
 
 # -----------------------------------------------------------------------------
-# inclusive-ai-labs Container App (External)
+# inclusive_ai_labs Container App (External)
 # -----------------------------------------------------------------------------
 resource "azurerm_container_app" "inclusive_ai_labs" {
   name                         = "app-inclusive-ai-labs"

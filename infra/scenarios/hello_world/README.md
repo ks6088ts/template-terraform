@@ -14,6 +14,18 @@ cat > terraform.tfvars <<EOF
 byte_length = 2
 EOF
 
+# create backend.tf if needed
+cat <<EOF > backend.tf
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "YOUR_RESOURCE_GROUP_NAME"
+    storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"
+    container_name       = "YOUR_CONTAINER_NAME"
+    key                  = "hello_world.dev.tfstate"
+  }
+}
+EOF
+
 # Initialize Terraform
 terraform init
 

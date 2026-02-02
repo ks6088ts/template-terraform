@@ -13,24 +13,24 @@ output "container_app_environment_name" {
   value       = azurerm_container_app_environment.this.name
 }
 
-# inclusive-ai-labs outputs
+# inclusive_ai_labs outputs
 output "inclusive_ai_labs_id" {
-  description = "ID of the inclusive-ai-labs Container App"
+  description = "ID of the inclusive_ai_labs Container App"
   value       = azurerm_container_app.inclusive_ai_labs.id
 }
 
 output "inclusive_ai_labs_name" {
-  description = "Name of the inclusive-ai-labs Container App"
+  description = "Name of the inclusive_ai_labs Container App"
   value       = azurerm_container_app.inclusive_ai_labs.name
 }
 
 output "inclusive_ai_labs_fqdn" {
-  description = "FQDN of the inclusive-ai-labs Container App (external URL)"
+  description = "FQDN of the inclusive_ai_labs Container App (external URL)"
   value       = azurerm_container_app.inclusive_ai_labs.ingress[0].fqdn
 }
 
 output "inclusive_ai_labs_url" {
-  description = "Full URL to access the inclusive-ai-labs Container App"
+  description = "Full URL to access the inclusive_ai_labs Container App"
   value       = "https://${azurerm_container_app.inclusive_ai_labs.ingress[0].fqdn}"
 }
 

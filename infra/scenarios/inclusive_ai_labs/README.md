@@ -1,6 +1,6 @@
-# inclusive-ai-labs
+# inclusive_ai_labs
 
-このTerraformシナリオは、Azure Container Apps上にinclusive-ai-labsアプリケーションをデプロイします。音声認識（STT）、AI対話（GenAI）、音声合成（TTS）を組み合わせた**インクルーシブなAI対話システム**を構築できます。
+このTerraformシナリオは、Azure Container Apps上にinclusive_ai_labsアプリケーションをデプロイします。音声認識（STT）、AI対話（GenAI）、音声合成（TTS）を組み合わせた**インクルーシブなAI対話システム**を構築できます。
 
 ## 🎯 このシナリオでできること
 
@@ -14,7 +14,7 @@
 
 | コンポーネント | 役割 | 外部アクセス |
 |---------------|------|-------------|
-| **inclusive-ai-labs** | メインAPIサーバー（対話処理の司令塔） | ✅ 可能 |
+| **inclusive_ai_labs** | メインAPIサーバー（対話処理の司令塔） | ✅ 可能 |
 | **voicevox** | 日本語音声合成エンジン | ❌ 内部のみ |
 | **ollama** | ローカルLLM実行エンジン | ❌ 内部のみ（設定で変更可） |
 
@@ -34,7 +34,7 @@ flowchart TB
                 direction TB
 
                 subgraph External["外部公開サービス"]
-                    IAL["🎯 inclusive-ai-labs<br/>（メインAPI）<br/>ポート: 8000"]
+                    IAL["🎯 inclusive_ai_labs<br/>（メインAPI）<br/>ポート: 8000"]
                 end
 
                 subgraph Internal["内部サービス"]
@@ -75,7 +75,7 @@ flowchart LR
         SA["💾 azurerm_storage_account"]
         FS["📂 azurerm_storage_share"]
         ES["🔗 azurerm_container_app_environment_storage"]
-        CA1["📦 azurerm_container_app<br/>(inclusive-ai-labs)"]
+        CA1["📦 azurerm_container_app<br/>(inclusive_ai_labs)"]
         CA2["📦 azurerm_container_app<br/>(voicevox)"]
         CA3["📦 azurerm_container_app<br/>(ollama)"]
     end
@@ -99,7 +99,7 @@ flowchart LR
 sequenceDiagram
     autonumber
     participant User as 👤 ユーザー
-    participant API as 🎯 inclusive-ai-labs
+    participant API as 🎯 inclusive_ai_labs
     participant STT as 🎧 STT モジュール<br/>(Whisper)
     participant LLM as 🧠 GenAI モジュール<br/>(Ollama / Azure OpenAI)
     participant TTS as 🎤 TTS モジュール<br/>(voicevox / piper)
@@ -166,7 +166,7 @@ flowchart TD
 
 ## � マルチプロバイダ対応
 
-inclusive-ai-labs は **STT（音声認識）**、**GenAI（生成AI）**、**TTS（音声合成）** の各モジュールで**複数のプロバイダを切り替え可能**な設計になっています。用途や要件に応じて最適なプロバイダを選択できます。
+inclusive_ai_labs は **STT（音声認識）**、**GenAI（生成AI）**、**TTS（音声合成）** の各モジュールで**複数のプロバイダを切り替え可能**な設計になっています。用途や要件に応じて最適なプロバイダを選択できます。
 
 ### プロバイダ対応一覧
 
@@ -257,12 +257,12 @@ flowchart TB
         direction TB
 
         subgraph DNS["内部DNS"]
-            D1["app-inclusive-ai-labs"]
+            D1["app-inclusive_ai_labs"]
             D2["app-voicevox"]
             D3["app-ollama"]
         end
 
-        IAL["inclusive-ai-labs"]
+        IAL["inclusive_ai_labs"]
         VV["voicevox"]
         OL["ollama"]
 
@@ -276,6 +276,7 @@ flowchart TB
 ```
 
 同じContainer Apps環境内では、アプリ名で直接通信できます。
+
 - `http://app-voicevox` → voicevoxコンテナ
 - `http://app-ollama` → ollamaコンテナ
 
@@ -284,7 +285,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph Apps["アプリケーション"]
-        CA1["inclusive-ai-labs"]
+        CA1["inclusive_ai_labs"]
         CA2["voicevox"]
         CA3["ollama"]
     end
@@ -363,11 +364,11 @@ flowchart LR
 | `name` | `inclusiveailabs` | リソースの基本名 |
 | `location` | `japaneast` | Azureリージョン |
 
-### inclusive-ai-labs コンテナ設定
+### inclusive_ai_labs コンテナ設定
 
 | 名前 | デフォルト値 | 説明 |
 |------|-------------|------|
-| `inclusive_ai_labs_image` | `ks6088ts/inclusive-ai-labs:0.0.3` | Dockerイメージ |
+| `inclusive_ai_labs_image` | `ks6088ts/inclusive_ai_labs:0.0.3` | Dockerイメージ |
 | `inclusive_ai_labs_cpu` | `2.0` | CPUコア数 |
 | `inclusive_ai_labs_memory` | `4Gi` | メモリ |
 | `inclusive_ai_labs_min_replicas` | `1` | 最小レプリカ数 |
@@ -412,7 +413,7 @@ flowchart LR
 
 | 名前 | 説明 |
 |------|------|
-| `inclusive_ai_labs_url` | inclusive-ai-labs APIの公開URL |
+| `inclusive_ai_labs_url` | inclusive_ai_labs APIの公開URL |
 | `inclusive_ai_labs_fqdn` | Container AppのFQDN |
 | `voicevox_internal_fqdn` | voicevoxの内部FQDN |
 | `ollama_internal_fqdn` | ollamaの内部FQDN |
@@ -420,12 +421,12 @@ flowchart LR
 
 ## 🔗 内部通信の仕組み
 
-`inclusive-ai-labs` コンテナは、Container Apps環境内の内部DNSを使用して他のコンテナと通信します：
+`inclusive_ai_labs` コンテナは、Container Apps環境内の内部DNSを使用して他のコンテナと通信します：
 
 ```mermaid
 flowchart LR
     subgraph CAE["Container Apps 環境"]
-        IAL["inclusive-ai-labs"]
+        IAL["inclusive_ai_labs"]
         VV["voicevox"]
         OL["ollama"]
 
@@ -435,6 +436,7 @@ flowchart LR
 ```
 
 環境変数で自動設定されます：
+
 - `TTS_VOICEVOX_BASE_URL=http://app-voicevox`
 - `GENAI_OLLAMA_BASE_URL=http://app-ollama`
 
@@ -546,7 +548,7 @@ flowchart TD
 ```bash
 # Azure CLIでログを確認
 az containerapp logs show \
-  --name app-inclusive-ai-labs \
+  --name app-inclusive_ai_labs \
   --resource-group rg-inclusiveailabs \
   --type console
 ```

@@ -15,4 +15,4 @@ A GitHub template repository for Terraform
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Azure Container Apps をデプロイします。Docker Hub イメージを使用し、外部アクセス可能なコンテナアプリを作成します。 |
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Azure 上に Microsoft Foundry 環境をデプロイします。Microsoft Foundry ワークロードを実行するためのインフラストラクチャをセットアップします。 |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.md) | Azure Hub-Spoke アーキテクチャ用の Spoke ネットワークをデプロイします。VNet、Bastion、Storage Account (Private Endpoint)、VM を構築します。 |
-| [inclusive-ai-labs](./infra/scenarios/inclusive-ai-labs/README.md) | Azure Container Apps 上に inclusive-ai-labs アプリケーションをデプロイします。VOICEVOX と連携した音声合成機能を持つ API サーバーを構築します。 |
+| [inclusive_ai_labs](./infra/scenarios/inclusive_ai_labs/README.md) | Azure Container Apps 上に inclusive_ai_labs アプリケーションをデプロイします。VOICEVOX と連携した音声合成機能を持つ API サーバーを構築します。 |
