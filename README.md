@@ -10,7 +10,7 @@ A GitHub template repository for Terraform
 | --- | --- |
 | [hello_world](./infra/scenarios/hello_world/README.md) | Terraform の機能説明のための最小限のサンプル。random provider を使用してランダム文字列を生成します。 |
 | [backend_azure_storage](./infra/scenarios/backend_azure_storage/README.md) | Terraform backend 用の Azure Storage Account を作成します。 |
-| [service_principal](./infra/scenarios/service_principal/README.md) | Azure に接続するための Service Principal を作成し、必要な権限を割り当てます。 |
+| [azure_github_oidc](./infra/scenarios/azure_github_oidc/README.md) | GitHub Actions から Azure に OIDC で接続するための Service Principal を作成し、必要な権限を割り当てます。 |
 | [github_secrets](./infra/scenarios/github_secrets/README.md) | GitHub リポジトリの環境シークレットを作成・管理します。GitHub Actions ワークフローで使用できます。 |
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Azure Container Apps をデプロイします。Docker Hub イメージを使用し、外部アクセス可能なコンテナアプリを作成します。 |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.md) | Azure のデータストア（Cosmos DB、Storage Account、Key Vault、PostgreSQL、Monitor）をデプロイします。テスト用途向けにパブリックアクセスを許可した構成です。 |
