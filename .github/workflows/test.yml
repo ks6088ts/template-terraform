@@ -49,6 +49,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - hello_world
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -58,12 +63,10 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-      - name: Run misc scenario tests
+      - name: Run misc scenario test (${{ matrix.scenario }})
         run: |
-          for dir in infra/scenarios/hello_world; do
-            echo "Test: $dir"
-            make _ci-test-base SCENARIO=$(basename $dir) || exit 1
-          done
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
   # Test AWS scenarios (aws_*)
   test-aws:
@@ -71,6 +74,11 @@ jobs:
     timeout-minutes: 10
     needs: lint
     environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - aws_github_oidc
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -85,14 +93,10 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-      - name: Run AWS scenario tests
+      - name: Run AWS scenario test (${{ matrix.scenario }})
         run: |
-          for dir in infra/scenarios/aws_*; do
-            if [ -d "$dir" ]; then
-              echo "Test: $dir"
-              make _ci-test-base SCENARIO=$(basename $dir) || exit 1
-            fi
-          done
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
   # Test Azure scenarios (azure_*)
   test-azure:
@@ -100,6 +104,17 @@ jobs:
     timeout-minutes: 10
     needs: lint
     environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - azure_container_apps
+          - azure_datastore
+          - azure_github_oidc
+          - azure_inclusive_ai_labs
+          - azure_microsoft_foundry
+          - azure_spoke_network
+          - azure_terraform_backend
     env:
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
@@ -114,14 +129,10 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-      - name: Run Azure scenario tests
+      - name: Run Azure scenario test (${{ matrix.scenario }})
         run: |
-          for dir in infra/scenarios/azure_*; do
-            if [ -d "$dir" ]; then
-              echo "Test: $dir"
-              make _ci-test-base SCENARIO=$(basename $dir) || exit 1
-            fi
-          done
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
   # Test GitHub scenarios (github_*)
   test-github:
@@ -129,6 +140,11 @@ jobs:
     timeout-minutes: 10
     needs: lint
     environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - github_secrets
     env:
       GITHUB_TOKEN: ${{ secrets.GH_PAT }}
     steps:
@@ -140,11 +156,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-      - name: Run GitHub scenario tests
+      - name: Run GitHub scenario test (${{ matrix.scenario }})
         run: |
-          for dir in infra/scenarios/github_*; do
-            if [ -d "$dir" ]; then
-              echo "Test: $dir"
-              make _ci-test-base SCENARIO=$(basename $dir) || exit 1
-            fi
-          done
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
