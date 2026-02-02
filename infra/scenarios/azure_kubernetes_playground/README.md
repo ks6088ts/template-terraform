@@ -74,7 +74,7 @@ terraform destroy -auto-approve
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|----------|
-| `name` | Base name for resources | `string` | `"akubeplayground"` | no |
+| `name` | Base name for resources | `string` | `"azurekubernetesplayground"` | no |
 | `location` | Azure region for resources | `string` | `"japaneast"` | no |
 | `tags` | Tags to apply to resources | `map(string)` | see variables.tf | no |
 | `acr_sku` | SKU for Azure Container Registry | `string` | `"Basic"` | no |

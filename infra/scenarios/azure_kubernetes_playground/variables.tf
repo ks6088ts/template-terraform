@@ -1,7 +1,7 @@
 variable "name" {
   description = "Specifies the base name for resources"
   type        = string
-  default     = "akubeplayground"
+  default     = "azurekubernetesplayground"
 }
 
 variable "location" {
