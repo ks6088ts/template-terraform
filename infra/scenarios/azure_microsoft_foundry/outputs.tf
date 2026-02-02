@@ -1,4 +1,4 @@
 output "resource_group_name" {
-  value       = azurerm_resource_group.this.name
+  value       = module.resource_group.name
   description = "created resource group name"
 }

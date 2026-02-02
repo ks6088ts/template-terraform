@@ -7,9 +7,14 @@ resource "random_string" "unique" {
   upper       = false
 }
 
+# =============================================================================
 # Resource Group
-resource "azurerm_resource_group" "this" {
-  name     = "rg-${var.name}-${random_string.unique.result}"
+# =============================================================================
+
+module "resource_group" {
+  source = "../../modules/azure/resource_group"
+
+  name     = "${var.name}-${random_string.unique.result}"
   location = var.location
   tags     = var.tags
 }
@@ -21,7 +26,7 @@ resource "azapi_resource" "account" {
   tags     = var.tags
 
   type                      = "Microsoft.CognitiveServices/accounts@2025-06-01"
-  parent_id                 = azurerm_resource_group.this.id
+  parent_id                 = module.resource_group.id
   schema_validation_enabled = false
 
   body = {

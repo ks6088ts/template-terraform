@@ -1,26 +1,37 @@
+# =============================================================================
 # Resource Group
-resource "azurerm_resource_group" "this" {
-  name     = "rg-${var.name}"
+# =============================================================================
+
+module "resource_group" {
+  source = "../../modules/azure/resource_group"
+
+  name     = var.name
   location = var.location
   tags     = var.tags
 }
 
-# Log Analytics Workspace (required for Container Apps Environment)
-resource "azurerm_log_analytics_workspace" "this" {
-  name                = "law-${var.name}"
-  location            = azurerm_resource_group.this.location
-  resource_group_name = azurerm_resource_group.this.name
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
+# =============================================================================
+# Log Analytics Workspace
+# =============================================================================
+
+module "log_analytics" {
+  source = "../../modules/azure/log_analytics"
+
+  name                = var.name
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
   tags                = var.tags
 }
 
+# =============================================================================
 # Container Apps Environment
+# =============================================================================
+
 resource "azurerm_container_app_environment" "this" {
   name                       = "env-${var.name}"
-  location                   = azurerm_resource_group.this.location
-  resource_group_name        = azurerm_resource_group.this.name
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.this.id
+  location                   = module.resource_group.location
+  resource_group_name        = module.resource_group.name
+  log_analytics_workspace_id = module.log_analytics.id
   tags                       = var.tags
 }
 
@@ -29,8 +40,8 @@ resource "azurerm_container_app_environment" "this" {
 # -----------------------------------------------------------------------------
 resource "azurerm_storage_account" "ollama" {
   name                     = "st${replace(var.name, "-", "")}ollama"
-  resource_group_name      = azurerm_resource_group.this.name
-  location                 = azurerm_resource_group.this.location
+  resource_group_name      = module.resource_group.name
+  location                 = module.resource_group.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
   tags                     = var.tags
@@ -58,7 +69,7 @@ resource "azurerm_container_app_environment_storage" "ollama" {
 resource "azurerm_container_app" "ollama" {
   name                         = "app-ollama"
   container_app_environment_id = azurerm_container_app_environment.this.id
-  resource_group_name          = azurerm_resource_group.this.name
+  resource_group_name          = module.resource_group.name
   revision_mode                = "Single"
   tags                         = var.tags
 
@@ -130,7 +141,7 @@ resource "azurerm_container_app" "ollama" {
 resource "azurerm_container_app" "voicevox" {
   name                         = "app-voicevox"
   container_app_environment_id = azurerm_container_app_environment.this.id
-  resource_group_name          = azurerm_resource_group.this.name
+  resource_group_name          = module.resource_group.name
   revision_mode                = "Single"
   tags                         = var.tags
 
@@ -176,7 +187,7 @@ resource "azurerm_container_app" "voicevox" {
 resource "azurerm_container_app" "inclusive_ai_labs" {
   name                         = "app-inclusive-ai-labs"
   container_app_environment_id = azurerm_container_app_environment.this.id
-  resource_group_name          = azurerm_resource_group.this.name
+  resource_group_name          = module.resource_group.name
   revision_mode                = "Single"
   tags                         = var.tags
 
