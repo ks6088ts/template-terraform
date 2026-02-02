@@ -1,10 +1,5 @@
-resource "random_string" "unique" {
-  length      = 5
-  min_numeric = 5
-  numeric     = true
-  special     = false
-  lower       = true
-  upper       = false
+module "random_string" {
+  source = "../../modules/common/random_string"
 }
 
 # =============================================================================
@@ -14,7 +9,7 @@ resource "random_string" "unique" {
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = "${var.name}-${random_string.unique.result}"
+  name     = "${var.name}-${module.random_string.result}"
   location = var.location
   tags     = var.tags
 }
