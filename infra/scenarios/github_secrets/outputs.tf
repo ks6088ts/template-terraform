@@ -1,4 +1,4 @@
 output "github_repository_environment_name" {
-  value       = github_repository_environment.this.environment
+  value       = module.repository_environment.environment_name
   description = "created github repository environment name"
 }
