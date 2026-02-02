@@ -47,3 +47,23 @@ jobs:
       - name: Run CI test
         run: |
           make ci-test
+
+  aws-oidc-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
+          aws-region: ap-northeast-1
+      - name: Verify AWS OIDC connection
+        run: |
+          echo "Verifying AWS OIDC connection..."
+          aws sts get-caller-identity
+          echo "AWS OIDC connection verified successfully!"
