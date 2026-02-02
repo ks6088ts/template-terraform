@@ -1,4 +1,4 @@
-# Backend Azure Storage Scenario
+# Azure Terraform Backend Scenario
 
 Create Azure Storage Account for Terraform backend.
 

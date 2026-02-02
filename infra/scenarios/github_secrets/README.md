@@ -37,6 +37,8 @@ APPLICATION_NAME="template-terraform_dev"
 APPLICATION_ID=$(az ad sp list --display-name "$APPLICATION_NAME" --query "[0].appId" --output tsv)
 SUBSCRIPTION_ID=$(az account show --query id --output tsv)
 TENANT_ID=$(az account show --query tenantId --output tsv)
+AWS_ID="YOUR_AWS_ACCOUNT_ID"
+AWS_ROLE_NAME="GitHubActionsRole"
 
 cat <<EOF > terraform.tfvars
 github_owner = "ks6088ts"
@@ -59,6 +61,14 @@ actions_environment_secrets = [
     name  = "ARM_USE_OIDC"
     value = "true"
   },
+  {
+    name  = "AWS_ID"
+    value = "$AWS_ID"
+  },
+  {
+    name  = "AWS_ROLE_NAME"
+    value = "$AWS_ROLE_NAME"
+  }
 ]
 EOF
 

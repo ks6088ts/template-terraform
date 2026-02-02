@@ -13,25 +13,25 @@ output "container_app_environment_name" {
   value       = azurerm_container_app_environment.this.name
 }
 
-# inclusive_ai_labs outputs
-output "inclusive_ai_labs_id" {
-  description = "ID of the inclusive_ai_labs Container App"
-  value       = azurerm_container_app.inclusive_ai_labs.id
+# azure_inclusive_ai_labs outputs
+output "azure_inclusive_ai_labs_id" {
+  description = "ID of the azure_inclusive_ai_labs Container App"
+  value       = azurerm_container_app.azure_inclusive_ai_labs.id
 }
 
-output "inclusive_ai_labs_name" {
-  description = "Name of the inclusive_ai_labs Container App"
-  value       = azurerm_container_app.inclusive_ai_labs.name
+output "azure_inclusive_ai_labs_name" {
+  description = "Name of the azure_inclusive_ai_labs Container App"
+  value       = azurerm_container_app.azure_inclusive_ai_labs.name
 }
 
-output "inclusive_ai_labs_fqdn" {
-  description = "FQDN of the inclusive_ai_labs Container App (external URL)"
-  value       = azurerm_container_app.inclusive_ai_labs.ingress[0].fqdn
+output "azure_inclusive_ai_labs_fqdn" {
+  description = "FQDN of the azure_inclusive_ai_labs Container App (external URL)"
+  value       = azurerm_container_app.azure_inclusive_ai_labs.ingress[0].fqdn
 }
 
-output "inclusive_ai_labs_url" {
-  description = "Full URL to access the inclusive_ai_labs Container App"
-  value       = "https://${azurerm_container_app.inclusive_ai_labs.ingress[0].fqdn}"
+output "azure_inclusive_ai_labs_url" {
+  description = "Full URL to access the azure_inclusive_ai_labs Container App"
+  value       = "https://${azurerm_container_app.azure_inclusive_ai_labs.ingress[0].fqdn}"
 }
 
 # voicevox outputs

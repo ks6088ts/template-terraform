@@ -1,7 +1,7 @@
 variable "name" {
   description = "Specifies the name"
   type        = string
-  default     = "backendazurestorage"
+  default     = "azureterraformbackend"
 }
 
 variable "location" {
@@ -14,7 +14,7 @@ variable "tags" {
   description = "Specifies the tags"
   type        = map(string)
   default = {
-    scenario        = "backend_azure_storage"
+    scenario        = "azure_terraform_backend"
     owner           = "ks6088ts"
     SecurityControl = "Ignore"
     CostControl     = "Ignore"

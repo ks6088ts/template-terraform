@@ -1,6 +1,6 @@
-# Creating a Service Principal with Terraform
+# Azure GitHub OIDC
 
-This Terraform scenario demonstrates how to create an Azure Service Principal and assign it the necessary permissions to manage resources in your Azure subscription. The created Service Principal can be used for authentication in various scenarios, such as CI/CD pipelines or automated scripts.
+This Terraform scenario creates an Azure Service Principal with federated identity credentials for GitHub Actions to authenticate with Azure using OpenID Connect (OIDC). This eliminates the need for storing long-lived Azure credentials as GitHub secrets.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ terraform {
     resource_group_name  = "YOUR_RESOURCE_GROUP_NAME"
     storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"
     container_name       = "YOUR_CONTAINER_NAME"
-    key                  = "service_principal.dev.tfstate"
+    key                  = "azure_github_oidc.dev.tfstate"
   }
 }
 EOF

@@ -182,9 +182,9 @@ resource "azurerm_container_app" "voicevox" {
 }
 
 # -----------------------------------------------------------------------------
-# inclusive_ai_labs Container App (External)
+# azure_inclusive_ai_labs Container App (External)
 # -----------------------------------------------------------------------------
-resource "azurerm_container_app" "inclusive_ai_labs" {
+resource "azurerm_container_app" "azure_inclusive_ai_labs" {
   name                         = "app-inclusive-ai-labs"
   container_app_environment_id = azurerm_container_app_environment.this.id
   resource_group_name          = module.resource_group.name
@@ -200,9 +200,9 @@ resource "azurerm_container_app" "inclusive_ai_labs" {
   template {
     container {
       name   = "inclusive-ai-labs"
-      image  = var.inclusive_ai_labs_image
-      cpu    = var.inclusive_ai_labs_cpu
-      memory = var.inclusive_ai_labs_memory
+      image  = var.azure_inclusive_ai_labs_image
+      cpu    = var.azure_inclusive_ai_labs_cpu
+      memory = var.azure_inclusive_ai_labs_memory
 
       # Command to run
       command = ["python", "scripts/api.py", "run", "--workers", "4"]
@@ -307,8 +307,8 @@ resource "azurerm_container_app" "inclusive_ai_labs" {
       }
     }
 
-    min_replicas = var.inclusive_ai_labs_min_replicas
-    max_replicas = var.inclusive_ai_labs_max_replicas
+    min_replicas = var.azure_inclusive_ai_labs_min_replicas
+    max_replicas = var.azure_inclusive_ai_labs_max_replicas
   }
 
   # External ingress (publicly accessible)

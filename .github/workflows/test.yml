@@ -13,15 +13,108 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  TERRAFORM_VERSION: 1.13.4
+  TFLINT_VERSION: v0.60.0
+  TRIVY_VERSION: v0.68.2
+
 jobs:
-  test:
-    strategy:
-      matrix:
-        platform: [ubuntu-latest]
-        terraform-version: [1.13.4]
-    runs-on: ${{ matrix.platform }}
+  # Lint and security scan (no auth required)
+  lint:
+    runs-on: ubuntu-latest
     timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.5
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+      - name: Run lint and security scan
+        run: |
+          make tflint trivy
+
+  # Test scenarios without authentication (hello_world, etc.)
+  test-misc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - hello_world
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run misc scenario test (${{ matrix.scenario }})
+        run: |
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
+
+  # Test AWS scenarios (aws_*)
+  test-aws:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
     environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - aws_github_oidc
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
+          aws-region: ap-northeast-1
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run AWS scenario test (${{ matrix.scenario }})
+        run: |
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
+
+  # Test Azure scenarios (azure_*)
+  test-azure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - azure_container_apps
+          - azure_datastore
+          - azure_github_oidc
+          - azure_inclusive_ai_labs
+          - azure_microsoft_foundry
+          - azure_spoke_network
+          - azure_terraform_backend
     env:
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
@@ -35,15 +128,35 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ matrix.terraform-version }}
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v6
-        with:
-          tflint_version: v0.60.0
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.5
-        with:
-          version: v0.68.2
-      - name: Run CI test
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run Azure scenario test (${{ matrix.scenario }})
         run: |
-          make ci-test
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
+
+  # Test GitHub scenarios (github_*)
+  test-github:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - github_secrets
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run GitHub scenario test (${{ matrix.scenario }})
+        run: |
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
