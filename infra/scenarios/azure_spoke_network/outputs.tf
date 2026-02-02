@@ -4,12 +4,12 @@
 
 output "resource_group_name" {
   description = "Name of the resource group"
-  value       = azurerm_resource_group.this.name
+  value       = module.resource_group.name
 }
 
 output "resource_group_id" {
   description = "ID of the resource group"
-  value       = azurerm_resource_group.this.id
+  value       = module.resource_group.id
 }
 
 # =============================================================================
@@ -18,27 +18,27 @@ output "resource_group_id" {
 
 output "vnet_id" {
   description = "ID of the spoke VNet"
-  value       = azurerm_virtual_network.spoke.id
+  value       = module.virtual_network.vnet_id
 }
 
 output "vnet_name" {
   description = "Name of the spoke VNet"
-  value       = azurerm_virtual_network.spoke.name
+  value       = module.virtual_network.vnet_name
 }
 
 output "subnet_bastion_id" {
   description = "ID of the Bastion subnet"
-  value       = azurerm_subnet.bastion.id
+  value       = module.virtual_network.subnet_ids["AzureBastionSubnet"]
 }
 
 output "subnet_paas_id" {
   description = "ID of the PaaS subnet"
-  value       = azurerm_subnet.paas.id
+  value       = module.virtual_network.subnet_ids["snet-paas-${var.name}"]
 }
 
 output "subnet_vm_id" {
   description = "ID of the VM subnet"
-  value       = azurerm_subnet.vm.id
+  value       = module.virtual_network.subnet_ids["snet-vm-${var.name}"]
 }
 
 # =============================================================================
@@ -47,22 +47,22 @@ output "subnet_vm_id" {
 
 output "storage_account_id" {
   description = "ID of the storage account"
-  value       = azurerm_storage_account.this.id
+  value       = module.storage.account_id
 }
 
 output "storage_account_name" {
   description = "Name of the storage account"
-  value       = azurerm_storage_account.this.name
+  value       = module.storage.account_name
 }
 
 output "private_endpoint_blob_id" {
   description = "ID of the blob private endpoint"
-  value       = azurerm_private_endpoint.blob.id
+  value       = module.storage.private_endpoint_id
 }
 
 output "private_endpoint_blob_ip" {
   description = "Private IP address of the blob private endpoint"
-  value       = azurerm_private_endpoint.blob.private_service_connection[0].private_ip_address
+  value       = module.storage.private_endpoint_ip
 }
 
 # =============================================================================
@@ -71,27 +71,27 @@ output "private_endpoint_blob_ip" {
 
 output "vm_id" {
   description = "ID of the virtual machine"
-  value       = azurerm_linux_virtual_machine.this.id
+  value       = module.linux_vm.id
 }
 
 output "vm_name" {
   description = "Name of the virtual machine"
-  value       = azurerm_linux_virtual_machine.this.name
+  value       = module.linux_vm.name
 }
 
 output "vm_private_ip" {
   description = "Private IP address of the virtual machine"
-  value       = azurerm_network_interface.vm.private_ip_address
+  value       = module.linux_vm.private_ip
 }
 
 output "vm_admin_username" {
   description = "Admin username for the virtual machine"
-  value       = azurerm_linux_virtual_machine.this.admin_username
+  value       = module.linux_vm.admin_username
 }
 
 output "vm_ssh_private_key" {
   description = "SSH private key for the virtual machine (sensitive)"
-  value       = tls_private_key.vm.private_key_pem
+  value       = module.linux_vm.ssh_private_key
   sensitive   = true
 }
 
@@ -101,15 +101,15 @@ output "vm_ssh_private_key" {
 
 output "bastion_id" {
   description = "ID of the Azure Bastion"
-  value       = azurerm_bastion_host.this.id
+  value       = module.bastion.id
 }
 
 output "bastion_name" {
   description = "Name of the Azure Bastion"
-  value       = azurerm_bastion_host.this.name
+  value       = module.bastion.name
 }
 
 output "bastion_public_ip" {
   description = "Public IP address of the Azure Bastion"
-  value       = azurerm_public_ip.bastion.ip_address
+  value       = module.bastion.public_ip_address
 }

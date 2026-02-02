@@ -2,17 +2,27 @@ resource "random_id" "this" {
   byte_length = 4
 }
 
-resource "azurerm_resource_group" "this" {
-  name     = "rg-${var.name}-${random_id.this.hex}"
+# =============================================================================
+# Resource Group
+# =============================================================================
+
+module "resource_group" {
+  source = "../../modules/azure/resource_group"
+
+  name     = "${var.name}-${random_id.this.hex}"
   location = var.location
   tags     = var.tags
 }
+
+# =============================================================================
+# Storage Account for Terraform State
+# =============================================================================
 
 resource "azurerm_storage_account" "this" {
   name                            = "satfstates${random_id.this.hex}"
   location                        = var.location
   tags                            = var.tags
-  resource_group_name             = azurerm_resource_group.this.name
+  resource_group_name             = module.resource_group.name
   account_tier                    = "Standard"
   account_replication_type        = "LRS"
   allow_nested_items_to_be_public = false

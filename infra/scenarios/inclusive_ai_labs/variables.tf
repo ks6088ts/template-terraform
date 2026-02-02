@@ -14,7 +14,7 @@ variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
   default = {
-    scenario        = "inclusive-ai-labs"
+    scenario        = "inclusive_ai_labs"
     owner           = "ks6088ts"
     SecurityControl = "Ignore"
     CostControl     = "Ignore"
@@ -22,17 +22,17 @@ variable "tags" {
 }
 
 # -----------------------------------------------------------------------------
-# inclusive-ai-labs Container Settings
+# inclusive_ai_labs Container Settings
 # -----------------------------------------------------------------------------
 
 variable "inclusive_ai_labs_image" {
-  description = "Docker Hub image for inclusive-ai-labs"
+  description = "Docker Hub image for inclusive_ai_labs"
   type        = string
-  default     = "ks6088ts/inclusive-ai-labs:0.0.3"
+  default     = "ks6088ts/inclusive-ai-labs:latest"
 }
 
 variable "inclusive_ai_labs_cpu" {
-  description = "CPU cores allocated to inclusive-ai-labs container"
+  description = "CPU cores allocated to inclusive_ai_labs container"
   type        = number
   default     = 2.0
 
@@ -43,7 +43,7 @@ variable "inclusive_ai_labs_cpu" {
 }
 
 variable "inclusive_ai_labs_memory" {
-  description = "Memory allocated to inclusive-ai-labs container"
+  description = "Memory allocated to inclusive_ai_labs container"
   type        = string
   default     = "4Gi"
 
@@ -54,7 +54,7 @@ variable "inclusive_ai_labs_memory" {
 }
 
 variable "inclusive_ai_labs_min_replicas" {
-  description = "Minimum number of replicas for inclusive-ai-labs"
+  description = "Minimum number of replicas for inclusive_ai_labs"
   type        = number
   default     = 1
 
@@ -65,7 +65,7 @@ variable "inclusive_ai_labs_min_replicas" {
 }
 
 variable "inclusive_ai_labs_max_replicas" {
-  description = "Maximum number of replicas for inclusive-ai-labs"
+  description = "Maximum number of replicas for inclusive_ai_labs"
   type        = number
   default     = 3
 
@@ -213,7 +213,7 @@ variable "ollama_external_enabled" {
 variable "project_name" {
   description = "Project name for the application"
   type        = string
-  default     = "inclusive-ai-labs"
+  default     = "inclusive_ai_labs"
 }
 
 variable "project_log_level" {
