@@ -4,11 +4,11 @@ output "resource_group_name" {
 }
 
 output "storage_account_name" {
-  value       = azurerm_storage_account.this.name
+  value       = module.storage.account_name
   description = "created storage account name"
 }
 
 output "storage_container_name" {
-  value       = azurerm_storage_container.this.name
+  value       = module.storage.container_name
   description = "created storage container name"
 }

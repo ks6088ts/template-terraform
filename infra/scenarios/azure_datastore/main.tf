@@ -41,11 +41,14 @@ module "storage" {
   count  = var.deploy_storage_account ? 1 : 0
 
   name                     = var.name
+  storage_account_name     = replace("st${var.name}", "-", "")
   resource_group_name      = module.resource_group.name
   location                 = module.resource_group.location
   tags                     = var.tags
   account_tier             = var.storage_account_tier
   account_replication_type = var.storage_account_replication_type
+  is_hns_enabled           = true
+  create_queue             = true
 }
 
 # =============================================================================

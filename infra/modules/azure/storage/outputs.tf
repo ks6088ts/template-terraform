@@ -26,5 +26,15 @@ output "primary_dfs_endpoint" {
 
 output "queue_name" {
   description = "Name of the Storage Queue"
-  value       = azurerm_storage_queue.this.name
+  value       = var.create_queue ? azurerm_storage_queue.this[0].name : null
+}
+
+output "container_name" {
+  description = "Name of the Storage Container"
+  value       = var.create_container ? azurerm_storage_container.this[0].name : null
+}
+
+output "container_id" {
+  description = "ID of the Storage Container"
+  value       = var.create_container ? azurerm_storage_container.this[0].id : null
 }

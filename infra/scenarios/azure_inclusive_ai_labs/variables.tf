@@ -14,7 +14,7 @@ variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
   default = {
-    scenario        = "inclusive_ai_labs"
+    scenario        = "azure_inclusive_ai_labs"
     owner           = "ks6088ts"
     SecurityControl = "Ignore"
     CostControl     = "Ignore"
@@ -22,55 +22,55 @@ variable "tags" {
 }
 
 # -----------------------------------------------------------------------------
-# inclusive_ai_labs Container Settings
+# azure_inclusive_ai_labs Container Settings
 # -----------------------------------------------------------------------------
 
-variable "inclusive_ai_labs_image" {
-  description = "Docker Hub image for inclusive_ai_labs"
+variable "azure_inclusive_ai_labs_image" {
+  description = "Docker Hub image for azure_inclusive_ai_labs"
   type        = string
   default     = "ks6088ts/inclusive-ai-labs:latest"
 }
 
-variable "inclusive_ai_labs_cpu" {
-  description = "CPU cores allocated to inclusive_ai_labs container"
+variable "azure_inclusive_ai_labs_cpu" {
+  description = "CPU cores allocated to azure_inclusive_ai_labs container"
   type        = number
   default     = 2.0
 
   validation {
-    condition     = contains([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], var.inclusive_ai_labs_cpu)
+    condition     = contains([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], var.azure_inclusive_ai_labs_cpu)
     error_message = "CPU must be one of: 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0."
   }
 }
 
-variable "inclusive_ai_labs_memory" {
-  description = "Memory allocated to inclusive_ai_labs container"
+variable "azure_inclusive_ai_labs_memory" {
+  description = "Memory allocated to azure_inclusive_ai_labs container"
   type        = string
   default     = "4Gi"
 
   validation {
-    condition     = can(regex("^[0-9]+(\\.[0-9]+)?Gi$", var.inclusive_ai_labs_memory))
+    condition     = can(regex("^[0-9]+(\\.[0-9]+)?Gi$", var.azure_inclusive_ai_labs_memory))
     error_message = "Memory must be in format like '0.5Gi', '1Gi', '2Gi'."
   }
 }
 
-variable "inclusive_ai_labs_min_replicas" {
-  description = "Minimum number of replicas for inclusive_ai_labs"
+variable "azure_inclusive_ai_labs_min_replicas" {
+  description = "Minimum number of replicas for azure_inclusive_ai_labs"
   type        = number
   default     = 1
 
   validation {
-    condition     = var.inclusive_ai_labs_min_replicas >= 0 && var.inclusive_ai_labs_min_replicas <= 300
+    condition     = var.azure_inclusive_ai_labs_min_replicas >= 0 && var.azure_inclusive_ai_labs_min_replicas <= 300
     error_message = "Minimum replicas must be between 0 and 300."
   }
 }
 
-variable "inclusive_ai_labs_max_replicas" {
-  description = "Maximum number of replicas for inclusive_ai_labs"
+variable "azure_inclusive_ai_labs_max_replicas" {
+  description = "Maximum number of replicas for azure_inclusive_ai_labs"
   type        = number
   default     = 3
 
   validation {
-    condition     = var.inclusive_ai_labs_max_replicas >= 1 && var.inclusive_ai_labs_max_replicas <= 300
+    condition     = var.azure_inclusive_ai_labs_max_replicas >= 1 && var.azure_inclusive_ai_labs_max_replicas <= 300
     error_message = "Maximum replicas must be between 1 and 300."
   }
 }
@@ -213,7 +213,7 @@ variable "ollama_external_enabled" {
 variable "project_name" {
   description = "Project name for the application"
   type        = string
-  default     = "inclusive_ai_labs"
+  default     = "azure_inclusive_ai_labs"
 }
 
 variable "project_log_level" {
