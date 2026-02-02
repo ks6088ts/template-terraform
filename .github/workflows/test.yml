@@ -13,14 +13,92 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  TERRAFORM_VERSION: 1.13.4
+  TFLINT_VERSION: v0.60.0
+  TRIVY_VERSION: v0.68.2
+
 jobs:
-  test:
-    strategy:
-      matrix:
-        platform: [ubuntu-latest]
-        terraform-version: [1.13.4]
-    runs-on: ${{ matrix.platform }}
+  # Lint and security scan (no auth required)
+  lint:
+    runs-on: ubuntu-latest
     timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.5
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+      - name: Run lint and security scan
+        run: |
+          make tflint trivy
+
+  # Test scenarios without authentication (hello_world, etc.)
+  test-misc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run misc scenario tests
+        run: |
+          for dir in infra/scenarios/hello_world; do
+            echo "Test: $dir"
+            make _ci-test-base SCENARIO=$(basename $dir) || exit 1
+          done
+
+  # Test AWS scenarios (aws_*)
+  test-aws:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    environment: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
+          aws-region: ap-northeast-1
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run AWS scenario tests
+        run: |
+          for dir in infra/scenarios/aws_*; do
+            if [ -d "$dir" ]; then
+              echo "Test: $dir"
+              make _ci-test-base SCENARIO=$(basename $dir) || exit 1
+            fi
+          done
+
+  # Test Azure scenarios (azure_*)
+  test-azure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
     environment: dev
     env:
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
@@ -35,35 +113,38 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ matrix.terraform-version }}
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v6
-        with:
-          tflint_version: v0.60.0
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.5
-        with:
-          version: v0.68.2
-      - name: Run CI test
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run Azure scenario tests
         run: |
-          make ci-test
+          for dir in infra/scenarios/azure_*; do
+            if [ -d "$dir" ]; then
+              echo "Test: $dir"
+              make _ci-test-base SCENARIO=$(basename $dir) || exit 1
+            fi
+          done
 
-  aws-oidc-check:
+  # Test GitHub scenarios (github_*)
+  test-github:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: lint
     environment: dev
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
-          aws-region: ap-northeast-1
-      - name: Verify AWS OIDC connection
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run GitHub scenario tests
         run: |
-          echo "Verifying AWS OIDC connection..."
-          aws sts get-caller-identity
-          echo "AWS OIDC connection verified successfully!"
+          for dir in infra/scenarios/github_*; do
+            if [ -d "$dir" ]; then
+              echo "Test: $dir"
+              make _ci-test-base SCENARIO=$(basename $dir) || exit 1
+            fi
+          done
