@@ -134,6 +134,36 @@ jobs:
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
+  # Test Google scenarios (google_*)
+  test-google:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - google_github_oidc
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Authenticate to Google Cloud via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run Google scenario test (${{ matrix.scenario }})
+        run: |
+          echo "Test: ${{ matrix.scenario }}"
+          make _ci-test-base SCENARIO=${{ matrix.scenario }}
+
   # Test GitHub scenarios (github_*)
   test-github:
     runs-on: ubuntu-latest

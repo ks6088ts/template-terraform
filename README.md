@@ -24,6 +24,12 @@ A GitHub template repository for Terraform
 | --- | --- |
 | [aws_github_oidc](./infra/scenarios/aws_github_oidc/README.md) | GitHub Actions から AWS に OIDC で接続するための IAM ロールを作成し、必要な権限を割り当てます。 |
 
+### Google Cloud
+
+| Scenario | Overview |
+| --- | --- |
+| [google_github_oidc](./infra/scenarios/google_github_oidc/README.md) | GitHub Actions から Google Cloud に OIDC で接続するための Workload Identity Federation を作成し、必要な権限を割り当てます。 |
+
 ### GitHub
 
 | Scenario | Overview |

@@ -37,8 +37,14 @@ APPLICATION_NAME="template-terraform_dev"
 APPLICATION_ID=$(az ad sp list --display-name "$APPLICATION_NAME" --query "[0].appId" --output tsv)
 SUBSCRIPTION_ID=$(az account show --query id --output tsv)
 TENANT_ID=$(az account show --query tenantId --output tsv)
-AWS_ID="YOUR_AWS_ACCOUNT_ID"
+AWS_ID="YOUR_AWS_ACCOUNT_ID" # replace me
 AWS_ROLE_NAME="GitHubActionsRole"
+
+# Google Cloud settings (get from google_github_oidc scenario outputs)
+# Run `terraform output` in infra/scenarios/google_github_oidc to get these values
+GCP_PROJECT_ID="YOUR_PROJECT_NUMBER" # replace me
+GCP_WORKLOAD_IDENTITY_PROVIDER="projects/${GCP_PROJECT_ID}/locations/global/workloadIdentityPools/github-actions-pool/providers/github"
+GCP_SERVICE_ACCOUNT="github-actions@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 
 cat <<EOF > terraform.tfvars
 github_owner = "ks6088ts"
@@ -68,6 +74,14 @@ actions_environment_secrets = [
   {
     name  = "AWS_ROLE_NAME"
     value = "$AWS_ROLE_NAME"
+  },
+  {
+    name  = "GCP_WORKLOAD_IDENTITY_PROVIDER"
+    value = "$GCP_WORKLOAD_IDENTITY_PROVIDER"
+  },
+  {
+    name  = "GCP_SERVICE_ACCOUNT"
+    value = "$GCP_SERVICE_ACCOUNT"
   }
 ]
 EOF
