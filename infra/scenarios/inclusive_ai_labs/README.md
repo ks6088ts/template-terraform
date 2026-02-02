@@ -257,7 +257,7 @@ flowchart TB
         direction TB
 
         subgraph DNS["内部DNS"]
-            D1["app-inclusive_ai_labs"]
+            D1["app-inclusive-ai-labs"]
             D2["app-voicevox"]
             D3["app-ollama"]
         end
@@ -331,7 +331,7 @@ flowchart LR
 
    # ローカルLLM（Ollama）をデフォルトで使用する場合
    genai_default_provider = "ollama"
-   ollama_model = "gemma3:270m"
+   ollama_model = "gemma3:270m"  # デフォルトモデル
    ```
 
 3. **デプロイ**
@@ -368,7 +368,7 @@ flowchart LR
 
 | 名前 | デフォルト値 | 説明 |
 |------|-------------|------|
-| `inclusive_ai_labs_image` | `ks6088ts/inclusive_ai_labs:0.0.3` | Dockerイメージ |
+| `inclusive_ai_labs_image` | `ks6088ts/inclusive-ai-labs:latest` | Dockerイメージ |
 | `inclusive_ai_labs_cpu` | `2.0` | CPUコア数 |
 | `inclusive_ai_labs_memory` | `4Gi` | メモリ |
 | `inclusive_ai_labs_min_replicas` | `1` | 最小レプリカ数 |
@@ -548,7 +548,7 @@ flowchart TD
 ```bash
 # Azure CLIでログを確認
 az containerapp logs show \
-  --name app-inclusive_ai_labs \
+  --name app-inclusive-ai-labs \
   --resource-group rg-inclusiveailabs \
   --type console
 ```
