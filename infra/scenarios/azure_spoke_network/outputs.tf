@@ -113,3 +113,17 @@ output "bastion_public_ip" {
   description = "Public IP address of the Azure Bastion"
   value       = module.bastion.public_ip_address
 }
+
+# =============================================================================
+# NAT Gateway Outputs
+# =============================================================================
+
+output "nat_gateway_id" {
+  description = "ID of the NAT Gateway (null if disabled)"
+  value       = var.enable_nat_gateway ? azurerm_nat_gateway.this[0].id : null
+}
+
+output "nat_gateway_public_ip" {
+  description = "Public IP address of the NAT Gateway (null if disabled)"
+  value       = var.enable_nat_gateway ? azurerm_public_ip.nat_gateway[0].ip_address : null
+}

@@ -132,3 +132,24 @@ variable "bastion_sku" {
     error_message = "Bastion SKU must be Basic, Standard, or Premium."
   }
 }
+
+# -------------------------------------------------------------------
+# NAT Gateway Configuration
+# -------------------------------------------------------------------
+
+variable "enable_nat_gateway" {
+  description = "Enable NAT Gateway for outbound internet connectivity from VMs"
+  type        = bool
+  default     = false
+}
+
+variable "nat_gateway_idle_timeout_in_minutes" {
+  description = "Idle timeout in minutes for the NAT Gateway"
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.nat_gateway_idle_timeout_in_minutes >= 4 && var.nat_gateway_idle_timeout_in_minutes <= 120
+    error_message = "NAT Gateway idle timeout must be between 4 and 120 minutes."
+  }
+}

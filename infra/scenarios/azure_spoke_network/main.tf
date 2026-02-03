@@ -90,6 +90,48 @@ module "linux_vm" {
 }
 
 # =============================================================================
+# NAT Gateway (Optional - for outbound internet connectivity)
+# =============================================================================
+
+resource "azurerm_public_ip" "nat_gateway" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  name                = "pip-nat-${var.name}"
+  location            = module.resource_group.location
+  resource_group_name = module.resource_group.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  zones               = ["1"]
+  tags                = var.tags
+}
+
+resource "azurerm_nat_gateway" "this" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  name                    = "nat-${var.name}"
+  location                = module.resource_group.location
+  resource_group_name     = module.resource_group.name
+  sku_name                = "Standard"
+  idle_timeout_in_minutes = var.nat_gateway_idle_timeout_in_minutes
+  zones                   = ["1"]
+  tags                    = var.tags
+}
+
+resource "azurerm_nat_gateway_public_ip_association" "this" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  nat_gateway_id       = azurerm_nat_gateway.this[0].id
+  public_ip_address_id = azurerm_public_ip.nat_gateway[0].id
+}
+
+resource "azurerm_subnet_nat_gateway_association" "vm_subnet" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  subnet_id      = module.virtual_network.subnet_ids["snet-vm-${var.name}"]
+  nat_gateway_id = azurerm_nat_gateway.this[0].id
+}
+
+# =============================================================================
 # Azure Bastion
 # =============================================================================
 
