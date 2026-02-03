@@ -87,6 +87,7 @@ module "linux_vm" {
   admin_username      = var.vm_admin_username
   os_disk_size_gb     = var.vm_os_disk_size_gb
   os_disk_type        = var.vm_os_disk_type
+  identity_enabled    = var.vm_identity_enabled
 }
 
 # =============================================================================

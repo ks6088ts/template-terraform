@@ -86,3 +86,9 @@ variable "image_version" {
   type        = string
   default     = "latest"
 }
+
+variable "identity_enabled" {
+  description = "Enable system-assigned managed identity for the VM"
+  type        = bool
+  default     = false
+}

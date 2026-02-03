@@ -118,6 +118,12 @@ variable "vm_os_disk_type" {
   }
 }
 
+variable "vm_identity_enabled" {
+  description = "Enable system-assigned managed identity for the VM"
+  type        = bool
+  default     = true
+}
+
 # -------------------------------------------------------------------
 # Bastion Configuration
 # -------------------------------------------------------------------

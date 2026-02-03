@@ -33,3 +33,8 @@ output "network_interface_id" {
   description = "ID of the network interface"
   value       = azurerm_network_interface.this.id
 }
+
+output "identity_principal_id" {
+  description = "Principal ID of the system-assigned managed identity"
+  value       = var.identity_enabled ? azurerm_linux_virtual_machine.this.identity[0].principal_id : null
+}

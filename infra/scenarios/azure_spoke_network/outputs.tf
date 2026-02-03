@@ -95,6 +95,11 @@ output "vm_ssh_private_key" {
   sensitive   = true
 }
 
+output "vm_identity_principal_id" {
+  description = "Principal ID of the VM's system-assigned managed identity"
+  value       = module.linux_vm.identity_principal_id
+}
+
 # =============================================================================
 # Bastion Outputs
 # =============================================================================

@@ -50,4 +50,11 @@ resource "azurerm_linux_virtual_machine" "this" {
     sku       = var.image_sku
     version   = var.image_version
   }
+
+  dynamic "identity" {
+    for_each = var.identity_enabled ? [1] : []
+    content {
+      type = "SystemAssigned"
+    }
+  }
 }
