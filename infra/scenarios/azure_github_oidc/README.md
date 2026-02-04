@@ -2,6 +2,25 @@
 
 This Terraform scenario creates an Azure Service Principal with federated identity credentials for GitHub Actions to authenticate with Azure using OpenID Connect (OIDC). This eliminates the need for storing long-lived Azure credentials as GitHub secrets.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph GitHub["GitHub"]
+        GA["GitHub Actions<br/>Workflow"]
+    end
+
+    subgraph Azure["Azure / Entra ID"]
+        SP["Service Principal<br/>- Federated Credentials"]
+        SUB["Azure Subscription<br/>- RBAC Role Assignment"]
+    end
+
+    GA -->|"1. Request OIDC Token"| GitHub
+    GA -->|"2. Exchange Token"| SP
+    SP -->|"3. Authorize"| SUB
+    GA -->|"4. Access Resources"| SUB
+```
+
 ## Prerequisites
 
 - Terraform CLI installed

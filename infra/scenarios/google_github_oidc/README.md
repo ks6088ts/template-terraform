@@ -2,6 +2,26 @@
 
 This Terraform scenario creates the necessary Google Cloud resources to enable GitHub Actions to authenticate with Google Cloud using OpenID Connect (OIDC) via Workload Identity Federation. This eliminates the need for storing long-lived service account keys as GitHub secrets.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph GitHub["GitHub"]
+        GA["GitHub Actions<br/>Workflow"]
+    end
+
+    subgraph GCP["Google Cloud"]
+        WIP["Workload Identity Pool<br/>- OIDC Provider"]
+        SA["Service Account<br/>- IAM Roles"]
+        Resources["GCP Resources"]
+    end
+
+    GA -->|"1. Request OIDC Token"| GitHub
+    GA -->|"2. Exchange Token"| WIP
+    WIP -->|"3. Impersonate"| SA
+    GA -->|"4. Access Resources"| Resources
+```
+
 ## Resources Created
 
 - **Workload Identity Pool**: Creates a pool for external identities

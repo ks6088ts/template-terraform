@@ -2,6 +2,14 @@
 
 Use random provider to generate random string.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    TF["Terraform CLI"] -->|"Apply"| RP["Random Provider<br/>- random_id resource"]
+    RP -->|"Generate"| OUT["Output<br/>- Random String"]
+```
+
 ## Prerequisites
 
 - Terraform CLI installed
