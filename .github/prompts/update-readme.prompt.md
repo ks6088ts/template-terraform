@@ -1,47 +1,33 @@
-# README 更新プロンプト
+---
+agent: 'agent'
+description: 'README.md にシナリオやアーキテクチャ図、手順を追記する'
+---
 
-このプロンプトは、シナリオ追加や変更に伴う README の更新を行う際に使用します。
+# README 更新
 
-## 使用例
+シナリオ追加や変更に伴う README の更新を行います。
 
-```
-#file:README.md の図表はすべて mermaid 図としてください。
-新規追加のシナリオは #file:README.md のテーブルに追記してください。
-```
+## 入力情報
 
-```
-#file:inclusive-ai-labs シナリオのアーキテクチャ図や要素技術、処理のフローなどの説明を
-詳細に #file:README.md に追記してほしい。
-図表はすべて mermaid フォーマットを利用し技術者以外でもわかる平易な説明をしてください。
-```
+更新タイプ: ${input:updateType:更新タイプを選択（scenario-table / architecture / procedure）}
+シナリオ名: ${input:scenarioName:対象シナリオ名（例: azure_container_apps）}
+追加情報: ${input:additionalInfo:概要や操作内容など追加の情報}
 
-```
-VM に Bastion 経由で接続して Private Endpoint 経由で正しく Azure Blob Storage に
-疎通していることを確認する手順を shell コマンドで簡単に実行する方法を追記して。
-```
+## 実行内容
 
-## プロンプトテンプレート
+更新タイプに応じて以下を実行してください：
 
-### シナリオテーブルへの追記
+### scenario-table の場合
+`README.md` のシナリオテーブルに ${input:scenarioName} を追記してください。
+概要: ${input:additionalInfo}
 
-```
-#file:README.md のシナリオテーブルに {シナリオ名} を追記してください。
-概要: {シナリオの簡潔な説明}
-```
+### architecture の場合
+${input:scenarioName} シナリオのアーキテクチャ図を `README.md` に追記してください。
+図表はすべて Mermaid フォーマットを利用してください。
 
-### アーキテクチャ図の追加
-
-```
-#file:{シナリオ名} シナリオのアーキテクチャ図を #file:README.md に追記してください。
-図表はすべて mermaid フォーマットを利用してください。
-```
-
-### 手順書の追加
-
-```
-{操作内容} を実行する手順を #file:README.md に追記してください。
+### procedure の場合
+${input:additionalInfo} を実行する手順を `README.md` に追記してください。
 shell コマンドで簡単に実行できる方法を記載してください。
-```
 
 ## README フォーマット規則
 
@@ -56,3 +42,8 @@ shell コマンドで簡単に実行できる方法を記載してください�
 - 技術者以外でもわかる平易な説明を心がける
 - 冗長な一般的説明は避ける
 - 具体的な操作手順はコマンド例を添える
+
+## 参照ファイル
+
+- `README.md` - 更新対象のファイル
+- `infra/scenarios/` - 既存シナリオの実装例
