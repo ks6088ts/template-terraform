@@ -26,6 +26,22 @@ module "random_string" {
 # Azure Functions Flex Consumption
 # =============================================================================
 
+# =============================================================================
+# Function App Package Archive
+# =============================================================================
+
+# Create a zip archive of the function app source code
+data "archive_file" "function_app" {
+  type        = "zip"
+  source_dir  = "${path.module}/src"
+  output_path = "${path.module}/.terraform/function_app.zip"
+  excludes    = ["local.settings.json", "__pycache__", ".venv", ".python_packages"]
+}
+
+# =============================================================================
+# Azure Functions Flex Consumption
+# =============================================================================
+
 module "functions_flex_consumption" {
   source = "../../modules/azure/functions_flex_consumption"
 
@@ -46,4 +62,9 @@ module "functions_flex_consumption" {
 
   # Additional app settings
   app_settings = var.app_settings
+
+  # Deploy function app package
+  deploy_package      = true
+  package_source      = data.archive_file.function_app.output_path
+  package_content_md5 = data.archive_file.function_app.output_md5
 }

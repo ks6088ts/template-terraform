@@ -1,0 +1,4 @@
+# Do not include azure-functions-worker in this file
+# The Python Worker is managed by Azure Functions platform
+#, and azure-functions-worker doesn't exist on pypi.
+azure-functions

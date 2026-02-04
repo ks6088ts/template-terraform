@@ -2,6 +2,9 @@
 # Azure Functions Flex Consumption Module
 # =============================================================================
 
+# Get current client configuration for role assignment
+data "azurerm_client_config" "current" {}
+
 # Azure Service Plan (Flex Consumption)
 resource "azurerm_service_plan" "this" {
   name                   = "plan-${var.name}"
@@ -106,4 +109,30 @@ resource "azurerm_role_assignment" "storage_table_data_contributor" {
   role_definition_name = "Storage Table Data Contributor"
   principal_id         = azurerm_function_app_flex_consumption.this.identity[0].principal_id
   principal_type       = "ServicePrincipal"
+}
+
+# Role Assignment: Storage Blob Data Contributor for Terraform executor (current client)
+# This is needed because shared_access_key_enabled = false, so we need RBAC to upload blobs
+resource "azurerm_role_assignment" "storage_blob_data_contributor_terraform" {
+  scope                = azurerm_storage_account.this.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+# =============================================================================
+# Function App Package Deployment (Optional)
+# =============================================================================
+
+resource "azurerm_storage_blob" "function_app_package" {
+  count                  = var.deploy_package ? 1 : 0
+  name                   = "function_app_${var.package_content_md5}.zip"
+  storage_account_name   = azurerm_storage_account.this.name
+  storage_container_name = azurerm_storage_container.deployment.name
+  type                   = "Block"
+  source                 = var.package_source
+  content_md5            = var.package_content_md5
+
+  depends_on = [
+    azurerm_role_assignment.storage_blob_data_contributor_terraform
+  ]
 }
