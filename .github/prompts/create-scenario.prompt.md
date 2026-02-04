@@ -51,6 +51,8 @@ description: '新規 Terraform シナリオを作成する'
 - 参照情報（cdk.tf、compose.yml など）があれば明示する
 - resource は可能な限りモジュール化する
 - README.md には概要、入力変数、出力変数、特徴、利用例、参照リンクを含める
+- シナリオ、モジュール双方で必ず `variables.tf`, `outputs.tf`, `versions.tf` を作成する
+- `export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv) && make fix _ci-test-base SCENARIO=${input:scenarioName}` コマンドで CI テストが通過することを確認する
 
 ## 参照ファイル
 
