@@ -72,9 +72,9 @@ resource "azurerm_function_app_flex_consumption" "this" {
   app_settings = merge(
     {
       # Workaround: https://github.com/hashicorp/terraform-provider-azurerm/pull/29099
-      "AzureWebJobsStorage"               = ""
-      "AzureWebJobsStorage__accountName"  = azurerm_storage_account.this.name
-      "AzureWebJobsStorage__credential"   = "managedidentity"
+      "AzureWebJobsStorage"                  = ""
+      "AzureWebJobsStorage__accountName"     = azurerm_storage_account.this.name
+      "AzureWebJobsStorage__credential"      = "managedidentity"
       "AzureWebJobsStorage__blobServiceUri"  = azurerm_storage_account.this.primary_blob_endpoint
       "AzureWebJobsStorage__queueServiceUri" = azurerm_storage_account.this.primary_queue_endpoint
       "AzureWebJobsStorage__tableServiceUri" = azurerm_storage_account.this.primary_table_endpoint
@@ -117,22 +117,4 @@ resource "azurerm_role_assignment" "storage_blob_data_contributor_terraform" {
   scope                = azurerm_storage_account.this.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = data.azurerm_client_config.current.object_id
-}
-
-# =============================================================================
-# Function App Package Deployment (Optional)
-# =============================================================================
-
-resource "azurerm_storage_blob" "function_app_package" {
-  count                  = var.deploy_package ? 1 : 0
-  name                   = "function_app_${var.package_content_md5}.zip"
-  storage_account_name   = azurerm_storage_account.this.name
-  storage_container_name = azurerm_storage_container.deployment.name
-  type                   = "Block"
-  source                 = var.package_source
-  content_md5            = var.package_content_md5
-
-  depends_on = [
-    azurerm_role_assignment.storage_blob_data_contributor_terraform
-  ]
 }

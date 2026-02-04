@@ -57,8 +57,3 @@ output "deployment_container_name" {
   description = "Name of the deployment container"
   value       = azurerm_storage_container.deployment.name
 }
-
-output "deployed_package_url" {
-  description = "URL of the deployed function app package"
-  value       = var.deploy_package ? azurerm_storage_blob.function_app_package[0].url : null
-}

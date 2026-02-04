@@ -80,21 +80,3 @@ variable "app_settings" {
   type        = map(string)
   default     = {}
 }
-
-variable "deploy_package" {
-  description = "Whether to deploy a function app package"
-  type        = bool
-  default     = false
-}
-
-variable "package_source" {
-  description = "Path to the zip file to deploy (required if deploy_package is true)"
-  type        = string
-  default     = null
-}
-
-variable "package_content_md5" {
-  description = "MD5 hash of the package content for change detection"
-  type        = string
-  default     = null
-}

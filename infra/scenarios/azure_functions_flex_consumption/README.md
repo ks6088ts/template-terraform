@@ -138,18 +138,102 @@ zone_redundant         = true
 
 ## Deploy Function Code
 
-デプロイ後、以下の方法で関数コードをデプロイできます：
+Terraform でインフラをデプロイした後、以下の方法で関数コードをデプロイします。
+
+> **Note**: Azure Functions Flex Consumption プランでは、Terraform の `zip_deploy_file` は正常に動作しないため、コードデプロイは別途実行する必要があります。Flex Consumption は "One Deploy" という独自のデプロイメカニズムを使用しています。
+
+### Azure Functions Core Tools を使用（推奨）
 
 ```shell
-# Azure Functions Core Tools を使用
-func azure functionapp publish <function_app_name>
+FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
 
-# VS Code Azure Functions 拡張機能を使用
-# または Azure CLI を使用
+# src ディレクトリに移動
+cd src
+
+# Function App にデプロイ
+func azure functionapp publish $FUNCTION_APP_NAME
+```
+
+### Azure CLI を使用
+
+```shell
+# src ディレクトリを zip 化
+cd src && zip -r ../function_app.zip . && cd ..
+
+# Azure CLI でデプロイ
 az functionapp deployment source config-zip \
-  --resource-group <resource_group_name> \
-  --name <function_app_name> \
-  --src <zip_file_path>
+  --resource-group $(terraform output -raw resource_group_name) \
+  --name $(terraform output -raw function_app_name) \
+  --src function_app.zip
+```
+
+### デプロイ確認
+
+```shell
+# Function App のログをストリーミング
+az webapp log tail \
+  --name $(terraform output -raw function_app_name) \
+  --resource-group $(terraform output -raw resource_group_name)
+```
+
+## Function の動作検証
+
+### HTTP トリガー関数のテスト
+
+```shell
+# Function App 名と Function Key を取得
+FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
+RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)
+
+# Function Key を取得
+FUNCTION_KEY=$(az functionapp function keys list \
+  --name $FUNCTION_APP_NAME \
+  --resource-group $RESOURCE_GROUP_NAME \
+  --function-name hello_world_http \
+  --query default -o tsv)
+
+# HTTP トリガー関数を呼び出し（基本）
+curl "https://${FUNCTION_APP_NAME}.azurewebsites.net/api/hello?code=${FUNCTION_KEY}"
+
+# HTTP トリガー関数を呼び出し（name パラメータ付き）
+curl "https://${FUNCTION_APP_NAME}.azurewebsites.net/api/hello?code=${FUNCTION_KEY}&name=Azure"
+
+# POST リクエストで呼び出し
+curl -X POST "https://${FUNCTION_APP_NAME}.azurewebsites.net/api/hello?code=${FUNCTION_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "World"}'
+```
+
+### タイマートリガー関数の確認
+
+タイマートリガー関数は 1 時間ごと（毎時 0 分）に自動実行されます。ログで実行を確認できます。
+
+```shell
+# ログをストリーミングして "hello world" の出力を確認
+az webapp log tail \
+  --name $(terraform output -raw function_app_name) \
+  --resource-group $(terraform output -raw resource_group_name)
+```
+
+## Known Issues / Troubleshooting
+
+### Terraform でのコードデプロイの制限
+
+Azure Functions Flex Consumption プランでは、Terraform の `zip_deploy_file` 属性を使用したコードデプロイは**サポートされていません**（404 Not Found エラーが発生します）。これは Flex Consumption が従来の App Service とは異なる "One Deploy" メカニズムを使用しているためです。
+
+**対処法**: インフラのデプロイ後、Azure Functions Core Tools (`func`) または Azure CLI を使用してコードをデプロイしてください。上記の「Deploy Function Code」セクションを参照してください。
+
+### 403 エラー: "This request is not authorized to perform this operation using this permission."
+
+初回デプロイ時に 403 エラーが発生することがあります。
+
+**原因**: このモジュールでは Storage Account のセキュリティを強化するために `shared_access_key_enabled = false` を設定し、RBAC（Role-Based Access Control）による認証を使用しています。**Azure の RBAC ロール割り当ては伝播に最大数分かかる**ことがあります。
+
+**対処法**: エラーが発生した場合は、1〜2分待ってから `terraform apply` を再度実行してください。
+
+```shell
+# 初回でエラーが出た場合、しばらく待ってから再実行
+terraform apply -auto-approve
 ```
 
 ## References
@@ -158,3 +242,4 @@ az functionapp deployment source config-zip \
 - [azurerm_function_app_flex_consumption](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/function_app_flex_consumption)
 - [Azure Functions Flex Consumption Samples](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples)
 - [Quickstart: Create and deploy Azure Functions resources from Terraform](https://learn.microsoft.com/en-us/azure/azure-functions/functions-create-first-function-terraform)
+- [Azure RBAC role assignment propagation time](https://learn.microsoft.com/en-us/azure/role-based-access-control/troubleshoot-limits#symptom---role-assignment-changes-are-not-being-detected)
