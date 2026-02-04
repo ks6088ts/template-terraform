@@ -2,6 +2,25 @@
 
 This Terraform scenario demonstrates how to create and manage GitHub repository environment secrets using the GitHub provider. It sets up secrets for a specified GitHub repository environment, which can be used in GitHub Actions workflows.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Terraform["Terraform"]
+        TF["GitHub Provider"]
+    end
+
+    subgraph GitHub["GitHub Repository"]
+        ENV["Environment<br/>- dev / staging / prod"]
+        SEC["Environment Secrets<br/>- ARM_CLIENT_ID<br/>- AWS credentials<br/>- GCP credentials"]
+        GA["GitHub Actions<br/>Workflow"]
+    end
+
+    TF -->|"Create/Update"| ENV
+    TF -->|"Manage"| SEC
+    GA -->|"Read Secrets"| SEC
+```
+
 ## Prerequisites
 
 - Terraform CLI installed

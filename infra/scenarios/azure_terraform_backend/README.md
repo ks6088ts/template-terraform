@@ -2,6 +2,17 @@
 
 Create Azure Storage Account for Terraform backend.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Azure["Azure Resource Group"]
+        SA["Storage Account<br/>- Blob Container<br/>- terraform.tfstate"]
+    end
+
+    TF["Terraform CLI"] -->|"State Read/Write"| SA
+```
+
 ## Prerequisites
 
 - Terraform CLI installed

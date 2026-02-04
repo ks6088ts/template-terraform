@@ -2,6 +2,19 @@
 
 This scenario deploys a Microsoft Foundry environment on Azure using Terraform. It sets up the necessary infrastructure components to run Microsoft Foundry workloads.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    Internet((Internet))
+
+    subgraph Azure["Azure Resource Group"]
+        MF["Microsoft Foundry<br/>- AI Hub<br/>- AI Services"]
+    end
+
+    Internet -->|HTTPS| MF
+```
+
 ## Prerequisites
 
 - Terraform CLI installed

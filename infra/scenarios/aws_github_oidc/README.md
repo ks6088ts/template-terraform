@@ -2,6 +2,26 @@
 
 This Terraform scenario creates the necessary AWS resources to enable GitHub Actions to authenticate with AWS using OpenID Connect (OIDC). This eliminates the need for storing long-lived AWS credentials as GitHub secrets.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph GitHub["GitHub"]
+        GA["GitHub Actions<br/>Workflow"]
+    end
+
+    subgraph AWS["AWS"]
+        OIDC["IAM OIDC<br/>Identity Provider"]
+        Role["IAM Role<br/>- Trust Policy<br/>- Permissions"]
+        Resources["AWS Resources"]
+    end
+
+    GA -->|"1. Request OIDC Token"| GitHub
+    GA -->|"2. Present Token"| OIDC
+    OIDC -->|"3. Validate & Assume"| Role
+    GA -->|"4. Access Resources"| Resources
+```
+
 ## Resources Created
 
 - **IAM OIDC Identity Provider**: Establishes trust between GitHub Actions and AWS

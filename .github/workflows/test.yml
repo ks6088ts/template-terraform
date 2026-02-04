@@ -111,6 +111,7 @@ jobs:
           - azure_apim_playground
           - azure_container_apps
           - azure_datastore
+          - azure_functions_flex_consumption
           - azure_github_oidc
           - azure_inclusive_ai_labs
           - azure_microsoft_foundry
