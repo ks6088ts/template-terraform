@@ -29,7 +29,7 @@ flowchart TB
     end
 
     subgraph Azure["☁️ Azure クラウド"]
-        subgraph RG["📁 リソースグループ (rg-inclusiveailabs)"]
+        subgraph RG["📁 リソースグループ (rg-azureinclusiveailabs)"]
             subgraph CAE["🔷 Container Apps 環境"]
                 direction TB
 
@@ -321,7 +321,7 @@ flowchart LR
 2. **`terraform.tfvars` ファイルを作成**
 
    ```hcl
-   name     = "inclusiveailabs"
+   name     = "azureinclusiveailabs"
    location = "japaneast"
 
    # Azure OpenAI 設定（Azure OpenAI を使用する場合は必須）
@@ -361,7 +361,7 @@ flowchart LR
 
 | 名前 | デフォルト値 | 説明 |
 |------|-------------|------|
-| `name` | `inclusiveailabs` | リソースの基本名 |
+| `name` | `azureinclusiveailabs` | リソースの基本名 |
 | `location` | `japaneast` | Azureリージョン |
 
 ### azure_inclusive_ai_labs コンテナ設定
@@ -549,6 +549,6 @@ flowchart TD
 # Azure CLIでログを確認
 az containerapp logs show \
   --name app-inclusive-ai-labs \
-  --resource-group rg-inclusiveailabs \
+  --resource-group rg-azureinclusiveailabs \
   --type console
 ```

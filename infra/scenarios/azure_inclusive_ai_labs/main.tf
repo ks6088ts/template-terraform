@@ -39,7 +39,7 @@ resource "azurerm_container_app_environment" "this" {
 # Azure Storage for Ollama model persistence
 # -----------------------------------------------------------------------------
 resource "azurerm_storage_account" "ollama" {
-  name                     = "st${replace(var.name, "-", "")}ollama"
+  name                     = substr("st${replace(var.name, "-", "")}ollama", 0, 24)
   resource_group_name      = module.resource_group.name
   location                 = module.resource_group.location
   account_tier             = "Standard"

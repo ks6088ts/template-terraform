@@ -1,7 +1,7 @@
 variable "name" {
   description = "Specifies the base name for resources"
   type        = string
-  default     = "inclusiveailabs"
+  default     = "azureinclusiveailabs"
 }
 
 variable "location" {
