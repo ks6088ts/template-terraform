@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telemetrygen-traces
+  namespace: playground-otel
+  labels:
+    app.kubernetes.io/name: telemetrygen-traces
+    app.kubernetes.io/part-of: otel-stack
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: telemetrygen-traces
+        app.kubernetes.io/part-of: otel-stack
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: telemetrygen
+          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+          args:
+            - traces
+            - --otlp-endpoint=otel-collector:4317
+            - --otlp-insecure
+            - --duration=5m
+            - --rate=1
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
