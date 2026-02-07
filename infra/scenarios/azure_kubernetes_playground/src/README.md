@@ -11,13 +11,11 @@ flowchart LR
         GenMetrics["telemetrygen<br/>(metrics)"]
     end
 
-    subgraph Collector["OpenTelemetry Collector"]
-        OTLP_IN["OTLP Receiver<br/>gRPC :4317<br/>HTTP :4318"]
+    subgraph Collector["OpenTelemetry Collector<br/>:4317 gRPC / :4318 HTTP"]
+        direction TB
+        OTLP_IN["OTLP Receiver"]
         Batch["Batch Processor"]
-        EXP_Jaeger["Exporter<br/>(OTLP → Jaeger)"]
-        EXP_Prom["Exporter<br/>(Prometheus :8889)"]
-        EXP_PromRW["Exporter<br/>(Prometheus Remote Write)"]
-        EXP_Debug["Exporter<br/>(Debug)"]
+        OTLP_IN --> Batch
     end
 
     subgraph Backends["バックエンド"]
@@ -27,13 +25,11 @@ flowchart LR
 
     GenTraces -- "OTLP gRPC" --> OTLP_IN
     GenMetrics -- "OTLP gRPC" --> OTLP_IN
-    OTLP_IN --> Batch
-    Batch --> EXP_Jaeger --> Jaeger
-    Batch --> EXP_Prom
-    Batch --> EXP_PromRW --> Prometheus
-    Batch --> EXP_Debug
 
-    Prometheus -- "scrape :8889" --> EXP_Prom
+    Batch -- "traces<br/>(OTLP export)" --> Jaeger
+    Batch -- "metrics<br/>(remote write push)" --> Prometheus
+    Prometheus -. "metrics<br/>(scrape :8889)" .-> Batch
+    Batch -- "traces / metrics / logs" --> Debug["Debug<br/>(stdout)"]
 ```
 
 ### コンポーネント一覧
