@@ -124,6 +124,68 @@ kubectl get all -n playground-otel
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector.playground-otel.svc.cluster.local:4317"
 ```
 
+#### kubectl から CLI でテレメトリを送信する
+
+クラスタ内に一時的な Pod を起動し、CLI でテレメトリを送信して動作確認できます。
+
+**1. telemetrygen でトレースを送信する**
+
+```shell
+kubectl run telemetrygen-test --rm -it --restart=Never \
+  -n playground-otel \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  -- traces --otlp-endpoint otel-collector:4317 --otlp-insecure --traces 5 --service my-test-service
+```
+
+**2. telemetrygen でメトリクスを送信する**
+
+```shell
+kubectl run telemetrygen-metrics-test --rm -it --restart=Never \
+  -n playground-otel \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  -- metrics --otlp-endpoint otel-collector:4317 --otlp-insecure --metrics 5 --service my-test-service
+```
+
+**3. telemetrygen でログを送信する**
+
+```shell
+kubectl run telemetrygen-logs-test --rm -it --restart=Never \
+  -n playground-otel \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  -- logs --otlp-endpoint otel-collector:4317 --otlp-insecure --logs 5 --service my-test-service
+```
+
+**4. curl で OTLP HTTP エンドポイントにトレースを送信する**
+
+```shell
+kubectl run curl-test --rm -it --restart=Never \
+  -n playground-otel \
+  --image=curlimages/curl:latest \
+  -- curl -X POST http://otel-collector:4318/v1/traces \
+    -H "Content-Type: application/json" \
+    -d '{
+      "resourceSpans": [{
+        "resource": {
+          "attributes": [{"key": "service.name", "value": {"stringValue": "curl-test"}}]
+        },
+        "scopeSpans": [{
+          "scope": {"name": "manual-test"},
+          "spans": [{
+            "traceId": "01020304050607080102040810203040",
+            "spanId": "0102040810203040",
+            "name": "hello-from-curl",
+            "kind": 1,
+            "startTimeUnixNano": "1000000000",
+            "endTimeUnixNano": "2000000000",
+            "status": {}
+          }]
+        }]
+      }]
+    }'
+```
+
+> **ヒント**: `kubectl run --rm -it` を使うと、コマンド終了後に Pod が自動的に削除されます。送信後に Jaeger UI や Prometheus UI で `my-test-service` や `curl-test` をサービス名として検索すると結果を確認できます。
+
 ### テレメトリ生成 Job の再実行
 
 Job は完了後に再実行できません。再度テレメトリを生成したい場合は、既存の Job を削除してから再作成してください。
