@@ -82,7 +82,10 @@ flowchart LR
 ### デプロイ
 
 ```shell
-# 全マニフェストを一括適用
+# Namespace を先に作成（他リソースが参照するため）
+kubectl apply -f namespace.yaml
+
+# 残りのマニフェストを一括適用
 kubectl apply -f .
 ```
 
