@@ -16,7 +16,7 @@ permissions:
 env:
   TERRAFORM_VERSION: 1.13.4
   TFLINT_VERSION: v0.60.0
-  TRIVY_VERSION: v0.68.2
+  TRIVY_VERSION: v0.69.3
 
 jobs:
   # Lint and security scan (no auth required)
@@ -37,7 +37,7 @@ jobs:
         with:
           tflint_version: ${{ env.TFLINT_VERSION }}
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.5
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
         with:
           version: ${{ env.TRIVY_VERSION }}
       - name: Run lint and security scan
