@@ -139,7 +139,7 @@ flowchart TD
 
     GenAI --> ProviderCheck{"🔄 GenAI<br/>プロバイダー選択"}
     ProviderCheck -->|"ollama"| Ollama["🏠 Ollama<br/>(ローカルLLM)"]
-    ProviderCheck -->|"azure_openai"| AOAI["☁️ Azure OpenAI<br/>(クラウドLLM)"]
+    ProviderCheck -->|"azure-openai"| AOAI["☁️ Azure OpenAI<br/>(クラウドLLM)"]
 
     Ollama --> Response["📄 テキスト応答"]
     AOAI --> Response
@@ -245,7 +245,7 @@ flowchart TD
 
 | 環境変数 | 設定値 | 説明 |
 |---------|-------|------|
-| `GENAI_DEFAULT_PROVIDER` | `ollama` / `azure_openai` | 使用するLLMプロバイダ |
+| `GENAI_DEFAULT_PROVIDER` | `ollama` / `azure-openai` | 使用するLLMプロバイダ |
 | `TTS_DEFAULT_PROVIDER` | `voicevox` / `piper` | 使用する音声合成プロバイダ |
 | `STT_DEFAULT_PROVIDER` | `whisper` | 使用する音声認識プロバイダ |
 
@@ -399,13 +399,21 @@ flowchart LR
 
 | 名前 | デフォルト値 | 説明 |
 |------|-------------|------|
-| `genai_default_provider` | `ollama` | LLMプロバイダー（`ollama` または `azure_openai`） |
+| `genai_default_provider` | `ollama` | LLMプロバイダー（`ollama` または `azure-openai`） |
+| `genai_system_prompt` | `You are a helpful assistant.` | GenAIプロバイダーのシステムプロンプト |
 | `genai_azure_openai_endpoint` | `` | Azure OpenAI エンドポイントURL |
 | `genai_azure_openai_deployment_name` | `gpt-4o` | デプロイメント名 |
+| `genai_azure_openai_api_version` | `2024-02-15-preview` | Azure OpenAI APIバージョン |
 | `stt_default_provider` | `whisper` | 音声認識プロバイダー |
 | `stt_whisper_model_size` | `small` | Whisperモデルサイズ |
+| `stt_whisper_device` | `cpu` | Whisperデバイス（`cpu` / `cuda`） |
+| `stt_whisper_compute_type` | `int8` | Whisper計算タイプ |
+| `stt_hf_home` | `` | Hugging Faceモデルキャッシュディレクトリ |
 | `tts_default_provider` | `voicevox` | 音声合成プロバイダー |
+| `tts_default_voice` | `en_US-lessac-medium` | デフォルト音声（piper用） |
 | `tts_voicevox_default_speaker` | `1` | voicevoxスピーカーID |
+| `tts_voicevox_timeout` | `30.0` | voicevoxリクエストタイムアウト（秒） |
+| `tts_piper_voices_dir` | `` | Piper音声モデルディレクトリ |
 
 詳細は [variables.tf](variables.tf) を参照してください。
 
