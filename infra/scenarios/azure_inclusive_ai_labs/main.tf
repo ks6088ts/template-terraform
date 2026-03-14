@@ -254,6 +254,10 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
         name  = "GENAI_AZURE_OPENAI_API_VERSION"
         value = var.genai_azure_openai_api_version
       }
+      env {
+        name  = "GENAI_SYSTEM_PROMPT"
+        value = var.genai_system_prompt
+      }
 
       # Ollama Settings (internal communication via Container Apps internal DNS)
       env {
@@ -282,6 +286,10 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
         name  = "STT_WHISPER_COMPUTE_TYPE"
         value = var.stt_whisper_compute_type
       }
+      env {
+        name  = "STT_HF_HOME"
+        value = var.stt_hf_home
+      }
 
       # TTS Settings
       env {
@@ -304,6 +312,10 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
       env {
         name  = "TTS_VOICEVOX_TIMEOUT"
         value = var.tts_voicevox_timeout
+      }
+      env {
+        name  = "TTS_PIPER_VOICES_DIR"
+        value = var.tts_piper_voices_dir
       }
     }
 

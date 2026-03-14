@@ -271,6 +271,12 @@ variable "genai_azure_openai_api_version" {
   default     = "2024-02-15-preview"
 }
 
+variable "genai_system_prompt" {
+  description = "System prompt for the GenAI provider"
+  type        = string
+  default     = "You are a helpful assistant."
+}
+
 # STT Settings
 variable "stt_default_provider" {
   description = "Default STT provider"
@@ -296,6 +302,12 @@ variable "stt_whisper_compute_type" {
   default     = "int8"
 }
 
+variable "stt_hf_home" {
+  description = "Hugging Face cache directory for STT models"
+  type        = string
+  default     = ""
+}
+
 # TTS Settings
 variable "tts_default_provider" {
   description = "Default TTS provider"
@@ -319,4 +331,10 @@ variable "tts_voicevox_timeout" {
   description = "Voicevox request timeout in seconds"
   type        = string
   default     = "30.0"
+}
+
+variable "tts_piper_voices_dir" {
+  description = "Directory for storing Piper voice models"
+  type        = string
+  default     = ""
 }
