@@ -9,7 +9,7 @@ module "random_string" {
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = "${var.name}-${module.random_string.result}"
+  name     = var.name
   location = var.location
   tags     = var.tags
 }
