@@ -578,7 +578,7 @@ flowchart LR
 - 開発環境でコストを最適化する場合は、`min_replicas` を 0 に設定できます
 - Ollamaのモデルデータは Azure Storage に永続化されるため、コンテナ再起動後も保持されます
 - `azure.extensions` 設定（`VECTOR,PG_TRGM`）反映後は PostgreSQL Flexible Server の再起動が必要になる場合があります
-- PostgreSQL モジュールは firewall rule `AllowAll`（`0.0.0.0-255.255.255.255`）を作成します。検証用途向け設定のため、本番ではアクセス制限を追加してください
+- ⚠️ **重要**: PostgreSQL モジュールは firewall rule `AllowAll`（`0.0.0.0-255.255.255.255`）を作成します。検証用途向け設定のため、本番では必ずアクセス制限を追加してください
 
 ## 📚 関連リソース
 

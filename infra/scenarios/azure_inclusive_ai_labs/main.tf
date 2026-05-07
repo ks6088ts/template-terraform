@@ -7,8 +7,8 @@ data "azurerm_client_config" "current" {}
 locals {
   tenant_id              = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
   entra_user_name        = "app-inclusive-ai-labs"
-  chatlog_dsn_with_auth  = format("postgresql+asyncpg://%s:%s@%s:5432/%s?sslmode=require", var.postgresql_administrator_login, var.postgresql_administrator_password, module.postgresql.server_fqdn, var.postgresql_database_name)
-  chatlog_dsn_without_pw = format("postgresql+asyncpg://%s@%s:5432/%s?sslmode=require", local.entra_user_name, module.postgresql.server_fqdn, var.postgresql_database_name)
+  chatlog_dsn_with_auth  = format("postgresql+asyncpg://%s:%s@%s:5432/%s?sslmode=require", urlencode(var.postgresql_administrator_login), urlencode(var.postgresql_administrator_password), module.postgresql.server_fqdn, var.postgresql_database_name)
+  chatlog_dsn_without_pw = format("postgresql+asyncpg://%s@%s:5432/%s?sslmode=require", urlencode(local.entra_user_name), module.postgresql.server_fqdn, var.postgresql_database_name)
   chatlog_dsn            = var.chatlog_auth_mode == "password" ? local.chatlog_dsn_with_auth : local.chatlog_dsn_without_pw
 }
 
@@ -440,7 +440,7 @@ resource "azurerm_postgresql_flexible_server_active_directory_administrator" "ch
   server_name         = module.postgresql.server_name
   resource_group_name = module.resource_group.name
   tenant_id           = local.tenant_id
-  object_id           = azurerm_container_app.azure_inclusive_ai_labs.identity[0].principal_id
+  object_id           = one(azurerm_container_app.azure_inclusive_ai_labs.identity).principal_id
   principal_name      = local.entra_user_name
   principal_type      = "ServicePrincipal"
 }
