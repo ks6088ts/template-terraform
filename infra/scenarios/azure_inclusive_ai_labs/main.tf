@@ -5,9 +5,11 @@
 data "azurerm_client_config" "current" {}
 
 locals {
-  tenant_id       = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
-  entra_user_name = "app-inclusive-ai-labs"
-  chatlog_dsn     = var.chatlog_auth_mode == "password" ? "postgresql+asyncpg://${var.postgresql_administrator_login}:${var.postgresql_administrator_password}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require" : "postgresql+asyncpg://${local.entra_user_name}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
+  tenant_id              = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
+  entra_user_name        = "app-inclusive-ai-labs"
+  chatlog_dsn_with_auth  = format("postgresql+asyncpg://%s:%s@%s:5432/%s?sslmode=require", var.postgresql_administrator_login, var.postgresql_administrator_password, module.postgresql.server_fqdn, var.postgresql_database_name)
+  chatlog_dsn_without_pw = format("postgresql+asyncpg://%s@%s:5432/%s?sslmode=require", local.entra_user_name, module.postgresql.server_fqdn, var.postgresql_database_name)
+  chatlog_dsn            = var.chatlog_auth_mode == "password" ? local.chatlog_dsn_with_auth : local.chatlog_dsn_without_pw
 }
 
 module "resource_group" {

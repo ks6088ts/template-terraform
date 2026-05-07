@@ -37,7 +37,7 @@ variable "administrator_password" {
   default     = null
 
   validation {
-    condition     = !var.password_auth_enabled || (var.administrator_password != null && length(trimspace(var.administrator_password)) > 0)
+    condition     = var.password_auth_enabled == false || (var.administrator_password != null && length(trimspace(var.administrator_password)) > 0)
     error_message = "administrator_password must be set when password_auth_enabled is true."
   }
 }
