@@ -17,6 +17,7 @@
 | **azure_inclusive_ai_labs** | メインAPIサーバー（対話処理の司令塔） | ✅ 可能 |
 | **voicevox** | 日本語音声合成エンジン | ❌ 内部のみ |
 | **ollama** | ローカルLLM実行エンジン | ❌ 内部のみ（設定で変更可） |
+| **PostgreSQL Flexible Server** | 会話履歴データベース（オプション） | ❌ 内部のみ |
 
 ## 🏗️ システムアーキテクチャ
 
@@ -349,6 +350,124 @@ flowchart LR
    terraform output azure_inclusive_ai_labs_url
    ```
 
+## 🗄️ PostgreSQL Flexible Server 設定
+
+このシナリオは、会話履歴を保存するための PostgreSQL Flexible Server をサポートしています。
+
+### PostgreSQL の機能
+
+- **会話履歴の永続化**: ユーザーとAIの対話履歴をデータベースに保存
+- **ベクトル検索**: `VECTOR` 拡張により、セマンティック検索が可能
+- **全文検索**: `PG_TRGM` 拡張により、高速な全文検索が可能
+- **2つの認証モード**: パスワード認証と Entra ID 認証に対応
+
+### 認証モードの選択
+
+#### パスワード認証モード（デフォルト）
+
+`terraform.tfvars` に以下を追加：
+
+```hcl
+# PostgreSQL 設定
+postgresql_administrator_login    = "psqladmin"
+postgresql_administrator_password = "YourSecurePassword123!"  # 強力なパスワードを設定
+postgresql_database_name          = "chatlog"
+postgresql_sku_name               = "B_Standard_B1ms"
+postgresql_version                = "17"
+
+# CHATLOG 設定
+chatlog_enabled   = true
+chatlog_auth_mode = "password"
+```
+
+#### Entra ID 認証モード
+
+Entra ID 認証を使用する場合は、`chatlog_auth_mode` を `"entra"` に設定します：
+
+```hcl
+# PostgreSQL 設定
+postgresql_administrator_login    = "psqladmin"
+postgresql_administrator_password = "YourSecurePassword123!"  # 初期設定用
+postgresql_database_name          = "chatlog"
+
+# CHATLOG 設定
+chatlog_enabled   = true
+chatlog_auth_mode = "entra"  # Entra ID 認証を使用
+```
+
+**Entra ID 認証の追加設定**
+
+Entra ID 認証を使用する場合、アプリケーションから接続するには以下の手順が必要です：
+
+1. **Terraform デプロイ後、PostgreSQL に接続**
+
+   ```bash
+   # Azure CLI でトークンを取得
+   az login
+   export PGPASSWORD=$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)
+
+   # PostgreSQL に管理者として接続
+   psql "host=$(terraform output -raw postgresql_server_fqdn) \
+         port=5432 \
+         dbname=postgres \
+         user=psqladmin \
+         sslmode=require"
+   ```
+
+2. **Container App の Managed Identity 用のロールを作成**
+
+   ```sql
+   -- Container App の Managed Identity を取得
+   -- terraform output で表示される principal_id を使用
+
+   -- PostgreSQL 内でロールを作成
+   SET aad_validate_oids_in_tenant = off;
+   CREATE ROLE "app-inclusive-ai-labs" WITH LOGIN PASSWORD NULL IN ROLE azure_ad_user;
+   GRANT ALL PRIVILEGES ON DATABASE chatlog TO "app-inclusive-ai-labs";
+
+   -- chatlog データベースに接続
+   \c chatlog
+   GRANT ALL PRIVILEGES ON SCHEMA public TO "app-inclusive-ai-labs";
+   ```
+
+3. **アプリケーションの起動**
+
+   アプリケーションは自動的に Azure AD トークンを使用してデータベースに接続します。
+
+### PostgreSQL 拡張機能
+
+デプロイ時に自動的に以下の拡張が有効化されます：
+
+- `VECTOR`: ベクトル検索用（AI埋め込みの保存と検索）
+- `PG_TRGM`: トライグラム全文検索用
+
+**注意**: 拡張機能の有効化後、PostgreSQL サーバーの再起動が必要になる場合があります。
+
+### 環境変数
+
+Container App に自動的に設定される環境変数：
+
+| 環境変数 | 説明 | 例 |
+|---------|------|-----|
+| `CHATLOG_ENABLED` | CHATLOG 機能の有効/無効 | `true` / `false` |
+| `CHATLOG_DSN` | データベース接続文字列（Secret） | `postgresql+asyncpg://...` |
+| `CHATLOG_AUTH_MODE` | 認証モード | `password` / `entra` |
+
+### 出力値
+
+PostgreSQL 関連の出力値：
+
+```bash
+# PostgreSQL サーバーの FQDN
+terraform output postgresql_server_fqdn
+
+# データベース名
+terraform output postgresql_database_name
+
+# 接続文字列（機密情報）
+terraform output -raw chatlog_dsn
+```
+
 ## 📋 変数一覧
 
 ### 必須変数
@@ -415,6 +534,18 @@ flowchart LR
 | `tts_voicevox_timeout` | `30.0` | voicevoxリクエストタイムアウト（秒） |
 | `tts_piper_voices_dir` | `` | Piper音声モデルディレクトリ |
 
+### PostgreSQL 設定
+
+| 名前 | デフォルト値 | 説明 |
+|------|-------------|------|
+| `postgresql_administrator_login` | `psqladmin` | PostgreSQL 管理者ユーザー名 |
+| `postgresql_administrator_password` | `` | PostgreSQL 管理者パスワード（機密情報） |
+| `postgresql_database_name` | `chatlog` | アプリケーション用データベース名 |
+| `postgresql_sku_name` | `B_Standard_B1ms` | PostgreSQL SKU名 |
+| `postgresql_version` | `17` | PostgreSQL バージョン |
+| `chatlog_enabled` | `true` | CHATLOG 機能の有効/無効 |
+| `chatlog_auth_mode` | `password` | 認証モード（`password` または `entra`） |
+
 詳細は [variables.tf](variables.tf) を参照してください。
 
 ## 📤 出力値
@@ -426,6 +557,9 @@ flowchart LR
 | `voicevox_internal_fqdn` | voicevoxの内部FQDN |
 | `ollama_internal_fqdn` | ollamaの内部FQDN |
 | `ollama_url` | ollamaのURL（外部/内部） |
+| `postgresql_server_fqdn` | PostgreSQL サーバーのFQDN |
+| `postgresql_database_name` | アプリケーション用データベース名 |
+| `chatlog_dsn` | CHATLOG データベース接続文字列（機密情報） |
 
 ## 🔗 内部通信の仕組み
 
@@ -526,6 +660,9 @@ flowchart LR
 - コールドスタートを避けるため、最小レプリカ数は1に設定されています
 - 開発環境でコストを最適化する場合は、`min_replicas` を 0 に設定できます
 - Ollamaのモデルデータは Azure Storage に永続化されるため、コンテナ再起動後も保持されます
+- **PostgreSQL**: 拡張機能（VECTOR, PG_TRGM）の有効化後、サーバーの再起動が必要になる場合があります
+- **PostgreSQL**: パブリックネットワークアクセスが有効化されているため、本番環境では Private Endpoint の使用を推奨します
+- **Entra ID 認証**: Entra ID 認証を使用する場合、手動での SQL 設定が必要です（上記の PostgreSQL 設定セクションを参照）
 
 ## 📚 関連リソース
 
