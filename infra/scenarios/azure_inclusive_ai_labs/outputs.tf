@@ -13,6 +13,22 @@ output "container_app_environment_name" {
   value       = azurerm_container_app_environment.this.name
 }
 
+output "postgresql_server_fqdn" {
+  description = "FQDN of PostgreSQL Flexible Server"
+  value       = module.postgresql.server_fqdn
+}
+
+output "postgresql_database_name" {
+  description = "Database name for chatlog"
+  value       = azurerm_postgresql_flexible_server_database.chatlog.name
+}
+
+output "chatlog_dsn" {
+  description = "Connection DSN for chatlog database"
+  value       = local.chatlog_dsn
+  sensitive   = true
+}
+
 # azure_inclusive_ai_labs outputs
 output "azure_inclusive_ai_labs_id" {
   description = "ID of the azure_inclusive_ai_labs Container App"

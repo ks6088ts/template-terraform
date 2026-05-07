@@ -4,7 +4,7 @@ resource "azurerm_postgresql_flexible_server" "this" {
   location                      = var.location
   version                       = var.postgresql_version
   administrator_login           = var.administrator_login
-  administrator_password        = var.administrator_password
+  administrator_password        = var.password_auth_enabled ? var.administrator_password : null
   zone                          = var.zone
   sku_name                      = var.sku_name
   tags                          = var.tags
@@ -12,7 +12,7 @@ resource "azurerm_postgresql_flexible_server" "this" {
 
   authentication {
     active_directory_auth_enabled = true
-    password_auth_enabled         = true
+    password_auth_enabled         = var.password_auth_enabled
     tenant_id                     = var.tenant_id
   }
 }

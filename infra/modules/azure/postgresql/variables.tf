@@ -34,6 +34,12 @@ variable "administrator_password" {
   description = "Administrator password for PostgreSQL Flexible Server"
   type        = string
   sensitive   = true
+  default     = null
+
+  validation {
+    condition     = !var.password_auth_enabled || (var.administrator_password != null && length(trimspace(var.administrator_password)) > 0)
+    error_message = "administrator_password must be set when password_auth_enabled is true."
+  }
 }
 
 variable "postgresql_version" {
@@ -52,4 +58,10 @@ variable "zone" {
   description = "Availability zone for PostgreSQL Flexible Server"
   type        = string
   default     = "2"
+}
+
+variable "password_auth_enabled" {
+  description = "Enable password-based authentication"
+  type        = bool
+  default     = true
 }

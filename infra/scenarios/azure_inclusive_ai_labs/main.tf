@@ -2,6 +2,14 @@
 # Resource Group
 # =============================================================================
 
+data "azurerm_client_config" "current" {}
+
+locals {
+  tenant_id       = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
+  entra_user_name = "app-inclusive-ai-labs"
+  chatlog_dsn     = var.chatlog_auth_mode == "password" ? "postgresql+asyncpg://${var.postgresql_administrator_login}:${var.postgresql_administrator_password}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require" : "postgresql+asyncpg://${local.entra_user_name}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
+}
+
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
@@ -21,6 +29,36 @@ module "log_analytics" {
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
+}
+
+# =============================================================================
+# PostgreSQL Flexible Server
+# =============================================================================
+
+module "postgresql" {
+  source = "../../modules/azure/postgresql"
+
+  name                   = var.name
+  resource_group_name    = module.resource_group.name
+  location               = module.resource_group.location
+  tags                   = var.tags
+  tenant_id              = local.tenant_id
+  administrator_login    = var.postgresql_administrator_login
+  administrator_password = var.postgresql_administrator_password
+  postgresql_version     = var.postgresql_version
+  sku_name               = var.postgresql_sku_name
+  password_auth_enabled  = var.chatlog_auth_mode == "password"
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "azure_extensions" {
+  name      = "azure.extensions"
+  server_id = module.postgresql.server_id
+  value     = "VECTOR,PG_TRGM"
+}
+
+resource "azurerm_postgresql_flexible_server_database" "chatlog" {
+  name      = var.postgresql_database_name
+  server_id = module.postgresql.server_id
 }
 
 # =============================================================================
@@ -191,6 +229,10 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
   revision_mode                = "Single"
   tags                         = var.tags
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   # Secret for Azure OpenAI API Key
   secret {
     name  = "genai-azure-openai-api-key"
@@ -201,6 +243,11 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
   secret {
     name  = "github-copilot-azure-openai-api-key"
     value = var.github_copilot_azure_openai_api_key
+  }
+
+  secret {
+    name  = "chatlog-dsn"
+    value = local.chatlog_dsn
   }
 
   template {
@@ -237,6 +284,18 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
       env {
         name  = "CORS_ORIGINS"
         value = var.cors_origins
+      }
+      env {
+        name  = "CHATLOG_ENABLED"
+        value = tostring(var.chatlog_enabled)
+      }
+      env {
+        name        = "CHATLOG_DSN"
+        secret_name = "chatlog-dsn"
+      }
+      env {
+        name  = "CHATLOG_AUTH_MODE"
+        value = var.chatlog_auth_mode
       }
 
       # GenAI Settings
@@ -367,6 +426,19 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
 
   depends_on = [
     azurerm_container_app.voicevox,
-    azurerm_container_app.ollama
+    azurerm_container_app.ollama,
+    azurerm_postgresql_flexible_server_configuration.azure_extensions,
+    azurerm_postgresql_flexible_server_database.chatlog
   ]
+}
+
+resource "azurerm_postgresql_flexible_server_active_directory_administrator" "chatlog" {
+  count = var.chatlog_auth_mode == "entra" ? 1 : 0
+
+  server_name         = module.postgresql.server_name
+  resource_group_name = module.resource_group.name
+  tenant_id           = local.tenant_id
+  object_id           = azurerm_container_app.azure_inclusive_ai_labs.identity[0].principal_id
+  principal_name      = local.entra_user_name
+  principal_type      = "ServicePrincipal"
 }

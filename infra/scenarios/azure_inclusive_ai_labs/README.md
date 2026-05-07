@@ -17,6 +17,7 @@
 | **azure_inclusive_ai_labs** | メインAPIサーバー（対話処理の司令塔） | ✅ 可能 |
 | **voicevox** | 日本語音声合成エンジン | ❌ 内部のみ |
 | **ollama** | ローカルLLM実行エンジン | ❌ 内部のみ（設定で変更可） |
+| **PostgreSQL Flexible Server** | Chatlogデータベース（`chatlog`） | ✅ 可能（public network） |
 
 ## 🏗️ システムアーキテクチャ
 
@@ -45,6 +46,7 @@ flowchart TB
 
             LAW["📊 Log Analytics<br/>（ログ監視）"]
             Storage["💾 Azure Storage<br/>（モデル永続化）"]
+            PostgreSQL["🐘 PostgreSQL Flexible Server<br/>chatlog DB<br/>extensions: VECTOR, PG_TRGM"]
         end
 
         AOAI["🤖 Azure OpenAI<br/>（クラウドLLM）"]
@@ -53,6 +55,7 @@ flowchart TB
     User -->|"HTTPS リクエスト"| IAL
     IAL -->|"内部HTTP"| VV
     IAL -->|"内部HTTP"| OL
+    IAL -->|"TLS 5432"| PostgreSQL
     IAL -.->|"HTTPS（オプション）"| AOAI
     CAE --> LAW
     OL --> Storage
@@ -78,6 +81,9 @@ flowchart LR
         CA1["📦 azurerm_container_app<br/>(azure_inclusive_ai_labs)"]
         CA2["📦 azurerm_container_app<br/>(voicevox)"]
         CA3["📦 azurerm_container_app<br/>(ollama)"]
+        PGS["🐘 azurerm_postgresql_flexible_server"]
+        PGC["⚙️ azurerm_postgresql_flexible_server_configuration<br/>(azure.extensions)"]
+        PGD["🗄️ azurerm_postgresql_flexible_server_database<br/>(chatlog)"]
     end
 
     RG --> LAW
@@ -89,6 +95,10 @@ flowchart LR
     CAE --> CA1
     CAE --> CA2
     CAE --> CA3
+    RG --> PGS
+    PGS --> PGC
+    PGS --> PGD
+    CA1 --> PGD
 ```
 
 ## 🔄 処理フロー
@@ -248,6 +258,9 @@ flowchart TD
 | `GENAI_DEFAULT_PROVIDER` | `ollama` / `azure-openai` | 使用するLLMプロバイダ |
 | `TTS_DEFAULT_PROVIDER` | `voicevox` / `piper` | 使用する音声合成プロバイダ |
 | `STT_DEFAULT_PROVIDER` | `whisper` | 使用する音声認識プロバイダ |
+| `CHATLOG_ENABLED` | `true` / `false` | Chatlog機能の有効化 |
+| `CHATLOG_AUTH_MODE` | `password` / `entra` | Chatlogの認証モード |
+| `CHATLOG_DSN` | Secret参照 | PostgreSQL接続DSN（Container Apps Secret経由） |
 
 ## 🔗 コンテナ間通信
 
@@ -332,6 +345,11 @@ flowchart LR
    # ローカルLLM（Ollama）をデフォルトで使用する場合
    genai_default_provider = "ollama"
    ollama_model = "gemma3:270m"  # デフォルトモデル
+
+   # Chatlog (PostgreSQL) 設定: password モード
+   postgresql_administrator_password = "YourSecurePassword123!"
+   chatlog_auth_mode                 = "password"
+   chatlog_enabled                   = true
    ```
 
 3. **デプロイ**
@@ -349,6 +367,17 @@ flowchart LR
    terraform output azure_inclusive_ai_labs_url
    ```
 
+### Entra 認証モードでデプロイする場合
+
+`chatlog_auth_mode = "entra"` を利用する場合は、以下の設定を追加してください。
+
+```hcl
+chatlog_auth_mode = "entra"
+tenant_id         = "<your-entra-tenant-id>" # 省略時は現在の Azure CLI ログイン tenant を使用
+```
+
+> `entra` モードでは、PostgreSQL 側でログイン用ロールの bootstrap（`azure_ad_user` ロールへの付与）が別途必要です。初期フェーズでは手動実施を想定しています。
+
 ## 📋 変数一覧
 
 ### 必須変数
@@ -363,6 +392,19 @@ flowchart LR
 |------|-------------|------|
 | `name` | `azureinclusiveailabs` | リソースの基本名 |
 | `location` | `japaneast` | Azureリージョン |
+
+### PostgreSQL / Chatlog 設定
+
+| 名前 | デフォルト値 | 説明 |
+|------|-------------|------|
+| `postgresql_administrator_login` | `psqladmin` | PostgreSQL 管理者ユーザー |
+| `postgresql_administrator_password` | `""` | PostgreSQL 管理者パスワード（`chatlog_auth_mode=password` の場合必須） |
+| `postgresql_database_name` | `chatlog` | アプリ用データベース名 |
+| `postgresql_sku_name` | `B_Standard_B1ms` | PostgreSQL SKU |
+| `postgresql_version` | `17` | PostgreSQL バージョン |
+| `chatlog_auth_mode` | `password` | Chatlog 認証モード（`password` / `entra`） |
+| `chatlog_enabled` | `true` | アプリ側の Chatlog 機能有効化 |
+| `tenant_id` | `""` | Entra テナント ID（空の場合は現在の Azure クライアントから自動取得） |
 
 ### azure_inclusive_ai_labs コンテナ設定
 
@@ -426,6 +468,9 @@ flowchart LR
 | `voicevox_internal_fqdn` | voicevoxの内部FQDN |
 | `ollama_internal_fqdn` | ollamaの内部FQDN |
 | `ollama_url` | ollamaのURL（外部/内部） |
+| `postgresql_server_fqdn` | PostgreSQL Flexible Server の FQDN |
+| `postgresql_database_name` | Chatlog 用データベース名 |
+| `chatlog_dsn` | Chatlog 接続用 DSN（sensitive） |
 
 ## 🔗 内部通信の仕組み
 
@@ -526,6 +571,7 @@ flowchart LR
 - コールドスタートを避けるため、最小レプリカ数は1に設定されています
 - 開発環境でコストを最適化する場合は、`min_replicas` を 0 に設定できます
 - Ollamaのモデルデータは Azure Storage に永続化されるため、コンテナ再起動後も保持されます
+- `azure.extensions` 設定（`VECTOR,PG_TRGM`）反映後は PostgreSQL Flexible Server の再起動が必要になる場合があります
 
 ## 📚 関連リソース
 
