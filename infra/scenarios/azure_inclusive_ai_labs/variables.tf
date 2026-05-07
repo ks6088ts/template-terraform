@@ -22,6 +22,74 @@ variable "tags" {
 }
 
 # -----------------------------------------------------------------------------
+# PostgreSQL / Chatlog Settings
+# -----------------------------------------------------------------------------
+
+variable "tenant_id" {
+  description = "Azure AD tenant ID used for PostgreSQL Entra ID authentication. If null, uses azurerm_client_config.current.tenant_id."
+  type        = string
+  default     = null
+}
+
+variable "postgresql_administrator_login" {
+  description = "Administrator login for PostgreSQL Flexible Server"
+  type        = string
+  default     = "psqladmin"
+}
+
+variable "postgresql_administrator_password" {
+  description = "Administrator password for PostgreSQL Flexible Server"
+  type        = string
+  sensitive   = true
+  default     = null
+
+  validation {
+    condition     = var.postgresql_administrator_password != null && var.postgresql_administrator_password != ""
+    error_message = "postgresql_administrator_password is required."
+  }
+}
+
+variable "postgresql_database_name" {
+  description = "Database name for the application (chatlog)"
+  type        = string
+  default     = "chatlog"
+}
+
+variable "postgresql_sku_name" {
+  description = "SKU name for PostgreSQL Flexible Server"
+  type        = string
+  default     = "B_Standard_B1ms"
+}
+
+variable "postgresql_version" {
+  description = "PostgreSQL version"
+  type        = string
+  default     = "17"
+
+  validation {
+    condition     = contains(["11", "12", "13", "14", "15", "16", "17"], var.postgresql_version)
+    error_message = "PostgreSQL version must be one of: 11, 12, 13, 14, 15, 16, 17."
+  }
+}
+
+variable "chatlog_auth_mode" {
+  description = "Chatlog authentication mode: password or entra"
+  type        = string
+  default     = "password"
+
+  validation {
+    condition     = contains(["password", "entra"], var.chatlog_auth_mode)
+    error_message = "chatlog_auth_mode must be one of: password, entra."
+  }
+}
+
+variable "chatlog_enabled" {
+  description = "Whether chatlog features are enabled in the app (CHATLOG_ENABLED)"
+  type        = bool
+  default     = true
+}
+
+# -----------------------------------------------------------------------------
 # azure_inclusive_ai_labs Container Settings
 # -----------------------------------------------------------------------------
 

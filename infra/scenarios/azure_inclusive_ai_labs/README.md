@@ -17,6 +17,7 @@
 | **azure_inclusive_ai_labs** | メインAPIサーバー（対話処理の司令塔） | ✅ 可能 |
 | **voicevox** | 日本語音声合成エンジン | ❌ 内部のみ |
 | **ollama** | ローカルLLM実行エンジン | ❌ 内部のみ（設定で変更可） |
+| **PostgreSQL Flexible Server** | 対話ログ保存用DB（`chatlog`） | ❌（DB への直接公開は非推奨） |
 
 ## 🏗️ システムアーキテクチャ
 
@@ -45,6 +46,7 @@ flowchart TB
 
             LAW["📊 Log Analytics<br/>（ログ監視）"]
             Storage["💾 Azure Storage<br/>（モデル永続化）"]
+            PSQL["🐘 PostgreSQL Flexible Server<br/>DB: chatlog<br/>ポート: 5432"]
         end
 
         AOAI["🤖 Azure OpenAI<br/>（クラウドLLM）"]
@@ -53,6 +55,7 @@ flowchart TB
     User -->|"HTTPS リクエスト"| IAL
     IAL -->|"内部HTTP"| VV
     IAL -->|"内部HTTP"| OL
+    IAL -->|"TCP 5432"| PSQL
     IAL -.->|"HTTPS（オプション）"| AOAI
     CAE --> LAW
     OL --> Storage
@@ -72,6 +75,7 @@ flowchart LR
         RG["📁 azurerm_resource_group"]
         LAW["📊 azurerm_log_analytics_workspace"]
         CAE["🔷 azurerm_container_app_environment"]
+        PSQL["🐘 azurerm_postgresql_flexible_server"]
         SA["💾 azurerm_storage_account"]
         FS["📂 azurerm_storage_share"]
         ES["🔗 azurerm_container_app_environment_storage"]
@@ -81,6 +85,7 @@ flowchart LR
     end
 
     RG --> LAW
+    RG --> PSQL
     RG --> SA
     LAW --> CAE
     SA --> FS
@@ -332,6 +337,13 @@ flowchart LR
    # ローカルLLM（Ollama）をデフォルトで使用する場合
    genai_default_provider = "ollama"
    ollama_model = "gemma3:270m"  # デフォルトモデル
+
+   # PostgreSQL（必須）
+   postgresql_administrator_password = "your-strong-password"
+
+   # Chatlog（対話ログ）接続
+   chatlog_enabled   = true
+   chatlog_auth_mode = "password" # or "entra"
    ```
 
 3. **デプロイ**
@@ -340,6 +352,8 @@ flowchart LR
    terraform plan
    terraform apply
    ```
+
+> NOTE: `azure.extensions` の変更はサーバー再起動が必要になる場合があります。
 
 4. **アプリケーションへのアクセス**
 
@@ -356,6 +370,7 @@ flowchart LR
 | 名前 | 説明 |
 |------|------|
 | `genai_azure_openai_api_key` | Azure OpenAI APIキー（機密情報） |
+| `postgresql_administrator_password` | PostgreSQL 管理者パスワード（機密情報） |
 
 ### 基本設定
 
@@ -363,6 +378,19 @@ flowchart LR
 |------|-------------|------|
 | `name` | `azureinclusiveailabs` | リソースの基本名 |
 | `location` | `japaneast` | Azureリージョン |
+
+### PostgreSQL / Chatlog 設定
+
+| 名前 | デフォルト値 | 説明 |
+|------|-------------|------|
+| `postgresql_administrator_login` | `psqladmin` | PostgreSQL 管理者ユーザー名 |
+| `postgresql_administrator_password` | (必須) | PostgreSQL 管理者パスワード（機密情報） |
+| `postgresql_database_name` | `chatlog` | アプリ用データベース名 |
+| `postgresql_sku_name` | `B_Standard_B1ms` | PostgreSQL SKU |
+| `postgresql_version` | `17` | PostgreSQL バージョン |
+| `chatlog_enabled` | `true` | アプリ側 `CHATLOG_ENABLED` |
+| `chatlog_auth_mode` | `password` | `password` / `entra` |
+| `tenant_id` | (自動) | Entra ID 認証用テナントID（未指定なら自動取得） |
 
 ### azure_inclusive_ai_labs コンテナ設定
 
@@ -426,6 +454,26 @@ flowchart LR
 | `voicevox_internal_fqdn` | voicevoxの内部FQDN |
 | `ollama_internal_fqdn` | ollamaの内部FQDN |
 | `ollama_url` | ollamaのURL（外部/内部） |
+| `postgresql_server_fqdn` | PostgreSQL の FQDN |
+| `postgresql_database_name` | アプリ用 DB 名 |
+| `chatlog_dsn` | `CHATLOG_DSN`（機密情報） |
+
+## 🔐 Entra ID 認証モード（`chatlog_auth_mode = "entra"`）
+
+このモードでは Container App に System Assigned Managed Identity を付与し、その ID を PostgreSQL の Entra 管理者として登録します。
+
+ただし、アプリが Entra ID ユーザーとして接続するには PostgreSQL 側でロール作成が必要です（Phase 1 は手動手順）。
+
+1. `terraform.tfvars` で `chatlog_auth_mode = "entra"` を設定して `terraform apply`
+2. 管理者として DB に接続し、アプリ用ロールを作成（例）
+
+   - ロール名: `app-inclusive-ai-labs`
+   - DB: `chatlog`
+
+   ```sql
+   CREATE ROLE "app-inclusive-ai-labs" WITH LOGIN IN ROLE azure_ad_user;
+   GRANT ALL PRIVILEGES ON DATABASE chatlog TO "app-inclusive-ai-labs";
+   ```
 
 ## 🔗 内部通信の仕組み
 

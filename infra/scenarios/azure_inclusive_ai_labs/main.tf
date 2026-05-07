@@ -1,4 +1,23 @@
 # =============================================================================
+# Data sources / locals
+# =============================================================================
+
+data "azurerm_client_config" "current" {}
+
+locals {
+  tenant_id = coalesce(try(nullif(var.tenant_id, ""), null), data.azurerm_client_config.current.tenant_id)
+
+  inclusive_ai_labs_container_app_name = "app-inclusive-ai-labs"
+  chatlog_entra_user_name              = local.inclusive_ai_labs_container_app_name
+
+  chatlog_dsn = var.chatlog_auth_mode == "entra" ? (
+    "postgresql+asyncpg://${local.chatlog_entra_user_name}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
+  ) : (
+    "postgresql+asyncpg://${var.postgresql_administrator_login}:${var.postgresql_administrator_password}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
+  )
+}
+
+# =============================================================================
 # Resource Group
 # =============================================================================
 
@@ -21,6 +40,35 @@ module "log_analytics" {
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
+}
+
+# =============================================================================
+# PostgreSQL Flexible Server (chatlog)
+# =============================================================================
+
+module "postgresql" {
+  source = "../../modules/azure/postgresql"
+
+  name                   = var.name
+  resource_group_name    = module.resource_group.name
+  location               = module.resource_group.location
+  tags                   = var.tags
+  tenant_id              = local.tenant_id
+  administrator_login    = var.postgresql_administrator_login
+  administrator_password = var.postgresql_administrator_password
+  postgresql_version     = var.postgresql_version
+  sku_name               = var.postgresql_sku_name
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "azure_extensions" {
+  name      = "azure.extensions"
+  server_id = module.postgresql.server_id
+  value     = "VECTOR,PG_TRGM"
+}
+
+resource "azurerm_postgresql_flexible_server_database" "chatlog" {
+  name      = var.postgresql_database_name
+  server_id = module.postgresql.server_id
 }
 
 # =============================================================================
@@ -185,11 +233,18 @@ resource "azurerm_container_app" "voicevox" {
 # azure_inclusive_ai_labs Container App (External)
 # -----------------------------------------------------------------------------
 resource "azurerm_container_app" "azure_inclusive_ai_labs" {
-  name                         = "app-inclusive-ai-labs"
+  name                         = local.inclusive_ai_labs_container_app_name
   container_app_environment_id = azurerm_container_app_environment.this.id
   resource_group_name          = module.resource_group.name
   revision_mode                = "Single"
   tags                         = var.tags
+
+  dynamic "identity" {
+    for_each = var.chatlog_auth_mode == "entra" ? [1] : []
+    content {
+      type = "SystemAssigned"
+    }
+  }
 
   # Secret for Azure OpenAI API Key
   secret {
@@ -201,6 +256,11 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
   secret {
     name  = "github-copilot-azure-openai-api-key"
     value = var.github_copilot_azure_openai_api_key
+  }
+
+  secret {
+    name  = "chatlog-dsn"
+    value = local.chatlog_dsn
   }
 
   template {
@@ -221,6 +281,18 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
       env {
         name  = "PROJECT_LOG_LEVEL"
         value = var.project_log_level
+      }
+      env {
+        name  = "CHATLOG_ENABLED"
+        value = tostring(var.chatlog_enabled)
+      }
+      env {
+        name        = "CHATLOG_DSN"
+        secret_name = "chatlog-dsn"
+      }
+      env {
+        name  = "CHATLOG_AUTH_MODE"
+        value = var.chatlog_auth_mode
       }
       env {
         name  = "PYTHONPATH"
@@ -367,6 +439,18 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
 
   depends_on = [
     azurerm_container_app.voicevox,
-    azurerm_container_app.ollama
+    azurerm_container_app.ollama,
+    azurerm_postgresql_flexible_server_configuration.azure_extensions,
+    azurerm_postgresql_flexible_server_database.chatlog
   ]
+}
+
+resource "azurerm_postgresql_flexible_server_active_directory_administrator" "chatlog" {
+  count = var.chatlog_auth_mode == "entra" ? 1 : 0
+
+  server_id      = module.postgresql.server_id
+  tenant_id      = local.tenant_id
+  object_id      = azurerm_container_app.azure_inclusive_ai_labs.identity[0].principal_id
+  principal_name = local.chatlog_entra_user_name
+  principal_type = "ServicePrincipal"
 }
