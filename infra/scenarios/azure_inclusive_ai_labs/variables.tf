@@ -338,3 +338,44 @@ variable "tts_piper_voices_dir" {
   type        = string
   default     = ""
 }
+
+# -----------------------------------------------------------------------------
+# GitHub Copilot Settings
+# -----------------------------------------------------------------------------
+
+variable "github_copilot_auth_mode" {
+  description = "GitHub Copilot authentication mode"
+  type        = string
+  default     = "byok"
+}
+
+variable "github_copilot_byok_profile" {
+  description = "GitHub Copilot BYOK profile"
+  type        = string
+  default     = "azure-openai"
+}
+
+variable "github_copilot_azure_openai_model" {
+  description = "GitHub Copilot Azure OpenAI model"
+  type        = string
+  default     = "gpt-5"
+}
+
+variable "github_copilot_azure_openai_endpoint" {
+  description = "GitHub Copilot Azure OpenAI endpoint URL"
+  type        = string
+  default     = "https://msfoundry99999.openai.azure.com/openai/"
+}
+
+variable "github_copilot_azure_openai_api_key" {
+  description = "GitHub Copilot Azure OpenAI API key"
+  type        = string
+  sensitive   = true
+  default     = "api_key"
+}
+
+variable "github_copilot_azure_openai_api_version" {
+  description = "GitHub Copilot Azure OpenAI API version"
+  type        = string
+  default     = "2024-10-21"
+}

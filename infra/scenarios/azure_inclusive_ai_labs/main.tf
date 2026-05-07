@@ -197,6 +197,12 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
     value = var.genai_azure_openai_api_key
   }
 
+  # Secret for GitHub Copilot Azure OpenAI API Key
+  secret {
+    name  = "github-copilot-azure-openai-api-key"
+    value = var.github_copilot_azure_openai_api_key
+  }
+
   template {
     container {
       name   = "inclusive-ai-labs"
@@ -316,6 +322,32 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
       env {
         name  = "TTS_PIPER_VOICES_DIR"
         value = var.tts_piper_voices_dir
+      }
+
+      # GitHub Copilot Settings
+      env {
+        name  = "GITHUB_COPILOT_AUTH_MODE"
+        value = var.github_copilot_auth_mode
+      }
+      env {
+        name  = "GITHUB_COPILOT_BYOK_PROFILE"
+        value = var.github_copilot_byok_profile
+      }
+      env {
+        name  = "GITHUB_COPILOT_AZURE_OPENAI_MODEL"
+        value = var.github_copilot_azure_openai_model
+      }
+      env {
+        name  = "GITHUB_COPILOT_AZURE_OPENAI_ENDPOINT"
+        value = var.github_copilot_azure_openai_endpoint
+      }
+      env {
+        name        = "GITHUB_COPILOT_AZURE_OPENAI_API_KEY"
+        secret_name = "github-copilot-azure-openai-api-key"
+      }
+      env {
+        name  = "GITHUB_COPILOT_AZURE_OPENAI_API_VERSION"
+        value = var.github_copilot_azure_openai_api_version
       }
     }
 
