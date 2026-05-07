@@ -376,13 +376,15 @@ chatlog_auth_mode = "entra"
 tenant_id         = "<your-entra-tenant-id>" # 省略時は現在の Azure CLI ログイン tenant を使用
 ```
 
-> `entra` モードでは、PostgreSQL 側でログイン用ロールの bootstrap（`azure_ad_user` ロールへの付与）が別途必要です。初期フェーズでは手動実施を想定しています。
+> `entra` モードでは、PostgreSQL 側でログイン用ロールの bootstrap（`azure_ad_user` ロールへの付与）が別途必要です。初期フェーズでは手動実施を想定しています（`terraform apply` 後に、PostgreSQL 管理者で接続して実行）。
 >
 > 例:
 > ```sql
 > CREATE ROLE "app-inclusive-ai-labs" WITH LOGIN IN ROLE azure_ad_user;
 > GRANT ALL PRIVILEGES ON DATABASE chatlog TO "app-inclusive-ai-labs";
 > ```
+>
+> 実行時は `psql "host=<postgresql_server_fqdn> dbname=postgres user=<postgres_admin> sslmode=require"` などで接続し、上記 SQL を投入してください。
 
 ## 📋 変数一覧
 
@@ -578,7 +580,7 @@ flowchart LR
 - 開発環境でコストを最適化する場合は、`min_replicas` を 0 に設定できます
 - Ollamaのモデルデータは Azure Storage に永続化されるため、コンテナ再起動後も保持されます
 - `azure.extensions` 設定（`VECTOR,PG_TRGM`）反映後は PostgreSQL Flexible Server の再起動が必要になる場合があります
-- ⚠️ **重要**: PostgreSQL モジュールは firewall rule `AllowAll`（`0.0.0.0-255.255.255.255`）を作成します。検証用途向け設定のため、本番では必ずアクセス制限を追加してください
+- ⚠️ **重要**: PostgreSQL モジュールは firewall rule `AllowAll`（`0.0.0.0-255.255.255.255`）を作成します。検証用途向け設定のため、本番では必ずアクセス制限を追加してください（例: `azurerm_postgresql_flexible_server_firewall_rule` を個別IP範囲に限定、または将来課題の VNet/Private Endpoint 化）。
 
 ## 📚 関連リソース
 
