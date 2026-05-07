@@ -1,4 +1,10 @@
 # =============================================================================
+# Data sources
+# =============================================================================
+
+data "azurerm_client_config" "current" {}
+
+# =============================================================================
 # Resource Group
 # =============================================================================
 
@@ -369,4 +375,43 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
     azurerm_container_app.voicevox,
     azurerm_container_app.ollama
   ]
+}
+
+# =============================================================================
+# Azure Database for PostgreSQL Flexible Server (lowest-cost configuration)
+# -----------------------------------------------------------------------------
+# Cost-minimizing choices:
+#   - SKU: Burstable B_Standard_B1ms (1 vCore, 2 GiB RAM) — cheapest tier
+#   - Storage: provider default (32 GiB / P4 tier) — smallest available
+#   - Backup retention: 7 days (default, no extra cost)
+#   - Geo-redundant backup: disabled (default)
+#   - High availability (zone redundant): disabled (default)
+#   - Public network access: enabled (no Private Endpoint cost)
+# =============================================================================
+
+# Generate a random administrator password when the user does not supply one.
+resource "random_password" "postgresql" {
+  count = var.deploy_postgresql && var.postgresql_administrator_password == null ? 1 : 0
+
+  length           = 24
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+module "postgresql" {
+  source = "../../modules/azure/postgresql"
+  count  = var.deploy_postgresql ? 1 : 0
+
+  name                = var.name
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  tags                = var.tags
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+
+  administrator_login    = var.postgresql_administrator_login
+  administrator_password = coalesce(var.postgresql_administrator_password, try(random_password.postgresql[0].result, null))
+
+  postgresql_version = var.postgresql_version
+  sku_name           = var.postgresql_sku_name
+  zone               = var.postgresql_zone
 }

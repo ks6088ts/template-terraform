@@ -379,3 +379,51 @@ variable "github_copilot_azure_openai_api_version" {
   type        = string
   default     = "2024-10-21"
 }
+
+# -----------------------------------------------------------------------------
+# Azure Database for PostgreSQL Flexible Server
+# Defaults are tuned for the lowest-cost configuration (Burstable B1ms,
+# minimum storage, no HA, no geo-redundant backup).
+# -----------------------------------------------------------------------------
+
+variable "deploy_postgresql" {
+  description = "Deploy Azure Database for PostgreSQL Flexible Server with the lowest-cost configuration"
+  type        = bool
+  default     = true
+}
+
+variable "postgresql_administrator_login" {
+  description = "Administrator login for PostgreSQL Flexible Server"
+  type        = string
+  default     = "psqladmin"
+}
+
+variable "postgresql_administrator_password" {
+  description = "Administrator password for PostgreSQL Flexible Server. If null, a random password is generated."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "postgresql_version" {
+  description = "PostgreSQL major version"
+  type        = string
+  default     = "17"
+
+  validation {
+    condition     = contains(["11", "12", "13", "14", "15", "16", "17"], var.postgresql_version)
+    error_message = "PostgreSQL version must be one of: 11, 12, 13, 14, 15, 16, 17."
+  }
+}
+
+variable "postgresql_sku_name" {
+  description = "SKU name for PostgreSQL Flexible Server. The default B_Standard_B1ms is the cheapest Burstable tier."
+  type        = string
+  default     = "B_Standard_B1ms"
+}
+
+variable "postgresql_zone" {
+  description = "Availability zone for PostgreSQL Flexible Server"
+  type        = string
+  default     = "2"
+}

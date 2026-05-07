@@ -86,3 +86,33 @@ output "ollama_storage_share_name" {
   description = "Name of the Azure File Share for Ollama"
   value       = azurerm_storage_share.ollama.name
 }
+
+# =============================================================================
+# PostgreSQL Flexible Server outputs
+# =============================================================================
+
+output "postgresql_server_id" {
+  description = "ID of the PostgreSQL Flexible Server"
+  value       = var.deploy_postgresql ? module.postgresql[0].server_id : null
+}
+
+output "postgresql_server_name" {
+  description = "Name of the PostgreSQL Flexible Server"
+  value       = var.deploy_postgresql ? module.postgresql[0].server_name : null
+}
+
+output "postgresql_server_fqdn" {
+  description = "FQDN of the PostgreSQL Flexible Server"
+  value       = var.deploy_postgresql ? module.postgresql[0].server_fqdn : null
+}
+
+output "postgresql_administrator_login" {
+  description = "Administrator login of the PostgreSQL Flexible Server"
+  value       = var.deploy_postgresql ? module.postgresql[0].administrator_login : null
+}
+
+output "postgresql_administrator_password" {
+  description = "Administrator password of the PostgreSQL Flexible Server (auto-generated when not supplied)"
+  value       = var.deploy_postgresql ? coalesce(var.postgresql_administrator_password, try(random_password.postgresql[0].result, null)) : null
+  sensitive   = true
+}
