@@ -12,7 +12,7 @@ locals {
 
   chatlog_dsn = var.chatlog_auth_mode == "entra" ? (
     "postgresql+asyncpg://${local.chatlog_entra_user_name}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
-  ) : (
+    ) : (
     "postgresql+asyncpg://${var.postgresql_administrator_login}:${var.postgresql_administrator_password}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
   )
 }
@@ -448,9 +448,10 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
 resource "azurerm_postgresql_flexible_server_active_directory_administrator" "chatlog" {
   count = var.chatlog_auth_mode == "entra" ? 1 : 0
 
-  server_id      = module.postgresql.server_id
-  tenant_id      = local.tenant_id
-  object_id      = azurerm_container_app.azure_inclusive_ai_labs.identity[0].principal_id
-  principal_name = local.chatlog_entra_user_name
-  principal_type = "ServicePrincipal"
+  resource_group_name = module.resource_group.name
+  server_name         = module.postgresql.server_name
+  tenant_id           = local.tenant_id
+  object_id           = azurerm_container_app.azure_inclusive_ai_labs.identity[0].principal_id
+  principal_name      = local.chatlog_entra_user_name
+  principal_type      = "ServicePrincipal"
 }
