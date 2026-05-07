@@ -7,9 +7,11 @@ data "azurerm_client_config" "current" {}
 locals {
   tenant_id              = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
   entra_user_name        = "app-inclusive-ai-labs"
-  chatlog_dsn_with_auth  = format("postgresql+asyncpg://%s:%s@%s:5432/%s?sslmode=require", urlencode(var.postgresql_administrator_login), urlencode(var.postgresql_administrator_password), module.postgresql.server_fqdn, var.postgresql_database_name)
-  chatlog_dsn_without_pw = format("postgresql+asyncpg://%s@%s:5432/%s?sslmode=require", urlencode(local.entra_user_name), module.postgresql.server_fqdn, var.postgresql_database_name)
-  chatlog_dsn            = var.chatlog_auth_mode == "password" ? local.chatlog_dsn_with_auth : local.chatlog_dsn_without_pw
+  postgresql_password    = var.postgresql_administrator_password != null ? var.postgresql_administrator_password : ""
+  postgresql_server_fqdn = var.postgresql_enabled ? module.postgresql[0].server_fqdn : ""
+  chatlog_dsn_with_auth  = var.postgresql_enabled ? format("postgresql+asyncpg://%s:%s@%s:5432/%s?sslmode=require", urlencode(var.postgresql_administrator_login), urlencode(local.postgresql_password), local.postgresql_server_fqdn, var.postgresql_database_name) : ""
+  chatlog_dsn_without_pw = var.postgresql_enabled ? format("postgresql+asyncpg://%s@%s:5432/%s?sslmode=require", urlencode(local.entra_user_name), local.postgresql_server_fqdn, var.postgresql_database_name) : ""
+  chatlog_dsn            = var.postgresql_enabled ? (var.chatlog_auth_mode == "password" ? local.chatlog_dsn_with_auth : local.chatlog_dsn_without_pw) : ""
 }
 
 module "resource_group" {
@@ -39,6 +41,7 @@ module "log_analytics" {
 
 module "postgresql" {
   source = "../../modules/azure/postgresql"
+  count  = var.postgresql_enabled ? 1 : 0
 
   name                   = var.name
   resource_group_name    = module.resource_group.name
@@ -53,14 +56,18 @@ module "postgresql" {
 }
 
 resource "azurerm_postgresql_flexible_server_configuration" "azure_extensions" {
+  count = var.postgresql_enabled ? 1 : 0
+
   name      = "azure.extensions"
-  server_id = module.postgresql.server_id
+  server_id = module.postgresql[0].server_id
   value     = "VECTOR,PG_TRGM"
 }
 
 resource "azurerm_postgresql_flexible_server_database" "chatlog" {
+  count = var.postgresql_enabled ? 1 : 0
+
   name      = var.postgresql_database_name
-  server_id = module.postgresql.server_id
+  server_id = module.postgresql[0].server_id
 }
 
 # =============================================================================
@@ -247,9 +254,12 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
     value = var.github_copilot_azure_openai_api_key
   }
 
-  secret {
-    name  = "chatlog-dsn"
-    value = local.chatlog_dsn
+  dynamic "secret" {
+    for_each = var.postgresql_enabled ? [1] : []
+    content {
+      name  = "chatlog-dsn"
+      value = local.chatlog_dsn
+    }
   }
 
   template {
@@ -291,9 +301,12 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
         name  = "CHATLOG_ENABLED"
         value = tostring(var.chatlog_enabled)
       }
-      env {
-        name        = "CHATLOG_DSN"
-        secret_name = "chatlog-dsn"
+      dynamic "env" {
+        for_each = var.postgresql_enabled ? [1] : []
+        content {
+          name        = "CHATLOG_DSN"
+          secret_name = "chatlog-dsn"
+        }
       }
       env {
         name  = "CHATLOG_AUTH_MODE"
@@ -435,9 +448,9 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
 }
 
 resource "azurerm_postgresql_flexible_server_active_directory_administrator" "chatlog" {
-  count = var.chatlog_auth_mode == "entra" ? 1 : 0
+  count = var.postgresql_enabled && var.chatlog_auth_mode == "entra" ? 1 : 0
 
-  server_name         = module.postgresql.server_name
+  server_name         = module.postgresql[0].server_name
   resource_group_name = module.resource_group.name
   tenant_id           = local.tenant_id
   object_id           = one(azurerm_container_app.azure_inclusive_ai_labs.identity).principal_id
