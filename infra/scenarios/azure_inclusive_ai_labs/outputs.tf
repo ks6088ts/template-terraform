@@ -86,3 +86,25 @@ output "ollama_storage_share_name" {
   description = "Name of the Azure File Share for Ollama"
   value       = azurerm_storage_share.ollama.name
 }
+
+# PostgreSQL outputs
+output "postgresql_server_fqdn" {
+  description = "FQDN of the PostgreSQL Flexible Server"
+  value       = module.postgresql.server_fqdn
+}
+
+output "postgresql_server_name" {
+  description = "Name of the PostgreSQL Flexible Server"
+  value       = module.postgresql.server_name
+}
+
+output "postgresql_database_name" {
+  description = "Name of the application database"
+  value       = azurerm_postgresql_flexible_server_database.chatlog.name
+}
+
+output "chatlog_dsn" {
+  description = "Connection string for CHATLOG database (sensitive)"
+  value       = local.chatlog_dsn
+  sensitive   = true
+}

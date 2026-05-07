@@ -1,4 +1,24 @@
 # =============================================================================
+# Data Sources
+# =============================================================================
+
+data "azurerm_client_config" "current" {}
+
+# =============================================================================
+# Local Variables
+# =============================================================================
+
+locals {
+  # Construct CHATLOG_DSN based on authentication mode
+  chatlog_dsn = var.chatlog_auth_mode == "password" ? (
+    "postgresql+asyncpg://${var.postgresql_administrator_login}:${var.postgresql_administrator_password}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
+    ) : (
+    # For entra mode, password is omitted (token-based auth)
+    "postgresql+asyncpg://${var.postgresql_administrator_login}@${module.postgresql.server_fqdn}:5432/${var.postgresql_database_name}?sslmode=require"
+  )
+}
+
+# =============================================================================
 # Resource Group
 # =============================================================================
 
@@ -21,6 +41,37 @@ module "log_analytics" {
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
+}
+
+# =============================================================================
+# PostgreSQL Flexible Server
+# =============================================================================
+
+module "postgresql" {
+  source = "../../modules/azure/postgresql"
+
+  name                   = var.name
+  resource_group_name    = module.resource_group.name
+  location               = module.resource_group.location
+  tags                   = var.tags
+  tenant_id              = data.azurerm_client_config.current.tenant_id
+  administrator_login    = var.postgresql_administrator_login
+  administrator_password = var.postgresql_administrator_password
+  postgresql_version     = var.postgresql_version
+  sku_name               = var.postgresql_sku_name
+}
+
+# Configure PostgreSQL extensions
+resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
+  name      = "azure.extensions"
+  server_id = module.postgresql.server_id
+  value     = "VECTOR,PG_TRGM"
+}
+
+# Create application database
+resource "azurerm_postgresql_flexible_server_database" "chatlog" {
+  name      = var.postgresql_database_name
+  server_id = module.postgresql.server_id
 }
 
 # =============================================================================
@@ -203,6 +254,20 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
     value = var.github_copilot_azure_openai_api_key
   }
 
+  # Secret for CHATLOG_DSN
+  secret {
+    name  = "chatlog-dsn"
+    value = local.chatlog_dsn
+  }
+
+  # Enable System Assigned Managed Identity (required for Entra ID authentication)
+  dynamic "identity" {
+    for_each = var.chatlog_auth_mode == "entra" ? [1] : []
+    content {
+      type = "SystemAssigned"
+    }
+  }
+
   template {
     container {
       name   = "inclusive-ai-labs"
@@ -349,6 +414,20 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
         name  = "GITHUB_COPILOT_AZURE_OPENAI_API_VERSION"
         value = var.github_copilot_azure_openai_api_version
       }
+
+      # CHATLOG Settings
+      env {
+        name  = "CHATLOG_ENABLED"
+        value = tostring(var.chatlog_enabled)
+      }
+      env {
+        name        = "CHATLOG_DSN"
+        secret_name = "chatlog-dsn"
+      }
+      env {
+        name  = "CHATLOG_AUTH_MODE"
+        value = var.chatlog_auth_mode
+      }
     }
 
     min_replicas = var.azure_inclusive_ai_labs_min_replicas
@@ -367,6 +446,26 @@ resource "azurerm_container_app" "azure_inclusive_ai_labs" {
 
   depends_on = [
     azurerm_container_app.voicevox,
-    azurerm_container_app.ollama
+    azurerm_container_app.ollama,
+    module.postgresql,
+    azurerm_postgresql_flexible_server_configuration.extensions,
+    azurerm_postgresql_flexible_server_database.chatlog
+  ]
+}
+
+# Configure Entra ID administrator (when using entra auth mode)
+# This must be created after the Container App so we can reference its identity
+resource "azurerm_postgresql_flexible_server_active_directory_administrator" "entra_admin" {
+  count = var.chatlog_auth_mode == "entra" ? 1 : 0
+
+  server_name         = module.postgresql.server_name
+  resource_group_name = module.resource_group.name
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+  object_id           = azurerm_container_app.azure_inclusive_ai_labs.identity[0].principal_id
+  principal_name      = azurerm_container_app.azure_inclusive_ai_labs.name
+  principal_type      = "ServicePrincipal"
+
+  depends_on = [
+    azurerm_container_app.azure_inclusive_ai_labs
   ]
 }
