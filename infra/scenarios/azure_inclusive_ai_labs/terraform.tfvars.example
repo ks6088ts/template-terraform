@@ -1,0 +1,92 @@
+# =============================================================================
+# Basic Configuration
+# =============================================================================
+
+name     = "azureinclusiveailabs"
+location = "japaneast"
+
+# =============================================================================
+# PostgreSQL Configuration
+# =============================================================================
+
+# PostgreSQL Administrator credentials
+postgresql_administrator_login    = "psqladmin"
+postgresql_administrator_password = "YourSecurePassword123!"  # Change this to a strong password
+
+# PostgreSQL Database settings
+postgresql_database_name = "chatlog"
+postgresql_sku_name      = "B_Standard_B1ms"
+postgresql_version       = "17"
+
+# CHATLOG settings
+chatlog_enabled   = true
+chatlog_auth_mode = "password"  # Options: "password" or "entra"
+
+# =============================================================================
+# Azure OpenAI Configuration (Optional - required if using azure-openai provider)
+# =============================================================================
+
+genai_default_provider             = "ollama"  # Options: "ollama" or "azure-openai"
+genai_azure_openai_endpoint        = ""        # e.g., "https://your-openai-resource.openai.azure.com/"
+genai_azure_openai_api_key         = "api_key" # Replace with your actual API key
+genai_azure_openai_deployment_name = "gpt-4o"
+
+# =============================================================================
+# GitHub Copilot Configuration (Optional)
+# =============================================================================
+
+github_copilot_auth_mode               = "byok"
+github_copilot_azure_openai_endpoint   = "https://msfoundry99999.openai.azure.com/openai/"
+github_copilot_azure_openai_api_key    = "api_key"  # Replace with your actual API key
+github_copilot_azure_openai_model      = "gpt-5"
+
+# =============================================================================
+# Ollama Configuration
+# =============================================================================
+
+ollama_model            = "gemma3:270m"  # Model to pull on startup
+ollama_storage_quota_gb = 10
+ollama_external_enabled = false  # Set to true to make Ollama accessible externally
+
+# =============================================================================
+# Container Resource Configuration (Optional - customize as needed)
+# =============================================================================
+
+# azure_inclusive_ai_labs container
+azure_inclusive_ai_labs_cpu    = 2.0
+azure_inclusive_ai_labs_memory = "4Gi"
+
+# voicevox container
+voicevox_cpu    = 2.0
+voicevox_memory = "4Gi"
+
+# ollama container
+ollama_cpu    = 2.0
+ollama_memory = "4Gi"
+
+# =============================================================================
+# AI/Voice Processing Settings (Optional)
+# =============================================================================
+
+# STT (Speech-to-Text) settings
+stt_default_provider    = "whisper"
+stt_whisper_model_size  = "small"
+stt_whisper_device      = "cpu"
+stt_whisper_compute_type = "int8"
+
+# TTS (Text-to-Speech) settings
+tts_default_provider           = "voicevox"
+tts_voicevox_default_speaker   = "1"
+tts_voicevox_timeout           = "30.0"
+
+# =============================================================================
+# Tags (Optional)
+# =============================================================================
+
+tags = {
+  scenario        = "azure_inclusive_ai_labs"
+  owner           = "your-name"
+  environment     = "dev"
+  SecurityControl = "Ignore"
+  CostControl     = "Ignore"
+}
