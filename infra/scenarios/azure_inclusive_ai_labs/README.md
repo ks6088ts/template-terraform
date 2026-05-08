@@ -17,6 +17,7 @@
 | **azure_inclusive_ai_labs** | メインAPIサーバー（対話処理の司令塔） | ✅ 可能 |
 | **voicevox** | 日本語音声合成エンジン | ❌ 内部のみ |
 | **ollama** | ローカルLLM実行エンジン | ❌ 内部のみ（設定で変更可） |
+| **PostgreSQL Flexible Server** | Chatlogデータベース（`chatlog`） | ✅ 可能（public network） / ⚠️ 既定では作成されません（`postgresql_enabled = true` で有効化） |
 
 ## 🏗️ システムアーキテクチャ
 
@@ -45,6 +46,7 @@ flowchart TB
 
             LAW["📊 Log Analytics<br/>（ログ監視）"]
             Storage["💾 Azure Storage<br/>（モデル永続化）"]
+            PostgreSQL["🐘 PostgreSQL Flexible Server<br/>chatlog DB<br/>extensions: VECTOR, PG_TRGM"]
         end
 
         AOAI["🤖 Azure OpenAI<br/>（クラウドLLM）"]
@@ -53,6 +55,7 @@ flowchart TB
     User -->|"HTTPS リクエスト"| IAL
     IAL -->|"内部HTTP"| VV
     IAL -->|"内部HTTP"| OL
+    IAL -->|"TLS 5432"| PostgreSQL
     IAL -.->|"HTTPS（オプション）"| AOAI
     CAE --> LAW
     OL --> Storage
@@ -78,6 +81,9 @@ flowchart LR
         CA1["📦 azurerm_container_app<br/>(azure_inclusive_ai_labs)"]
         CA2["📦 azurerm_container_app<br/>(voicevox)"]
         CA3["📦 azurerm_container_app<br/>(ollama)"]
+        PGS["🐘 azurerm_postgresql_flexible_server"]
+        PGC["⚙️ azurerm_postgresql_flexible_server_configuration<br/>(azure.extensions)"]
+        PGD["🗄️ azurerm_postgresql_flexible_server_database<br/>(chatlog)"]
     end
 
     RG --> LAW
@@ -89,6 +95,10 @@ flowchart LR
     CAE --> CA1
     CAE --> CA2
     CAE --> CA3
+    RG --> PGS
+    PGS --> PGC
+    PGS --> PGD
+    CA1 --> PGD
 ```
 
 ## 🔄 処理フロー
@@ -248,6 +258,9 @@ flowchart TD
 | `GENAI_DEFAULT_PROVIDER` | `ollama` / `azure-openai` | 使用するLLMプロバイダ |
 | `TTS_DEFAULT_PROVIDER` | `voicevox` / `piper` | 使用する音声合成プロバイダ |
 | `STT_DEFAULT_PROVIDER` | `whisper` | 使用する音声認識プロバイダ |
+| `CHATLOG_ENABLED` | `true` / `false` | Chatlog機能の有効化 |
+| `CHATLOG_AUTH_MODE` | `password` / `entra` | Chatlogの認証モード |
+| `CHATLOG_DSN` | Secret参照 | PostgreSQL接続DSN（Container Apps Secret経由） |
 
 ## 🔗 コンテナ間通信
 
@@ -306,7 +319,7 @@ flowchart LR
 ## ⚙️ 前提条件
 
 - Azure サブスクリプション
-- Terraform >= 1.6.0
+- Terraform >= 1.9.0
 - Azure CLI（ログイン済み）
 - Azure OpenAI リソース（デプロイ済みモデル付き）※ Azure OpenAI を利用する場合
 
@@ -332,6 +345,17 @@ flowchart LR
    # ローカルLLM（Ollama）をデフォルトで使用する場合
    genai_default_provider = "ollama"
    ollama_model = "gemma3:270m"  # デフォルトモデル
+
+   # Chatlog (PostgreSQL) 設定: デフォルトは entra（passwordless）モード
+   # Chatlog (PostgreSQL) 設定
+   # 既定では PostgreSQL Flexible Server は作成されません（postgresql_enabled = false）
+   # chatlog を使う場合は以下を明示的に指定してください
+   # postgresql_enabled                = true
+   # chatlog_enabled                   = true
+   #
+   # password モードを使う場合は以下のように上書きしてください
+   # postgresql_administrator_password = "YourSecurePassword123!"
+   # chatlog_auth_mode                 = "password"
    ```
 
 3. **デプロイ**
@@ -349,6 +373,55 @@ flowchart LR
    terraform output azure_inclusive_ai_labs_url
    ```
 
+### PostgreSQL（chatlog）を有効化する
+
+コストや初期構築の軽量化のため、**PostgreSQL Flexible Server は既定で作成されません**（`postgresql_enabled = false`）。chatlog 機能を利用する場合のみ、`terraform.tfvars` で以下のように明示的に有効化してください。
+
+```hcl
+# PostgreSQL Flexible Server とその関連リソース（chatlog DB / 拡張 / Entra 管理者）を作成する
+postgresql_enabled = true
+
+# アプリ側の chatlog 機能も有効化する（postgresql_enabled = true が前提）
+chatlog_enabled = true
+```
+
+`postgresql_enabled = false` のままだと以下のリソースは一切作成されず、`CHATLOG_DSN` には空文字列が設定されます。
+
+- `module.postgresql`（`azurerm_postgresql_flexible_server` 本体・ファイアウォールルール）
+- `azurerm_postgresql_flexible_server_configuration.azure_extensions`
+- `azurerm_postgresql_flexible_server_database.chatlog`
+- `azurerm_postgresql_flexible_server_active_directory_administrator.chatlog`
+
+> `chatlog_enabled = true` を指定する場合は `postgresql_enabled = true` も併せて必要です（バリデーションでエラーになります）。
+
+### Password 認証モードでデプロイする場合
+
+`chatlog_auth_mode = "password"` を利用する場合は、以下の設定を追加してください。
+
+```hcl
+chatlog_auth_mode                 = "password"
+postgresql_administrator_password = "YourSecurePassword123!"
+```
+
+### Entra 認証モードでデプロイする場合
+
+デフォルトで `chatlog_auth_mode = "entra"` です。明示する場合は以下のとおりです。
+
+```hcl
+chatlog_auth_mode = "entra"
+tenant_id         = "<your-entra-tenant-id>" # 省略時は現在の Azure CLI ログイン tenant を使用
+```
+
+> `entra` モードでは、PostgreSQL 側でログイン用ロールの bootstrap（`azure_ad_user` ロールへの付与）が別途必要です。初期フェーズでは手動実施を想定しています（`terraform apply` 後に、PostgreSQL 管理者で接続して実行）。
+>
+> 例:
+> ```sql
+> CREATE ROLE "app-inclusive-ai-labs" WITH LOGIN IN ROLE azure_ad_user;
+> GRANT ALL PRIVILEGES ON DATABASE chatlog TO "app-inclusive-ai-labs";
+> ```
+>
+> 実行時は `psql "host=<postgresql_server_fqdn> dbname=postgres user=<postgres_admin> sslmode=require"` などで接続し、上記 SQL を投入してください。
+
 ## 📋 変数一覧
 
 ### 必須変数
@@ -363,6 +436,22 @@ flowchart LR
 |------|-------------|------|
 | `name` | `azureinclusiveailabs` | リソースの基本名 |
 | `location` | `japaneast` | Azureリージョン |
+
+### PostgreSQL / Chatlog 設定
+
+> ⚠️ **既定では PostgreSQL Flexible Server を作成しません。** 利用するには `postgresql_enabled = true` を明示的に指定してください。詳細は [PostgreSQL（chatlog）を有効化する](#postgresqlchatlogを有効化する) を参照してください。
+
+| 名前 | デフォルト値 | 説明 |
+|------|-------------|------|
+| `postgresql_enabled` | `false` | PostgreSQL Flexible Server を作成するか。`true` で chatlog 関連リソース一式（サーバー / DB / 拡張 / Entra 管理者）が作成される |
+| `postgresql_administrator_login` | `psqladmin` | PostgreSQL 管理者ユーザー |
+| `postgresql_administrator_password` | `null` | PostgreSQL 管理者パスワード（`chatlog_auth_mode=password` の場合必須・非空である必要あり） |
+| `postgresql_database_name` | `chatlog` | アプリ用データベース名 |
+| `postgresql_sku_name` | `B_Standard_B1ms` | PostgreSQL SKU |
+| `postgresql_version` | `17` | PostgreSQL バージョン |
+| `chatlog_auth_mode` | `entra` | Chatlog 認証モード（`password` / `entra`） |
+| `chatlog_enabled` | `false` | アプリ側の Chatlog 機能有効化（`true` にする場合は `postgresql_enabled = true` 必須） |
+| `tenant_id` | `""` | Entra テナント ID（空の場合は現在の Azure クライアントから自動取得） |
 
 ### azure_inclusive_ai_labs コンテナ設定
 
@@ -426,6 +515,9 @@ flowchart LR
 | `voicevox_internal_fqdn` | voicevoxの内部FQDN |
 | `ollama_internal_fqdn` | ollamaの内部FQDN |
 | `ollama_url` | ollamaのURL（外部/内部） |
+| `postgresql_server_fqdn` | PostgreSQL Flexible Server の FQDN |
+| `postgresql_database_name` | Chatlog 用データベース名 |
+| `chatlog_dsn` | Chatlog 接続用 DSN（sensitive） |
 
 ## 🔗 内部通信の仕組み
 
@@ -526,6 +618,8 @@ flowchart LR
 - コールドスタートを避けるため、最小レプリカ数は1に設定されています
 - 開発環境でコストを最適化する場合は、`min_replicas` を 0 に設定できます
 - Ollamaのモデルデータは Azure Storage に永続化されるため、コンテナ再起動後も保持されます
+- `azure.extensions` 設定（`VECTOR,PG_TRGM`）反映後は PostgreSQL Flexible Server の再起動が必要になる場合があります
+- ⚠️ **重要**: PostgreSQL モジュールは firewall rule `AllowAll`（`0.0.0.0-255.255.255.255`）を作成します。検証用途向け設定のため、本番では必ずアクセス制限を追加してください（例: `azurerm_postgresql_flexible_server_firewall_rule` を個別IP範囲に限定、または将来課題の VNet/Private Endpoint 化）。
 
 ## 📚 関連リソース
 

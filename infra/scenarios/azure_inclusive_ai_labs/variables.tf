@@ -22,6 +22,80 @@ variable "tags" {
 }
 
 # -----------------------------------------------------------------------------
+# PostgreSQL Settings
+# -----------------------------------------------------------------------------
+
+variable "postgresql_administrator_login" {
+  description = "Administrator login for PostgreSQL Flexible Server"
+  type        = string
+  default     = "psqladmin"
+}
+
+variable "postgresql_administrator_password" {
+  description = "Administrator password for PostgreSQL Flexible Server. Required (must be non-empty) when chatlog_auth_mode is \"password\"; can be left unset when chatlog_auth_mode is \"entra\"."
+  type        = string
+  sensitive   = true
+  default     = null
+
+  validation {
+    condition     = var.chatlog_auth_mode != "password" || (var.postgresql_administrator_password != null && length(trimspace(var.postgresql_administrator_password)) > 0)
+    error_message = "postgresql_administrator_password must be set (non-empty) when chatlog_auth_mode is \"password\"."
+  }
+}
+
+variable "postgresql_database_name" {
+  description = "Database name for chatlog"
+  type        = string
+  default     = "chatlog"
+}
+
+variable "postgresql_sku_name" {
+  description = "SKU name for PostgreSQL Flexible Server"
+  type        = string
+  default     = "B_Standard_B1ms"
+}
+
+variable "postgresql_version" {
+  description = "PostgreSQL version"
+  type        = string
+  default     = "17"
+}
+
+variable "chatlog_auth_mode" {
+  description = "Authentication mode for chatlog connection. Defaults to \"entra\" (passwordless / Microsoft Entra ID). Set to \"password\" to use the PostgreSQL administrator password instead."
+  type        = string
+  default     = "entra"
+
+  validation {
+    condition     = contains(["password", "entra"], var.chatlog_auth_mode)
+    error_message = "chatlog_auth_mode must be either password or entra."
+  }
+}
+
+variable "chatlog_enabled" {
+  description = "Enable chatlog feature for application. Defaults to false. Requires postgresql_enabled = true."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = var.chatlog_enabled == false || var.postgresql_enabled == true
+    error_message = "chatlog_enabled = true requires postgresql_enabled = true."
+  }
+}
+
+variable "postgresql_enabled" {
+  description = "Provision the PostgreSQL Flexible Server (and related chatlog DB / configuration / Entra admin). Defaults to false to avoid creating the resource unless explicitly opted-in."
+  type        = bool
+  default     = false
+}
+
+variable "tenant_id" {
+  description = "Entra tenant ID used for PostgreSQL authentication (defaults to current Azure client tenant if empty)"
+  type        = string
+  default     = ""
+}
+
+# -----------------------------------------------------------------------------
 # azure_inclusive_ai_labs Container Settings
 # -----------------------------------------------------------------------------
 
