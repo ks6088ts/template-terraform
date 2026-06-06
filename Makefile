@@ -9,6 +9,10 @@ SUBSCRIPTION_ID ?= $(shell az account show --query id --output tsv)
 SUBSCRIPTION_NAME ?= $(shell az account show --query name --output tsv)
 TENANT_ID ?= $(shell az account show --query tenantId --output tsv)
 
+# azurerm provider (v4+) requires the subscription ID to be specified explicitly.
+# Export it so all Terraform targets pick it up automatically.
+export ARM_SUBSCRIPTION_ID ?= $(SUBSCRIPTION_ID)
+
 # Terraform
 SCENARIO ?= hello_world
 SCENARIO_DIR ?= infra/scenarios/$(SCENARIO)
