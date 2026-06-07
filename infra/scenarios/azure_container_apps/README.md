@@ -140,7 +140,9 @@ Or using a `terraform.tfvars` file:
 ```hcl
 # terraform.tfvars
 container_image   = "ks6088ts/concierge:latest"
+
 container_command = ["python", "scripts/playgrounds/tts.py", "--host", "0.0.0.0", "--port", "80"]
+# container_command = ["uvicorn", "concierge.chat.infrastructure.web.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "80"]
 ```
 
 ```shell
