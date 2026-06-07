@@ -75,6 +75,8 @@ terraform destroy -auto-approve
 | `memory` | Memory allocated to the container | `string` | `"0.5Gi"` | no |
 | `min_replicas` | Minimum number of replicas | `number` | `0` | no |
 | `max_replicas` | Maximum number of replicas | `number` | `3` | no |
+| `env_vars` | Environment variables to inject (`value` for plain, `secret_name` to reference a secret) | `list(object)` | `[]` | no |
+| `secrets` | Secrets defined on the Container App, referenced by `env_vars` | `list(object)` | `[]` | no |
 | `tags` | Tags to apply to resources | `map(string)` | `{}` | no |
 
 ## Outputs
@@ -152,6 +154,30 @@ terraform apply -auto-approve
 # Get the application URL
 terraform output container_app_url
 ```
+
+### Inject environment variables
+
+```hcl
+# terraform.tfvars
+container_image = "myusername/myapp:v1.0.0"
+container_port  = 8080
+
+# Plain environment variables, and secret-backed ones.
+env_vars = [
+  { name = "LOG_LEVEL", value = "INFO" },
+  { name = "APP_ENV", value = "production" },
+  { name = "API_KEY", secret_name = "api-key" },
+]
+
+# Secret values referenced by env_vars via `secret_name`.
+secrets = [
+  { name = "api-key", value = "super-secret-value" },
+]
+```
+
+Each `env_vars` entry must set exactly one of `value` (plain text) or `secret_name`
+(a reference to an entry in `secrets`). Prefer `secrets` for sensitive values so
+they are stored as Container App secrets rather than plain environment values.
 
 ## Notes
 

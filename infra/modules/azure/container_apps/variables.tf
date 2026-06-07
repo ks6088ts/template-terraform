@@ -99,3 +99,30 @@ variable "identity_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "env_vars" {
+  description = "Environment variables to inject into the container. Use 'value' for plain values or 'secret_name' to reference a secret defined in 'secrets'."
+  type = list(object({
+    name        = string
+    value       = optional(string)
+    secret_name = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for e in var.env_vars : (e.value == null) != (e.secret_name == null)
+    ])
+    error_message = "Each env_var must set exactly one of 'value' or 'secret_name'."
+  }
+}
+
+variable "secrets" {
+  description = "Secrets to define on the Container App, referenced by env_vars via 'secret_name'."
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default   = []
+  sensitive = true
+}

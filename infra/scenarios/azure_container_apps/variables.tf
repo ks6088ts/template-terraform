@@ -92,3 +92,23 @@ variable "max_replicas" {
     error_message = "Maximum replicas must be between 1 and 300."
   }
 }
+
+variable "env_vars" {
+  description = "Environment variables to inject into the container. Use 'value' for plain values or 'secret_name' to reference a secret defined in 'secrets'."
+  type = list(object({
+    name        = string
+    value       = optional(string)
+    secret_name = optional(string)
+  }))
+  default = []
+}
+
+variable "secrets" {
+  description = "Secrets to define on the Container App, referenced by env_vars via 'secret_name'."
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default   = []
+  sensitive = true
+}

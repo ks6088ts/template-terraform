@@ -42,4 +42,6 @@ module "container_apps" {
   min_replicas               = var.min_replicas
   max_replicas               = var.max_replicas
   target_port                = var.container_port
+  env_vars                   = var.env_vars
+  secrets                    = var.secrets
 }

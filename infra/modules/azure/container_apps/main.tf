@@ -15,6 +15,14 @@ resource "azurerm_container_app" "this" {
   revision_mode                = var.revision_mode
   tags                         = var.tags
 
+  dynamic "secret" {
+    for_each = var.secrets
+    content {
+      name  = secret.value.name
+      value = secret.value.value
+    }
+  }
+
   dynamic "identity" {
     for_each = var.identity_type != null ? [1] : []
     content {
@@ -30,6 +38,15 @@ resource "azurerm_container_app" "this" {
       cpu     = var.cpu
       memory  = var.memory
       command = length(var.container_command) > 0 ? var.container_command : null
+
+      dynamic "env" {
+        for_each = var.env_vars
+        content {
+          name        = env.value.name
+          value       = env.value.secret_name == null ? env.value.value : null
+          secret_name = env.value.secret_name
+        }
+      }
     }
 
     min_replicas = var.min_replicas
