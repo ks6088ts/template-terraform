@@ -9,7 +9,7 @@ This scenario creates:
 - **Resource Group**: Container for all resources
 - **Log Analytics Workspace**: Required for Container Apps Environment monitoring
 - **Container Apps Environment**: Managed environment for running container apps
-- **Container App**: Runs a Docker Hub image with external ingress enabled
+- **Container App**: Runs a Docker Hub image with external ingress enabled and a system-assigned managed identity (enabled by default)
 
 ## Prerequisites
 
@@ -88,6 +88,7 @@ terraform destroy -auto-approve
 | `container_app_name` | Name of the Container App |
 | `container_app_fqdn` | FQDN of the Container App |
 | `container_app_url` | Full URL to access the Container App |
+| `container_app_identity_principal_id` | Principal ID of the Container App's system assigned managed identity |
 
 ## Examples
 

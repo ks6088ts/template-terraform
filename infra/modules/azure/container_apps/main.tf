@@ -15,6 +15,14 @@ resource "azurerm_container_app" "this" {
   revision_mode                = var.revision_mode
   tags                         = var.tags
 
+  dynamic "identity" {
+    for_each = var.identity_type != null ? [1] : []
+    content {
+      type         = var.identity_type
+      identity_ids = length(var.identity_ids) > 0 ? var.identity_ids : null
+    }
+  }
+
   template {
     container {
       name    = "app-${var.name}"

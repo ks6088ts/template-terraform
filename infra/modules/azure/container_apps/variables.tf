@@ -82,3 +82,20 @@ variable "container_command" {
   type        = list(string)
   default     = []
 }
+
+variable "identity_type" {
+  description = "Type of managed identity to assign to the Container App. Set to null to disable. Valid values: SystemAssigned, UserAssigned, 'SystemAssigned, UserAssigned'."
+  type        = string
+  default     = "SystemAssigned"
+
+  validation {
+    condition     = var.identity_type == null || contains(["SystemAssigned", "UserAssigned", "SystemAssigned, UserAssigned"], coalesce(var.identity_type, "SystemAssigned"))
+    error_message = "identity_type must be one of: SystemAssigned, UserAssigned, 'SystemAssigned, UserAssigned', or null."
+  }
+}
+
+variable "identity_ids" {
+  description = "List of user assigned managed identity IDs. Required when identity_type includes UserAssigned."
+  type        = list(string)
+  default     = []
+}

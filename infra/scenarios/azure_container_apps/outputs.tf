@@ -32,3 +32,8 @@ output "container_app_url" {
   description = "Full URL to access the Container App"
   value       = module.container_apps.app_url
 }
+
+output "container_app_identity_principal_id" {
+  description = "Principal ID of the Container App's system assigned managed identity"
+  value       = module.container_apps.identity_principal_id
+}
