@@ -32,6 +32,12 @@ variable "container_image" {
   }
 }
 
+variable "container_command" {
+  description = "Command to run in the container (overrides the image entrypoint)"
+  type        = list(string)
+  default     = []
+}
+
 variable "container_port" {
   description = "Port exposed by the container"
   type        = number
@@ -85,4 +91,24 @@ variable "max_replicas" {
     condition     = var.max_replicas >= 1 && var.max_replicas <= 300
     error_message = "Maximum replicas must be between 1 and 300."
   }
+}
+
+variable "env_vars" {
+  description = "Environment variables to inject into the container. Use 'value' for plain values or 'secret_name' to reference a secret defined in 'secrets'."
+  type = list(object({
+    name        = string
+    value       = optional(string)
+    secret_name = optional(string)
+  }))
+  default = []
+}
+
+variable "secrets" {
+  description = "Secrets to define on the Container App, referenced by env_vars via 'secret_name'."
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default   = []
+  sensitive = true
 }

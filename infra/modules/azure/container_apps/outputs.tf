@@ -27,3 +27,13 @@ output "app_url" {
   description = "Full URL to access the Container App"
   value       = var.enable_ingress ? "https://${azurerm_container_app.this.ingress[0].fqdn}" : null
 }
+
+output "identity_principal_id" {
+  description = "Principal ID of the system assigned managed identity, if enabled"
+  value       = var.identity_type != null ? azurerm_container_app.this.identity[0].principal_id : null
+}
+
+output "identity_tenant_id" {
+  description = "Tenant ID of the system assigned managed identity, if enabled"
+  value       = var.identity_type != null ? azurerm_container_app.this.identity[0].tenant_id : null
+}

@@ -9,7 +9,7 @@ This scenario creates:
 - **Resource Group**: Container for all resources
 - **Log Analytics Workspace**: Required for Container Apps Environment monitoring
 - **Container Apps Environment**: Managed environment for running container apps
-- **Container App**: Runs a Docker Hub image with external ingress enabled
+- **Container App**: Runs a Docker Hub image with external ingress enabled and a system-assigned managed identity (enabled by default)
 
 ## Prerequisites
 
@@ -69,11 +69,14 @@ terraform destroy -auto-approve
 | `container_app_environment_name` | Name of the Container Apps Environment | `string` | - | yes |
 | `container_app_name` | Name of the Container App | `string` | - | yes |
 | `container_image` | Docker Hub image to deploy | `string` | `"nginx:latest"` | no |
+| `container_command` | Command to run in the container (overrides entrypoint) | `list(string)` | `[]` | no |
 | `container_port` | Port exposed by the container | `number` | `80` | no |
 | `cpu` | CPU cores allocated to the container | `number` | `0.25` | no |
 | `memory` | Memory allocated to the container | `string` | `"0.5Gi"` | no |
 | `min_replicas` | Minimum number of replicas | `number` | `0` | no |
 | `max_replicas` | Maximum number of replicas | `number` | `3` | no |
+| `env_vars` | Environment variables to inject (`value` for plain, `secret_name` to reference a secret) | `list(object)` | `[]` | no |
+| `secrets` | Secrets defined on the Container App, referenced by `env_vars` | `list(object)` | `[]` | no |
 | `tags` | Tags to apply to resources | `map(string)` | `{}` | no |
 
 ## Outputs
@@ -87,6 +90,7 @@ terraform destroy -auto-approve
 | `container_app_name` | Name of the Container App |
 | `container_app_fqdn` | FQDN of the Container App |
 | `container_app_url` | Full URL to access the Container App |
+| `container_app_identity_principal_id` | Principal ID of the Container App's system assigned managed identity |
 
 ## Examples
 
@@ -123,6 +127,57 @@ tags = {
   cost-center = "12345"
 }
 ```
+
+### Deploy ks6088ts/concierge with custom startup command
+
+```shell
+export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+
+terraform apply -auto-approve \
+  -var="container_image=ks6088ts/concierge:latest" \
+  -var='container_command=["python","scripts/playgrounds/tts.py","--host","0.0.0.0","--port","80"]'
+```
+
+Or using a `terraform.tfvars` file:
+
+```hcl
+# terraform.tfvars
+container_image   = "ks6088ts/concierge:latest"
+
+container_command = ["python", "scripts/playgrounds/tts.py", "--host", "0.0.0.0", "--port", "80"]
+# container_command = ["uvicorn", "concierge.chat.infrastructure.web.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "80"]
+```
+
+```shell
+terraform apply -auto-approve
+
+# Get the application URL
+terraform output container_app_url
+```
+
+### Inject environment variables
+
+```hcl
+# terraform.tfvars
+container_image = "myusername/myapp:v1.0.0"
+container_port  = 8080
+
+# Plain environment variables, and secret-backed ones.
+env_vars = [
+  { name = "LOG_LEVEL", value = "INFO" },
+  { name = "APP_ENV", value = "production" },
+  { name = "API_KEY", secret_name = "api-key" },
+]
+
+# Secret values referenced by env_vars via `secret_name`.
+secrets = [
+  { name = "api-key", value = "super-secret-value" },
+]
+```
+
+Each `env_vars` entry must set exactly one of `value` (plain text) or `secret_name`
+(a reference to an entry in `secrets`). Prefer `secrets` for sensitive values so
+they are stored as Container App secrets rather than plain environment values.
 
 ## Notes
 
