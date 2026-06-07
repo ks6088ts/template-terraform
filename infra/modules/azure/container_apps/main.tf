@@ -17,10 +17,11 @@ resource "azurerm_container_app" "this" {
 
   template {
     container {
-      name   = "app-${var.name}"
-      image  = var.container_image
-      cpu    = var.cpu
-      memory = var.memory
+      name    = "app-${var.name}"
+      image   = var.container_image
+      cpu     = var.cpu
+      memory  = var.memory
+      command = length(var.container_command) > 0 ? var.container_command : null
     }
 
     min_replicas = var.min_replicas

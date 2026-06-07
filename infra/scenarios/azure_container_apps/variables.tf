@@ -32,6 +32,12 @@ variable "container_image" {
   }
 }
 
+variable "container_command" {
+  description = "Command to run in the container (overrides the image entrypoint)"
+  type        = list(string)
+  default     = []
+}
+
 variable "container_port" {
   description = "Port exposed by the container"
   type        = number

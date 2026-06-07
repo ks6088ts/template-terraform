@@ -69,6 +69,7 @@ terraform destroy -auto-approve
 | `container_app_environment_name` | Name of the Container Apps Environment | `string` | - | yes |
 | `container_app_name` | Name of the Container App | `string` | - | yes |
 | `container_image` | Docker Hub image to deploy | `string` | `"nginx:latest"` | no |
+| `container_command` | Command to run in the container (overrides entrypoint) | `list(string)` | `[]` | no |
 | `container_port` | Port exposed by the container | `number` | `80` | no |
 | `cpu` | CPU cores allocated to the container | `number` | `0.25` | no |
 | `memory` | Memory allocated to the container | `string` | `"0.5Gi"` | no |
@@ -122,6 +123,31 @@ tags = {
   team        = "platform"
   cost-center = "12345"
 }
+```
+
+### Deploy ks6088ts/concierge with custom startup command
+
+```shell
+export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+
+terraform apply -auto-approve \
+  -var="container_image=ks6088ts/concierge:latest" \
+  -var='container_command=["python","scripts/playgrounds/tts.py","--host","0.0.0.0","--port","80"]'
+```
+
+Or using a `terraform.tfvars` file:
+
+```hcl
+# terraform.tfvars
+container_image   = "ks6088ts/concierge:latest"
+container_command = ["python", "scripts/playgrounds/tts.py", "--host", "0.0.0.0", "--port", "80"]
+```
+
+```shell
+terraform apply -auto-approve
+
+# Get the application URL
+terraform output container_app_url
 ```
 
 ## Notes

@@ -36,6 +36,7 @@ module "container_apps" {
   tags                       = var.tags
   log_analytics_workspace_id = module.log_analytics.id
   container_image            = var.container_image
+  container_command          = var.container_command
   cpu                        = var.cpu
   memory                     = var.memory
   min_replicas               = var.min_replicas

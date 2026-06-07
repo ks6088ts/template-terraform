@@ -76,3 +76,9 @@ variable "target_port" {
   type        = number
   default     = 80
 }
+
+variable "container_command" {
+  description = "Command to run in the container (overrides the image entrypoint)"
+  type        = list(string)
+  default     = []
+}
