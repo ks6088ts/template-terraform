@@ -37,11 +37,11 @@ info-azure: ## show information about Azure
 
 .PHONY: install-deps-dev
 install-deps-dev: ## install dependencies for development
-	@which terraform || echo "Please install Terraform: https://developer.hashicorp.com/terraform/install"
-	@which az || echo "Please install Azure CLI: https://docs.microsoft.com/cli/azure/install-azure-cli"
-	@which gh || echo "Please install GitHub CLI: https://cli.github.com/"
-	@which tflint || echo "Please install tflint: https://github.com/terraform-linters/tflint#installation"
-	@which trivy || echo "Please install Trivy: https://aquasecurity.github.io/trivy/v0.57/getting-started/installation/"
+	@command -v terraform >/dev/null 2>&1 || echo "Please install Terraform: https://developer.hashicorp.com/terraform/install"
+	@command -v az >/dev/null 2>&1 || echo "Please install Azure CLI: https://docs.microsoft.com/cli/azure/install-azure-cli"
+	@command -v gh >/dev/null 2>&1 || echo "Please install GitHub CLI: https://cli.github.com/"
+	@command -v tflint >/dev/null 2>&1 || echo "Please install tflint: https://github.com/terraform-linters/tflint#installation"
+	@command -v trivy >/dev/null 2>&1 || echo "Please install Trivy: https://aquasecurity.github.io/trivy/v0.57/getting-started/installation/"
 
 .PHONY: clean
 clean:
