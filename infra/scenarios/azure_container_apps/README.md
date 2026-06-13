@@ -8,6 +8,7 @@ This scenario creates:
 
 - **Resource Group**: Container for all resources
 - **Log Analytics Workspace**: Required for Container Apps Environment monitoring
+- **Application Insights**: Workspace-based Application Insights for application observability (enabled by default). Its connection string is injected into the Container App as a secret-backed `APPLICATIONINSIGHTS_CONNECTION_STRING` environment variable.
 - **Container Apps Environment**: Managed environment for running container apps
 - **Container App**: Runs a Docker Hub image with external ingress enabled and a system-assigned managed identity (enabled by default)
 
@@ -28,10 +29,13 @@ flowchart TB
             CA["Container App<br/>- External Access Enabled<br/>- HTTPS Endpoint"]
         end
         LAW["Log Analytics Workspace<br/>- Logs & Metrics"]
+        APPI["Application Insights<br/>- Workspace-based<br/>- APM / Traces"]
     end
 
     Internet -->|HTTPS| CA
     CAE -.->|Monitoring| LAW
+    APPI -.->|workspace_id| LAW
+    CA -.->|Telemetry| APPI
 ```
 
 ## How to use
@@ -77,6 +81,9 @@ terraform destroy -auto-approve
 | `max_replicas` | Maximum number of replicas | `number` | `3` | no |
 | `env_vars` | Environment variables to inject (`value` for plain, `secret_name` to reference a secret) | `list(object)` | `[]` | no |
 | `secrets` | Secrets defined on the Container App, referenced by `env_vars` | `list(object)` | `[]` | no |
+| `enable_application_insights` | Whether to deploy Application Insights and inject its connection string into the Container App | `bool` | `true` | no |
+| `application_insights_type` | Type of Application Insights to create (`web`, `java`, `MobileCenter`, `Node.JS`, `other`) | `string` | `"web"` | no |
+| `application_insights_sampling_percentage` | Telemetry sampling percentage (0-100, 100 = no sampling) | `number` | `100` | no |
 | `tags` | Tags to apply to resources | `map(string)` | `{}` | no |
 
 ## Outputs
@@ -91,6 +98,10 @@ terraform destroy -auto-approve
 | `container_app_fqdn` | FQDN of the Container App |
 | `container_app_url` | Full URL to access the Container App |
 | `container_app_identity_principal_id` | Principal ID of the Container App's system assigned managed identity |
+| `application_insights_id` | ID of the Application Insights resource (null when disabled) |
+| `application_insights_name` | Name of the Application Insights resource (null when disabled) |
+| `application_insights_connection_string` | Connection string of the Application Insights resource (sensitive, null when disabled) |
+| `application_insights_instrumentation_key` | Instrumentation key of the Application Insights resource (sensitive, null when disabled) |
 
 ## Examples
 
