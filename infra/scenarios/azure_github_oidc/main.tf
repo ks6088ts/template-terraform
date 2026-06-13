@@ -16,13 +16,16 @@ resource "azuread_application" "this" {
   owners = [
     data.azuread_client_config.this.object_id,
   ]
-  required_resource_access {
-    resource_app_id = data.azuread_application_published_app_ids.this.result["MicrosoftGraph"]
-    dynamic "resource_access" {
-      for_each = var.resource_access_permissions
-      content {
-        id   = data.azuread_service_principal.this.app_role_ids[resource_access.value.resource_access_permission_name]
-        type = resource_access.value.type
+  dynamic "required_resource_access" {
+    for_each = length(var.resource_access_permissions) > 0 ? [1] : []
+    content {
+      resource_app_id = data.azuread_application_published_app_ids.this.result["MicrosoftGraph"]
+      dynamic "resource_access" {
+        for_each = var.resource_access_permissions
+        content {
+          id   = data.azuread_service_principal.this.app_role_ids[resource_access.value.resource_access_permission_name]
+          type = resource_access.value.type
+        }
       }
     }
   }
