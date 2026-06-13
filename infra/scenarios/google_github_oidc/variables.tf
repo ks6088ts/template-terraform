@@ -25,7 +25,7 @@ variable "github_repository" {
 variable "workload_identity_pool_id" {
   description = "ID for the Workload Identity Pool (must be 4-32 characters, lowercase letters, numbers, and hyphens)"
   type        = string
-  default     = "github-actions-pool"
+  default     = "github-actions"
 }
 
 variable "workload_identity_pool_display_name" {
