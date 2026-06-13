@@ -112,3 +112,31 @@ variable "secrets" {
   default   = []
   sensitive = true
 }
+
+variable "enable_application_insights" {
+  description = "Whether to deploy Application Insights and inject its connection string into the Container App as a secret-backed environment variable (APPLICATIONINSIGHTS_CONNECTION_STRING)."
+  type        = bool
+  default     = true
+}
+
+variable "application_insights_type" {
+  description = "Type of Application Insights to create (e.g., web, java, MobileCenter, Node.JS, other)"
+  type        = string
+  default     = "web"
+
+  validation {
+    condition     = contains(["web", "java", "MobileCenter", "Node.JS", "other"], var.application_insights_type)
+    error_message = "application_insights_type must be one of: web, java, MobileCenter, Node.JS, other."
+  }
+}
+
+variable "application_insights_sampling_percentage" {
+  description = "Telemetry sampling percentage for Application Insights (0-100). 100 means no sampling."
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = var.application_insights_sampling_percentage >= 0 && var.application_insights_sampling_percentage <= 100
+    error_message = "application_insights_sampling_percentage must be between 0 and 100."
+  }
+}
