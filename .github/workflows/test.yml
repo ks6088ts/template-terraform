@@ -113,7 +113,8 @@ jobs:
           - azure_container_apps
           - azure_datastore
           - azure_functions_flex_consumption
-          - azure_github_oidc
+          # FIXME: data.azuread_service_principal requires Microsoft Graph permissions that are not available under our current test setup, so skipping for now
+          # - azure_github_oidc
           - azure_inclusive_ai_labs
           - azure_microsoft_foundry
           - azure_spoke_network
