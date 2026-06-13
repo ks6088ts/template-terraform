@@ -62,7 +62,7 @@ AWS_ROLE_NAME="GitHubActionsRole"
 # Google Cloud settings (get from google_github_oidc scenario outputs)
 # Run `terraform output` in infra/scenarios/google_github_oidc to get these values
 GCP_PROJECT_ID="YOUR_PROJECT_NUMBER" # replace me
-GCP_WORKLOAD_IDENTITY_PROVIDER="projects/${GCP_PROJECT_ID}/locations/global/workloadIdentityPools/github-actions-pool/providers/github"
+GCP_WORKLOAD_IDENTITY_PROVIDER="projects/${GCP_PROJECT_ID}/locations/global/workloadIdentityPools/github-actions/providers/github"
 GCP_SERVICE_ACCOUNT="github-actions@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 
 cat <<EOF > terraform.tfvars
