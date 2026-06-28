@@ -45,6 +45,7 @@ terraform apply -auto-approve \
 
 | 出力 | 説明 |
 |------|------|
+| `resource_group_name` | リソースグループ名 |
 | `postgresql_connection_uri` | 接続 URI（`sensitive`） |
 | `postgresql_administrator_login` | 管理者ログイン |
 | `postgresql_administrator_password` | 管理者パスワード（`sensitive`） |
