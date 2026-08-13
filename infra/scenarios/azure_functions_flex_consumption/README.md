@@ -1,3 +1,7 @@
+---
+description: Azure Functions Flex Consumption プランを最小構成でデプロイするシナリオ
+---
+
 # Azure Functions Flex Consumption Scenario
 
 Azure Functions の Flex Consumption プランをデプロイします。サーバーレス関数の実行環境を最小構成で構築します。
@@ -14,9 +18,11 @@ Azure Functions の Flex Consumption プランをデプロイします。サー�
 
 ## Prerequisites
 
-- Terraform CLI installed (>= 1.6.0)
-- Azure CLI installed and logged in (`az login`)
-- Azure subscription with permissions to create resources
+[プロバイダー認証](../../../docs/tips/provider-authentication.md)、
+[標準 Terraform ワークフロー](../../../docs/tips/terraform-workflow.md)、およびオプションの
+[Azure Blob リモートステート](../../../docs/tips/azure-blob-backend.md)については、共通ガイダンスを参照してください。
+
+リポジトリの Makefile を使用する場合は、`SCENARIO=azure_functions_flex_consumption` を指定します。
 
 ## Architecture
 
@@ -45,24 +51,13 @@ flowchart TB
 
 ## How to use
 
+[標準 Terraform ワークフロー](../../../docs/tips/terraform-workflow.md)に従い、
+`SCENARIO=azure_functions_flex_consumption` を指定します。
+
+### デプロイ確認
+
 ```shell
-# Login to Azure
-az login
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
-# Get the Function App URL
 terraform output function_app_url
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables

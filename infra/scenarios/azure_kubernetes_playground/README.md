@@ -1,3 +1,7 @@
+---
+description: Deploy Azure Container Registry and Azure Kubernetes Service for container workload testing
+---
+
 # Azure Kubernetes Playground Scenario
 
 Deploy Azure Container Registry (ACR) and Azure Kubernetes Service (AKS) for basic container workload testing.
@@ -12,9 +16,12 @@ This scenario creates:
 
 ## Prerequisites
 
-- Terraform CLI installed (>= 1.6.0)
-- Azure CLI installed and logged in (`az login`)
 - Azure subscription with permissions to create resources
+
+Follow the shared [Azure authentication](../../../docs/tips/provider-authentication.md),
+[Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
+[Azure Blob Storage backend](../../../docs/tips/azure-blob-backend.md) guidance.
+Set `SCENARIO=azure_kubernetes_playground` when using the repository Makefile.
 
 ## Architecture
 
@@ -36,19 +43,11 @@ flowchart TB
 
 ## How to use
 
-```shell
-# Login to Azure
-az login
+Deploy the infrastructure with the shared workflow and
+`SCENARIO=azure_kubernetes_playground`. Then run the scenario-specific
+operations:
 
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
+```bash
 # Get AKS credentials
 az aks get-credentials \
     --resource-group $(terraform output -raw resource_group_name) \
@@ -65,9 +64,6 @@ docker push $ACR_NAME.azurecr.io/myapp:v1
 
 # Deploy to AKS
 kubectl create deployment myapp --image=$ACR_NAME.azurecr.io/myapp:v1
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables

@@ -1,3 +1,7 @@
+---
+description: Configure GitHub Actions OIDC authentication for Azure with Terraform
+---
+
 # Azure GitHub OIDC
 
 This Terraform scenario creates an Azure Service Principal with federated identity credentials for GitHub Actions to authenticate with Azure using OpenID Connect (OIDC). This eliminates the need for storing long-lived Azure credentials as GitHub secrets.
@@ -23,49 +27,18 @@ flowchart LR
 
 ## Prerequisites
 
-- Terraform CLI installed
-- Azure CLI installed
-- Azure subscription
+Use the shared guidance for [provider authentication](../../../docs/tips/provider-authentication.md),
+the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
+[Azure Blob remote state](../../../docs/tips/azure-blob-backend.md).
+
+Set `SCENARIO=azure_github_oidc` when using the repository Makefile.
 
 ## How to use
 
-```shell
-# create backend.tf if needed
-cat <<EOF > backend.tf
-terraform {
-  backend "azurerm" {
-    resource_group_name  = "YOUR_RESOURCE_GROUP_NAME"
-    storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"
-    container_name       = "YOUR_CONTAINER_NAME"
-    key                  = "azure_github_oidc.dev.tfstate"
-  }
-}
-EOF
-
-# Log in to Azure
-az login
-
-# (Optional) Confirm the details for the currently logged-in user
-az ad signed-in-user show
-
-# Set environment variables
-export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
-# Confirm the output
-terraform output
-
-# Destroy the deployment
-terraform destroy -auto-approve
-```
+Follow the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md) with
+`SCENARIO=azure_github_oidc`. For remote state, follow the
+[Azure Blob backend guide](../../../docs/tips/azure-blob-backend.md) instead of committing
+scenario-specific backend configuration.
 
 ## FAQ
 

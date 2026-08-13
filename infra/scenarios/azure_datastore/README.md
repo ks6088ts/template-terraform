@@ -1,3 +1,7 @@
+---
+description: Deploy optional Azure data stores for simplified public-access testing
+---
+
 # Azure Datastore Scenario
 
 Deploy various Azure data stores for simplified testing with public internet access enabled.
@@ -16,9 +20,11 @@ This scenario creates the following data stores (each can be individually enable
 
 ## Prerequisites
 
-- Terraform CLI installed (>= 1.6.0)
-- Azure CLI installed and logged in (`az login`)
-- Azure subscription with permissions to create resources
+Use the shared guidance for [provider authentication](../../../docs/tips/provider-authentication.md),
+the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
+[Azure Blob remote state](../../../docs/tips/azure-blob-backend.md).
+
+Set `SCENARIO=azure_datastore` when using the repository Makefile.
 
 ## Architecture
 
@@ -45,17 +51,13 @@ flowchart TB
 
 ## How to use
 
+Follow the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md) with
+`SCENARIO=azure_datastore`. All resources are disabled by default, so enable the resources
+you need when applying the configuration.
+
+### Deploy specific resources
+
 ```shell
-# Login to Azure
-az login
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment (all resources disabled by default)
-terraform plan
-
-# Deploy specific resources using flags
 terraform apply -auto-approve \
   -var="deploy_cosmosdb=true" \
   -var="deploy_storage_account=true" \
@@ -63,8 +65,11 @@ terraform apply -auto-approve \
   -var="deploy_postgresql=true" \
   -var="deploy_monitor_workspace=true" \
   -var="postgresql_administrator_password=YourSecurePassword123!"
+```
 
-# Or use a terraform.tfvars file
+Or use a `terraform.tfvars` file:
+
+```shell
 cat > terraform.tfvars <<EOF
 deploy_cosmosdb          = true
 deploy_storage_account   = true
@@ -74,12 +79,12 @@ deploy_monitor_workspace = true
 postgresql_administrator_password = "YourSecurePassword123!"
 EOF
 terraform apply -auto-approve
+```
 
-# Get outputs
+### Verify the deployment
+
+```shell
 terraform output
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables

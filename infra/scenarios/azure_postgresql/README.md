@@ -1,18 +1,25 @@
+---
+description: Azure Database for PostgreSQL Flexible Server をデプロイするシナリオ
+---
+
 # azure_postgresql
 
 Azure Database for PostgreSQL Flexible Server をデプロイするシナリオです。
 
 ## 使い方
 
-```shell
-az login
-terraform init
-terraform apply -auto-approve
-```
+共通の [Azure 認証](../../../docs/tips/provider-authentication.md)、
+[Terraform ワークフロー](../../../docs/tips/terraform-workflow.md)、および必要に応じて
+[Azure Blob Storage バックエンド](../../../docs/tips/azure-blob-backend.md)を設定してください。
+このシナリオの Makefile コマンドでは `SCENARIO=azure_postgresql` を指定します。
+
+既存のローカル `backend.tf` を利用していた場合は、共通ガイドへの移行について
+[PostgreSQL シナリオのアップグレード手順](../../../docs/tips/azure-blob-backend.md#upgrade-the-postgresql-scenario)
+を確認してください。
 
 管理者パスワードは自動生成されます。接続情報は出力から取得します。
 
-```shell
+```bash
 # 接続 URI（パスワード込み）
 terraform output -raw postgresql_connection_uri
 
@@ -23,7 +30,7 @@ terraform output postgresql_server_fqdn
 
 パスワードやデータベース名などを指定したい場合は変数を渡します。
 
-```shell
+```bash
 terraform apply -auto-approve \
   -var='administrator_password=YourSecurePassword123!' \
   -var='database_name=mydb'

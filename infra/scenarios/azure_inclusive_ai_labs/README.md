@@ -1,3 +1,7 @@
+---
+description: Azure Container Apps にインクルーシブ AI 対話システムをデプロイするシナリオ
+---
+
 # azure_inclusive_ai_labs
 
 このTerraformシナリオは、Azure Container Apps上にazure_inclusive_ai_labsアプリケーションをデプロイします。音声認識（STT）、AI対話（GenAI）、音声合成（TTS）を組み合わせた**インクルーシブなAI対話システム**を構築できます。
@@ -319,19 +323,16 @@ flowchart LR
 ## ⚙️ 前提条件
 
 - Azure サブスクリプション
-- Terraform >= 1.9.0
-- Azure CLI（ログイン済み）
 - Azure OpenAI リソース（デプロイ済みモデル付き）※ Azure OpenAI を利用する場合
+
+共通の [Azure 認証](../../../docs/tips/provider-authentication.md)、
+[Terraform ワークフロー](../../../docs/tips/terraform-workflow.md)、および必要に応じて
+[Azure Blob Storage バックエンド](../../../docs/tips/azure-blob-backend.md)を設定してください。
+このシナリオの Makefile コマンドでは `SCENARIO=azure_inclusive_ai_labs` を指定します。
 
 ## 🚀 クイックスタート
 
-1. **Terraformの初期化**
-
-   ```bash
-   terraform init
-   ```
-
-2. **`terraform.tfvars` ファイルを作成**
+1. **`terraform.tfvars` ファイルを作成**
 
    ```hcl
    name     = "azureinclusiveailabs"
@@ -358,14 +359,12 @@ flowchart LR
    # chatlog_auth_mode                 = "password"
    ```
 
-3. **デプロイ**
+2. **デプロイ**
 
-   ```bash
-   terraform plan
-   terraform apply
-   ```
+    [標準の Terraform ワークフロー](../../../docs/tips/terraform-workflow.md)に従って
+    `SCENARIO=azure_inclusive_ai_labs` をデプロイします。
 
-4. **アプリケーションへのアクセス**
+3. **アプリケーションへのアクセス**
 
    デプロイ完了後、URLが出力されます：
 
@@ -542,9 +541,8 @@ flowchart LR
 
 ## 🗑️ リソースの削除
 
-```bash
-terraform destroy
-```
+`SCENARIO=azure_inclusive_ai_labs` を指定し、
+[標準の Terraform ワークフロー](../../../docs/tips/terraform-workflow.md)に従って削除します。
 
 ## 💡 ユースケース
 
