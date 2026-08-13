@@ -1,3 +1,7 @@
+---
+description: Generate and verify a random string with Terraform
+---
+
 # Hello World Scenario
 
 Use random provider to generate random string.
@@ -12,45 +16,25 @@ flowchart LR
 
 ## Prerequisites
 
-- Terraform CLI installed
+- Complete the prerequisites in the [Terraform workflow](../../../docs/tips/terraform-workflow.md)
+- Review [provider authentication](../../../docs/tips/provider-authentication.md); this scenario does not require provider credentials
 
 ## How to use
 
-```shell
+Create the variable definition for this scenario:
+
+```bash
 # Create variable definitions file
 cat > terraform.tfvars <<EOF
 byte_length = 2
 EOF
+```
 
-# create backend.tf if needed
-cat <<EOF > backend.tf
-terraform {
-  backend "azurerm" {
-    resource_group_name  = "YOUR_RESOURCE_GROUP_NAME"
-    storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"
-    container_name       = "YOUR_CONTAINER_NAME"
-    key                  = "hello_world.dev.tfstate"
-  }
-}
-EOF
+Follow the [Terraform workflow](../../../docs/tips/terraform-workflow.md) with
+`SCENARIO=hello_world`.
 
-# Initialize Terraform
-terraform init
+Verify the generated value after deployment:
 
-# Plan the deployment
-terraform plan -out=tfplan
-
-# Apply the deployment
-terraform apply tfplan
-# or simply
-terraform apply -auto-approve
-
-# Confirm the output
+```bash
 terraform output
-
-# Confirm the state file
-cat terraform.tfstate
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```

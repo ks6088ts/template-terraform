@@ -1,6 +1,12 @@
+---
+description: Bootstrap Azure Blob Storage for Terraform remote state
+---
+
 # Azure Terraform Backend Scenario
 
-Create Azure Storage Account for Terraform backend.
+Create an Azure Storage Account for Terraform backend. This scenario bootstraps
+the backend storage using local state so it does not depend on the backend it
+creates.
 
 ## Architecture
 
@@ -15,39 +21,25 @@ flowchart TB
 
 ## Prerequisites
 
-- Terraform CLI installed
-- Azure CLI installed
 - Azure subscription
+
+Follow the shared [Azure authentication](../../../docs/tips/provider-authentication.md)
+and [Terraform workflow](../../../docs/tips/terraform-workflow.md). Set
+`SCENARIO=azure_terraform_backend` when using the repository Makefile. This
+bootstrap scenario must remain on local state during deployment.
 
 ## How to use
 
-```shell
-# Log in to Azure
-az login
+Deploy the scenario with the standard workflow and local state. Retrieve the
+three values required by the
+[Azure Blob Storage backend guide](../../../docs/tips/azure-blob-backend.md):
 
-# (Optional) Confirm the details for the currently logged-in user
-az ad signed-in-user show
-
-# Set environment variables
-export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan -out=tfplan
-
-# Apply the deployment
-terraform apply tfplan
-# or simply
-terraform apply -auto-approve
-
-# Confirm the output
-terraform output
-
-# Confirm the state file
-cat terraform.tfstate
-
-# Destroy the deployment
-terraform destroy -auto-approve
+```bash
+terraform output -raw resource_group_name
+terraform output -raw storage_account_name
+terraform output -raw storage_container_name
 ```
+
+Do not destroy this scenario while another scenario stores state in its Blob
+container. Follow the shared workflow with `SCENARIO=azure_terraform_backend`
+when the backend storage can be removed.

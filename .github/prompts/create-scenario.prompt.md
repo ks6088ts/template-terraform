@@ -23,7 +23,6 @@ description: '新規 Terraform シナリオを作成する'
    - `outputs.tf` - 出力定義
    - `providers.tf` - プロバイダ設定
    - `versions.tf` - Terraform バージョン制約
-   - `backend.tf` - バックエンド設定
    - `README.md` - シナリオの説明
 
 2. **モジュールの作成**: 必要に応じて `infra/modules/{provider}/` 配下にモジュールを作成
@@ -51,6 +50,9 @@ description: '新規 Terraform シナリオを作成する'
 - 参照情報（cdk.tf、compose.yml など）があれば明示する
 - resource は可能な限りモジュール化する
 - README.md には概要、入力変数、出力変数、特徴、利用例、参照リンクを含める
+- `backend.tf` は作成しない。Terraform はローカルバックエンドを既定とし、リモートステートが必要な場合は共通 Tips を参照する
+- README.md では認証、標準 Terraform ワークフロー、Azure Blob バックエンドの手順を重複して記載せず、`../../../docs/tips/index.md` を参照する
+- README.md にはシナリオ固有の変数、コマンドオプション、検証手順、デプロイ後の操作のみを詳しく記載する
 - シナリオ、モジュール双方で必ず `variables.tf`, `outputs.tf`, `versions.tf` を作成する
 - `export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv) && make fix _ci-test-base SCENARIO=${input:scenarioName}` コマンドで CI テストが通過することを確認する
 
@@ -60,3 +62,4 @@ description: '新規 Terraform シナリオを作成する'
 - `infra/scenarios/` - 既存シナリオの実装例
 - `infra/modules/` - 再利用可能なモジュール
 - `.github/workflows/test.yml` - CI テスト設定
+- [`docs/tips/index.md`](../../docs/tips/index.md) - 共通の認証、Terraform ワークフロー、バックエンド設定

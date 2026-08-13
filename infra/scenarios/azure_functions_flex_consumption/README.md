@@ -1,22 +1,28 @@
+---
+description: Scenario for deploying Azure Functions on a Flex Consumption plan with a minimal configuration
+---
+
 # Azure Functions Flex Consumption Scenario
 
-Azure Functions の Flex Consumption プランをデプロイします。サーバーレス関数の実行環境を最小構成で構築します。
+This scenario deploys an Azure Functions Flex Consumption plan. It creates a minimal serverless function execution environment.
 
 ## Overview
 
-このシナリオは以下のリソースを作成します：
+This scenario creates the following resources:
 
-- **Resource Group**: 全リソースのコンテナ
-- **Storage Account**: Functions の実行に必要なストレージ（デプロイメントパッケージ用コンテナを含む）
-- **Service Plan (Flex Consumption)**: FC1 SKU の Flex Consumption プラン
-- **Function App**: Flex Consumption で動作する Function App（System Assigned Managed Identity 付き）
-- **RBAC Role Assignments**: Storage に対する Managed Identity の権限設定
+* **Resource Group**: Container for all resources
+* **Storage Account**: Storage required to run Functions, including a container for deployment packages
+* **Service Plan (Flex Consumption)**: Flex Consumption plan with the FC1 SKU
+* **Function App**: Function App running on Flex Consumption with a system-assigned managed identity
+* **RBAC Role Assignments**: Managed identity permissions for Storage
 
 ## Prerequisites
 
-- Terraform CLI installed (>= 1.6.0)
-- Azure CLI installed and logged in (`az login`)
-- Azure subscription with permissions to create resources
+See the shared guidance for [provider authentication](../../../docs/tips/provider-authentication.md),
+the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md), and the optional
+[Azure Blob remote state](../../../docs/tips/azure-blob-backend.md).
+
+When using the repository Makefile, specify `SCENARIO=azure_functions_flex_consumption`.
 
 ## Architecture
 
@@ -37,32 +43,21 @@ flowchart TB
 
 ## Features
 
-- **Flex Consumption Plan**: 従量課金制でコスト効率の良いサーバーレス実行環境
-- **System Assigned Managed Identity**: セキュアな認証（接続文字列不要）
-- **RBAC-based Access**: Storage への最小権限アクセス
-- **Zone Redundancy**: オプションでゾーン冗長を有効化可能
-- **Application Insights 不要**: 監視なしの最小構成
+* **Flex Consumption Plan**: Cost-effective, consumption-based serverless execution environment
+* **System Assigned Managed Identity**: Secure authentication without connection strings
+* **RBAC-based Access**: Least-privilege access to Storage
+* **Zone Redundancy**: Optional zone redundancy
+* **No Application Insights**: Minimal configuration without monitoring
 
 ## How to use
 
+Follow the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md) and specify
+`SCENARIO=azure_functions_flex_consumption`.
+
+### Verify the deployment
+
 ```shell
-# Login to Azure
-az login
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
-# Get the Function App URL
 terraform output function_app_url
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables
@@ -138,108 +133,108 @@ zone_redundant         = true
 
 ## Deploy Function Code
 
-Terraform でインフラをデプロイした後、以下の方法で関数コードをデプロイします。
+After deploying the infrastructure with Terraform, deploy the function code using one of the following methods.
 
-> **Note**: Azure Functions Flex Consumption プランでは、Terraform の `zip_deploy_file` は正常に動作しないため、コードデプロイは別途実行する必要があります。Flex Consumption は "One Deploy" という独自のデプロイメカニズムを使用しています。
+> **Note**: Terraform's `zip_deploy_file` does not work correctly with the Azure Functions Flex Consumption plan, so you must deploy the code separately. Flex Consumption uses a dedicated deployment mechanism called "One Deploy."
 
-### Azure Functions Core Tools を使用（推奨）
+### Use Azure Functions Core Tools (recommended)
 
 ```shell
 FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
 
-# src ディレクトリに移動
+# Move to the src directory
 cd src
 
-# Function App にデプロイ
+# Deploy to the Function App
 func azure functionapp publish $FUNCTION_APP_NAME
 ```
 
-### Azure CLI を使用
+### Use Azure CLI
 
 ```shell
-# src ディレクトリを zip 化
+# Create a zip archive of the src directory
 cd src && zip -r ../function_app.zip . && cd ..
 
-# Azure CLI でデプロイ
+# Deploy with Azure CLI
 az functionapp deployment source config-zip \
   --resource-group $(terraform output -raw resource_group_name) \
   --name $(terraform output -raw function_app_name) \
   --src function_app.zip
 ```
 
-### デプロイ確認
+### Verify the deployment
 
 ```shell
-# Function App のログをストリーミング
+# Stream the Function App logs
 az webapp log tail \
   --name $(terraform output -raw function_app_name) \
   --resource-group $(terraform output -raw resource_group_name)
 ```
 
-## Function の動作検証
+## Verify Function Behavior
 
-### HTTP トリガー関数のテスト
+### Test the HTTP trigger function
 
 ```shell
-# Function App 名と Function Key を取得
+# Get the Function App name and Function key
 FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
 RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)
 
-# Function Key を取得
+# Get the Function key
 FUNCTION_KEY=$(az functionapp function keys list \
   --name $FUNCTION_APP_NAME \
   --resource-group $RESOURCE_GROUP_NAME \
   --function-name hello_world_http \
   --query default -o tsv)
 
-# HTTP トリガー関数を呼び出し（基本）
+# Call the HTTP trigger function (basic)
 curl "https://${FUNCTION_APP_NAME}.azurewebsites.net/api/hello?code=${FUNCTION_KEY}"
 
-# HTTP トリガー関数を呼び出し（name パラメータ付き）
+# Call the HTTP trigger function with the name parameter
 curl "https://${FUNCTION_APP_NAME}.azurewebsites.net/api/hello?code=${FUNCTION_KEY}&name=Azure"
 
-# POST リクエストで呼び出し
+# Call the function with a POST request
 curl -X POST "https://${FUNCTION_APP_NAME}.azurewebsites.net/api/hello?code=${FUNCTION_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"name": "World"}'
 ```
 
-### タイマートリガー関数の確認
+### Verify the timer trigger function
 
-タイマートリガー関数は 1 時間ごと（毎時 0 分）に自動実行されます。ログで実行を確認できます。
+The timer trigger function runs automatically every hour at the top of the hour. You can verify its execution in the logs.
 
 ```shell
-# ログをストリーミングして "hello world" の出力を確認
+# Stream the logs and check for "hello world" output
 az webapp log tail \
   --name $(terraform output -raw function_app_name) \
   --resource-group $(terraform output -raw resource_group_name)
 ```
 
-## Known Issues / Troubleshooting
+## Known Issues and Troubleshooting
 
-### Terraform でのコードデプロイの制限
+### Terraform code deployment limitation
 
-Azure Functions Flex Consumption プランでは、Terraform の `zip_deploy_file` 属性を使用したコードデプロイは**サポートされていません**（404 Not Found エラーが発生します）。これは Flex Consumption が従来の App Service とは異なる "One Deploy" メカニズムを使用しているためです。
+The Azure Functions Flex Consumption plan **does not support** code deployment through Terraform's `zip_deploy_file` attribute. Attempts return a 404 Not Found error. This limitation exists because Flex Consumption uses the "One Deploy" mechanism instead of the mechanism used by traditional App Service plans.
 
-**対処法**: インフラのデプロイ後、Azure Functions Core Tools (`func`) または Azure CLI を使用してコードをデプロイしてください。上記の「Deploy Function Code」セクションを参照してください。
+**Workaround**: After deploying the infrastructure, deploy the code with Azure Functions Core Tools (`func`) or Azure CLI. See the "Deploy Function Code" section above.
 
-### 403 エラー: "This request is not authorized to perform this operation using this permission."
+### 403 error: "This request is not authorized to perform this operation using this permission."
 
-初回デプロイ時に 403 エラーが発生することがあります。
+A 403 error can occur during the initial deployment.
 
-**原因**: このモジュールでは Storage Account のセキュリティを強化するために `shared_access_key_enabled = false` を設定し、RBAC（Role-Based Access Control）による認証を使用しています。**Azure の RBAC ロール割り当ては伝播に最大数分かかる**ことがあります。
+**Cause**: This module sets `shared_access_key_enabled = false` to improve Storage Account security and uses RBAC (Role-Based Access Control) authentication. **Azure RBAC role assignments can take several minutes to propagate.**
 
-**対処法**: エラーが発生した場合は、1〜2分待ってから `terraform apply` を再度実行してください。
+**Workaround**: If the error occurs, wait one or two minutes, then run `terraform apply` again.
 
 ```shell
-# 初回でエラーが出た場合、しばらく待ってから再実行
+# If the first attempt fails, wait briefly and run it again
 terraform apply -auto-approve
 ```
 
 ## References
 
-- [Azure Functions Flex Consumption Plan](https://learn.microsoft.com/ja-jp/azure/azure-functions/flex-consumption-plan)
-- [azurerm_function_app_flex_consumption](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/function_app_flex_consumption)
-- [Azure Functions Flex Consumption Samples](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples)
-- [Quickstart: Create and deploy Azure Functions resources from Terraform](https://learn.microsoft.com/en-us/azure/azure-functions/functions-create-first-function-terraform)
-- [Azure RBAC role assignment propagation time](https://learn.microsoft.com/en-us/azure/role-based-access-control/troubleshoot-limits#symptom---role-assignment-changes-are-not-being-detected)
+* [Azure Functions Flex Consumption Plan](https://learn.microsoft.com/ja-jp/azure/azure-functions/flex-consumption-plan)
+* [azurerm_function_app_flex_consumption](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/function_app_flex_consumption)
+* [Azure Functions Flex Consumption Samples](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples)
+* [Quickstart: Create and deploy Azure Functions resources from Terraform](https://learn.microsoft.com/en-us/azure/azure-functions/functions-create-first-function-terraform)
+* [Azure RBAC role assignment propagation time](https://learn.microsoft.com/en-us/azure/role-based-access-control/troubleshoot-limits#symptom---role-assignment-changes-are-not-being-detected)

@@ -1,3 +1,7 @@
+---
+description: Deploy an externally accessible Azure Container App with monitoring
+---
+
 # Container Apps Scenario
 
 Deploy Azure Container Apps with a Docker Hub image, externally accessible.
@@ -14,9 +18,11 @@ This scenario creates:
 
 ## Prerequisites
 
-- Terraform CLI installed (>= 1.6.0)
-- Azure CLI installed and logged in (`az login`)
-- Azure subscription with permissions to create resources
+Use the shared guidance for [provider authentication](../../../docs/tips/provider-authentication.md),
+the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
+[Azure Blob remote state](../../../docs/tips/azure-blob-backend.md).
+
+Set `SCENARIO=azure_container_apps` when using the repository Makefile.
 
 ## Architecture
 
@@ -40,27 +46,15 @@ flowchart TB
 
 ## How to use
 
+Follow the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md) with
+`SCENARIO=azure_container_apps`.
+
+### Verify the deployment
+
 ```shell
-# Login to Azure
-az login
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
-# Get the application URL
 terraform output container_app_url
 
-# Test the deployment
 curl $(terraform output -raw container_app_url)
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables

@@ -1,3 +1,7 @@
+---
+description: Configure AWS IAM resources for GitHub Actions OIDC authentication
+---
+
 # AWS GitHub OIDC
 
 This Terraform scenario creates the necessary AWS resources to enable GitHub Actions to authenticate with AWS using OpenID Connect (OIDC). This eliminates the need for storing long-lived AWS credentials as GitHub secrets.
@@ -30,14 +34,19 @@ flowchart LR
 
 ## Prerequisites
 
-- Terraform CLI installed
-- AWS CLI installed and configured
 - AWS account with appropriate permissions to create IAM resources
+- Complete [provider authentication](../../../docs/tips/provider-authentication.md) for AWS
 
 ## How to use
 
-```shell
-# Create backend.tf if you want to use S3 backend (optional)
+Follow the [Terraform workflow](../../../docs/tips/terraform-workflow.md) with
+`SCENARIO=aws_github_oidc`.
+
+### Optional S3 backend
+
+Create `backend.tf` in this scenario directory to use an S3 backend:
+
+```bash
 cat <<EOF > backend.tf
 terraform {
   backend "s3" {
@@ -47,37 +56,6 @@ terraform {
   }
 }
 EOF
-
-# Or use local backend for testing
-cat <<EOF > backend.tf
-terraform {
-  backend "local" {
-    path = "terraform.tfstate"
-  }
-}
-EOF
-
-# Configure AWS credentials
-aws configure
-# Or set environment variables
-export AWS_ACCESS_KEY_ID="your-access-key"
-export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_REGION="ap-northeast-1"
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
-# Confirm the output
-terraform output
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables

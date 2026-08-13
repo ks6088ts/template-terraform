@@ -1,3 +1,7 @@
+---
+description: Configure Google Cloud Workload Identity Federation for GitHub Actions
+---
+
 # Google GitHub OIDC
 
 This Terraform scenario creates the necessary Google Cloud resources to enable GitHub Actions to authenticate with Google Cloud using OpenID Connect (OIDC) via Workload Identity Federation. This eliminates the need for storing long-lived service account keys as GitHub secrets.
@@ -31,12 +35,11 @@ flowchart LR
 
 ## Prerequisites
 
-- Terraform CLI installed
-- Google Cloud SDK (gcloud) installed and configured
 - Google Cloud project with the following APIs enabled:
   - IAM API (`iam.googleapis.com`)
   - IAM Service Account Credentials API (`iamcredentials.googleapis.com`)
 - Appropriate permissions to create IAM resources in the project
+- Complete [provider authentication](../../../docs/tips/provider-authentication.md) for Google Cloud
 
 ## Enable Required APIs
 
@@ -46,8 +49,20 @@ gcloud services enable iam.googleapis.com iamcredentials.googleapis.com --projec
 
 ## How to use
 
-```shell
-# Create backend.tf if you want to use GCS backend (optional)
+Set the project ID required by this scenario:
+
+```bash
+export TF_VAR_project_id="your-project-id"
+```
+
+Follow the [Terraform workflow](../../../docs/tips/terraform-workflow.md) with
+`SCENARIO=google_github_oidc`.
+
+### Optional GCS backend
+
+Create `backend.tf` in this scenario directory to use a GCS backend:
+
+```bash
 cat <<EOF > backend.tf
 terraform {
   backend "gcs" {
@@ -56,38 +71,6 @@ terraform {
   }
 }
 EOF
-
-# Or use local backend for testing
-cat <<EOF > backend.tf
-terraform {
-  backend "local" {
-    path = "terraform.tfstate"
-  }
-}
-EOF
-
-# Configure Google Cloud credentials
-gcloud auth application-default login
-# Or set environment variable
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
-
-# Set your project ID
-export TF_VAR_project_id="your-project-id"
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
-# Confirm the output
-terraform output
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables

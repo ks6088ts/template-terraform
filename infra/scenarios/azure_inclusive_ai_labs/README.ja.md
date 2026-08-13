@@ -1,0 +1,658 @@
+---
+description: Azure Container Apps にインクルーシブ AI 対話システムをデプロイするシナリオ
+---
+
+# azure_inclusive_ai_labs
+
+この Terraform シナリオは、Azure Container Apps 上に azure_inclusive_ai_labs アプリケーションをデプロイします。音声認識（STT）、AI 対話（GenAI）、音声合成（TTS）を組み合わせた**インクルーシブな AI 対話システム**を構築できます。
+
+## 🎯 このシナリオでできること
+
+* **音声からテキストへの変換**（Speech-to-Text）: ユーザーの音声をテキストに変換
+* **AI との対話**（Generative AI）: テキストを元に AI が応答を生成
+* **テキストから音声への変換**（Text-to-Speech）: AI の応答を音声で読み上げ
+
+これにより、視覚障害者や手を使えない方でも、音声で AI と対話できるアクセシブルなシステムを実現します。
+
+## 📦 デプロイされるコンポーネント
+
+| コンポーネント                   | 役割                                      | 外部アクセス                                                                                                  |
+|----------------------------------|-------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| **azure_inclusive_ai_labs**      | メイン API サーバー（対話処理の司令塔）   | ✅ 可能                                                                                                       |
+| **voicevox**                     | 日本語音声合成エンジン                    | ❌ 内部のみ                                                                                                   |
+| **ollama**                       | ローカル LLM 実行エンジン                 | ❌ 内部のみ（設定で変更可）                                                                                   |
+| **PostgreSQL Flexible Server**   | Chatlog データベース（`chatlog`）         | ✅ 可能（public network） / ⚠️ 既定では作成されません（`postgresql_enabled = true` で有効化）                 |
+
+## 🏗️ システムアーキテクチャ
+
+### 全体構成図
+
+```mermaid
+flowchart TB
+    subgraph Internet["🌐 インターネット"]
+        User["👤 ユーザー"]
+    end
+
+    subgraph Azure["☁️ Azure クラウド"]
+        subgraph RG["📁 リソースグループ (rg-azureinclusiveailabs)"]
+            subgraph CAE["🔷 Container Apps 環境"]
+                direction TB
+
+                subgraph External["外部公開サービス"]
+                    IAL["🎯 azure_inclusive_ai_labs<br/>（メイン API）<br/>ポート: 8000"]
+                end
+
+                subgraph Internal["内部サービス"]
+                    VV["🎤 voicevox<br/>（音声合成）<br/>ポート: 50021"]
+                    OL["🧠 ollama<br/>（ローカル LLM）<br/>ポート: 11434"]
+                end
+            end
+
+            LAW["📊 Log Analytics<br/>（ログ監視）"]
+            Storage["💾 Azure Storage<br/>（モデル永続化）"]
+            PostgreSQL["🐘 PostgreSQL Flexible Server<br/>chatlog DB<br/>extensions: VECTOR, PG_TRGM"]
+        end
+
+        AOAI["🤖 Azure OpenAI<br/>（クラウド LLM）"]
+    end
+
+    User -->|"HTTPS リクエスト"| IAL
+    IAL -->|"内部 HTTP"| VV
+    IAL -->|"内部 HTTP"| OL
+    IAL -->|"TLS 5432"| PostgreSQL
+    IAL -.->|"HTTPS（オプション）"| AOAI
+    CAE --> LAW
+    OL --> Storage
+
+    style IAL fill:#4CAF50,color:#fff
+    style VV fill:#2196F3,color:#fff
+    style OL fill:#9C27B0,color:#fff
+    style AOAI fill:#FF9800,color:#fff
+```
+
+### Azure リソース構成図
+
+```mermaid
+flowchart LR
+    subgraph Resources["Azure リソース一覧"]
+        direction TB
+        RG["📁 azurerm_resource_group"]
+        LAW["📊 azurerm_log_analytics_workspace"]
+        CAE["🔷 azurerm_container_app_environment"]
+        SA["💾 azurerm_storage_account"]
+        FS["📂 azurerm_storage_share"]
+        ES["🔗 azurerm_container_app_environment_storage"]
+        CA1["📦 azurerm_container_app<br/>(azure_inclusive_ai_labs)"]
+        CA2["📦 azurerm_container_app<br/>(voicevox)"]
+        CA3["📦 azurerm_container_app<br/>(ollama)"]
+        PGS["🐘 azurerm_postgresql_flexible_server"]
+        PGC["⚙️ azurerm_postgresql_flexible_server_configuration<br/>(azure.extensions)"]
+        PGD["🗄️ azurerm_postgresql_flexible_server_database<br/>(chatlog)"]
+    end
+
+    RG --> LAW
+    RG --> SA
+    LAW --> CAE
+    SA --> FS
+    FS --> ES
+    ES --> CAE
+    CAE --> CA1
+    CAE --> CA2
+    CAE --> CA3
+    RG --> PGS
+    PGS --> PGC
+    PGS --> PGD
+    CA1 --> PGD
+```
+
+## 🔄 処理フロー
+
+### 音声対話の流れ
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as 👤 ユーザー
+    participant API as 🎯 azure_inclusive_ai_labs
+    participant STT as 🎧 STT モジュール<br/>(Whisper)
+    participant LLM as 🧠 GenAI モジュール<br/>(Ollama / Azure OpenAI)
+    participant TTS as 🎤 TTS モジュール<br/>(voicevox / piper)
+
+    User->>+API: 音声データを送信
+    Note over API: 音声ファイルを受信
+
+    API->>+STT: 音声をテキストに変換依頼
+    STT-->>-API: テキスト「こんにちは」
+    Note over API: 音声認識完了
+
+    API->>+LLM: テキストで AI に質問
+    Note over LLM: プロバイダーに応じて<br/>Ollama または Azure OpenAI を使用
+    LLM-->>-API: 応答「こんにちは！何かお手伝いできますか？」
+    Note over API: AI 応答生成完了
+
+    API->>+TTS: 応答テキストを音声に変換依頼
+    Note over TTS: 言語に応じて<br/>voicevox（日本語）または piper（多言語）を使用
+    TTS-->>-API: 音声データ (WAV)
+    Note over API: 音声合成完了
+
+    API-->>-User: 音声データを返却
+    Note over User: 音声で応答を聞く
+```
+
+### API リクエスト処理の詳細
+
+```mermaid
+flowchart TD
+    Start["🚀 リクエスト受信"] --> Parse["📝 リクエスト解析"]
+    Parse --> Decision{"🔀 処理タイプ判定"}
+
+    Decision -->|"音声入力"| STT["🎧 STT モジュール<br/>(Whisper)"]
+    Decision -->|"テキスト入力"| GenAI
+
+    STT --> GenAI["🧠 GenAI モジュール"]
+
+    GenAI --> ProviderCheck{"🔄 GenAI<br/>プロバイダー選択"}
+    ProviderCheck -->|"ollama"| Ollama["🏠 Ollama<br/>（ローカル LLM）"]
+    ProviderCheck -->|"azure-openai"| AOAI["☁️ Azure OpenAI<br/>（クラウド LLM）"]
+
+    Ollama --> Response["📄 テキスト応答"]
+    AOAI --> Response
+
+    Response --> TTSCheck{"🔊 音声出力?"}
+    TTSCheck -->|"はい"| TTSModule["🎤 TTS モジュール"]
+    TTSCheck -->|"いいえ"| TextOut["📤 テキスト返却"]
+
+    TTSModule --> TTSProvider{"🔄 TTS<br/>プロバイダー選択"}
+    TTSProvider -->|"日本語"| VV["🎤 voicevox<br/>（日本語特化）"]
+    TTSProvider -->|"多言語"| Piper["🎤 piper<br/>（多言語対応）"]
+
+    VV --> AudioOut["🔈 音声返却"]
+    Piper --> AudioOut
+
+    TextOut --> End["✅ 完了"]
+    AudioOut --> End
+
+    style Ollama fill:#9C27B0,color:#fff
+    style AOAI fill:#FF9800,color:#fff
+    style VV fill:#2196F3,color:#fff
+    style Piper fill:#00BCD4,color:#fff
+```
+
+## 🔀 マルチプロバイダー対応
+
+azure_inclusive_ai_labs は **STT（音声認識）**、**GenAI（生成 AI）**、**TTS（音声合成）**の各モジュールで**複数のプロバイダーを切り替え可能**な設計になっています。用途や要件に応じて最適なプロバイダーを選択できます。
+
+### プロバイダー対応一覧
+
+```mermaid
+flowchart TB
+    subgraph STT["🎧 STT（音声認識）モジュール"]
+        direction LR
+        STT_IF["統一インターフェース"]
+        STT_W["✅ Whisper<br/>（現在サポート）"]
+        STT_Future["🔮 将来拡張可能"]
+        STT_IF --> STT_W
+        STT_IF -.-> STT_Future
+    end
+
+    subgraph GenAI["🧠 GenAI（生成 AI）モジュール"]
+        direction LR
+        GENAI_IF["統一インターフェース"]
+        GENAI_OL["✅ Ollama<br/>（ローカル LLM）"]
+        GENAI_AO["✅ Azure OpenAI<br/>（クラウド LLM）"]
+        GENAI_IF --> GENAI_OL
+        GENAI_IF --> GENAI_AO
+    end
+
+    subgraph TTS["🎤 TTS（音声合成）モジュール"]
+        direction LR
+        TTS_IF["統一インターフェース"]
+        TTS_VV["✅ voicevox<br/>（日本語向け）"]
+        TTS_PP["✅ piper<br/>（多言語向け）"]
+        TTS_IF --> TTS_VV
+        TTS_IF --> TTS_PP
+    end
+
+    style STT_W fill:#4CAF50,color:#fff
+    style GENAI_OL fill:#9C27B0,color:#fff
+    style GENAI_AO fill:#FF9800,color:#fff
+    style TTS_VV fill:#2196F3,color:#fff
+    style TTS_PP fill:#00BCD4,color:#fff
+```
+
+### 各モジュールの詳細
+
+| モジュール | プロバイダー | 対応言語・用途             | 特徴                                                  |
+|------------|--------------|----------------------------|-------------------------------------------------------|
+| **STT**    | Whisper      | 多言語（100 言語以上）     | OpenAI 開発の高精度音声認識モデル                     |
+| **GenAI**  | Ollama       | 多言語                     | ローカル実行、データが外部に出ない、無料              |
+| **GenAI**  | Azure OpenAI | 多言語                     | GPT-4o などの高性能モデル、エンタープライズ対応       |
+| **TTS**    | voicevox     | 🇯🇵 **日本語特化**         | 高品質な日本語音声、キャラクター音声対応              |
+| **TTS**    | piper        | 🌍 **多言語対応**          | 英語・ドイツ語・フランス語など、軽量で高速            |
+
+### プロバイダー選択のフロー
+
+```mermaid
+flowchart TD
+    subgraph Selection["プロバイダー選択の判断基準"]
+        Start["📝 要件の確認"] --> Lang{"🌐 対象言語は？"}
+
+        Lang -->|"日本語メイン"| TTS_JP["TTS: voicevox を推奨"]
+        Lang -->|"英語・多言語"| TTS_ML["TTS: piper を推奨"]
+
+        Start --> Privacy{"🔒 データの機密性は？"}
+        Privacy -->|"高い（外部送信不可）"| LLM_Local["GenAI: Ollama を推奨"]
+        Privacy -->|"通常"| LLM_Cloud["GenAI: Azure OpenAI を推奨"]
+
+        Start --> Performance{"⚡ 性能要件は？"}
+        Performance -->|"最高品質"| LLM_Cloud
+        Performance -->|"コスト重視"| LLM_Local
+    end
+
+    style TTS_JP fill:#2196F3,color:#fff
+    style TTS_ML fill:#00BCD4,color:#fff
+    style LLM_Local fill:#9C27B0,color:#fff
+    style LLM_Cloud fill:#FF9800,color:#fff
+```
+
+### 環境変数によるプロバイダー切り替え
+
+| 環境変数                 | 設定値                      | 説明                                                     |
+|--------------------------|-----------------------------|----------------------------------------------------------|
+| `GENAI_DEFAULT_PROVIDER` | `ollama` / `azure-openai`   | 使用する LLM プロバイダー                                |
+| `TTS_DEFAULT_PROVIDER`   | `voicevox` / `piper`        | 使用する音声合成プロバイダー                             |
+| `STT_DEFAULT_PROVIDER`   | `whisper`                   | 使用する音声認識プロバイダー                             |
+| `CHATLOG_ENABLED`        | `true` / `false`            | Chatlog 機能の有効化                                     |
+| `CHATLOG_AUTH_MODE`      | `password` / `entra`        | Chatlog の認証モード                                     |
+| `CHATLOG_DSN`            | Secret 参照                 | PostgreSQL 接続 DSN（Container Apps Secret 経由）        |
+
+## 🔗 コンテナ間通信
+
+```mermaid
+flowchart TB
+    subgraph CAE["Container Apps 環境"]
+        direction TB
+
+        subgraph DNS["内部 DNS"]
+            D1["app-inclusive-ai-labs"]
+            D2["app-voicevox"]
+            D3["app-ollama"]
+        end
+
+        IAL["azure_inclusive_ai_labs"]
+        VV["voicevox"]
+        OL["ollama"]
+
+        D1 -.-> IAL
+        D2 -.-> VV
+        D3 -.-> OL
+    end
+
+    IAL -->|"http://app-voicevox:80"| VV
+    IAL -->|"http://app-ollama:80"| OL
+```
+
+同じ Container Apps 環境内では、アプリ名で直接通信できます。
+
+* `http://app-voicevox` → voicevox コンテナ
+* `http://app-ollama` → ollama コンテナ
+
+## 📊 監視とログ
+
+```mermaid
+flowchart LR
+    subgraph Apps["アプリケーション"]
+        CA1["azure_inclusive_ai_labs"]
+        CA2["voicevox"]
+        CA3["ollama"]
+    end
+
+    subgraph Monitoring["監視基盤"]
+        LAW["📊 Log Analytics<br/>ワークスペース"]
+    end
+
+    CA1 -->|"ログ送信"| LAW
+    CA2 -->|"ログ送信"| LAW
+    CA3 -->|"ログ送信"| LAW
+
+    LAW --> Query["🔍 ログ検索"]
+    LAW --> Alert["⚠️ アラート設定"]
+    LAW --> Dashboard["📈 ダッシュボード"]
+```
+
+## ⚙️ 前提条件
+
+* Azure サブスクリプション
+* Azure OpenAI リソース（デプロイ済みモデル付き）※ Azure OpenAI を利用する場合
+
+共通の [Azure 認証](../../../docs/tips/provider-authentication.ja.md)、
+[Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)、および必要に応じて
+[Azure Blob Storage バックエンド](../../../docs/tips/azure-blob-backend.ja.md)を設定してください。
+このシナリオの Makefile コマンドでは `SCENARIO=azure_inclusive_ai_labs` を指定します。
+
+## 🚀 クイックスタート
+
+1. **`terraform.tfvars` ファイルを作成**
+
+   ```hcl
+   name     = "azureinclusiveailabs"
+   location = "japaneast"
+
+   # Azure OpenAI 設定（Azure OpenAI を使用する場合は必須）
+   genai_azure_openai_endpoint = "https://your-openai-resource.openai.azure.com/"
+   genai_azure_openai_api_key  = "your-api-key-here"
+   genai_azure_openai_deployment_name = "gpt-4o"
+
+   # ローカル LLM（Ollama）をデフォルトで使用する場合
+   genai_default_provider = "ollama"
+   ollama_model = "gemma3:270m"  # デフォルトモデル
+
+   # Chatlog (PostgreSQL) 設定: デフォルトは entra（パスワードレス）モード
+   # Chatlog (PostgreSQL) 設定
+   # 既定では PostgreSQL Flexible Server は作成されません（postgresql_enabled = false）
+   # chatlog を使う場合は以下を明示的に指定してください
+   # postgresql_enabled                = true
+   # chatlog_enabled                   = true
+   #
+   # password モードを使う場合は以下のように上書きしてください
+   # postgresql_administrator_password = "YourSecurePassword123!"
+   # chatlog_auth_mode                 = "password"
+   ```
+
+2. **デプロイ**
+
+   [標準の Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)に従って
+   `SCENARIO=azure_inclusive_ai_labs` をデプロイします。
+
+3. **アプリケーションへのアクセス**
+
+   デプロイ完了後、URL が出力されます。
+
+   ```bash
+   terraform output azure_inclusive_ai_labs_url
+   ```
+
+### PostgreSQL（chatlog）を有効化する
+
+コストや初期構築の軽量化のため、**PostgreSQL Flexible Server は既定で作成されません**（`postgresql_enabled = false`）。chatlog 機能を利用する場合のみ、`terraform.tfvars` で以下のように明示的に有効化してください。
+
+```hcl
+# PostgreSQL Flexible Server とその関連リソース（chatlog DB / 拡張 / Entra 管理者）を作成する
+postgresql_enabled = true
+
+# アプリ側の chatlog 機能も有効化する（postgresql_enabled = true が前提）
+chatlog_enabled = true
+```
+
+`postgresql_enabled = false` のままだと以下のリソースは一切作成されず、`CHATLOG_DSN` には空文字列が設定されます。
+
+* `module.postgresql`（`azurerm_postgresql_flexible_server` 本体・ファイアウォールルール）
+* `azurerm_postgresql_flexible_server_configuration.azure_extensions`
+* `azurerm_postgresql_flexible_server_database.chatlog`
+* `azurerm_postgresql_flexible_server_active_directory_administrator.chatlog`
+
+> [!IMPORTANT]
+> `chatlog_enabled = true` を指定する場合は `postgresql_enabled = true` も併せて必要です（バリデーションでエラーになります）。
+
+### パスワード認証モードでデプロイする場合
+
+`chatlog_auth_mode = "password"` を利用する場合は、以下の設定を追加してください。
+
+```hcl
+chatlog_auth_mode                 = "password"
+postgresql_administrator_password = "YourSecurePassword123!"
+```
+
+### Entra 認証モードでデプロイする場合
+
+デフォルトで `chatlog_auth_mode = "entra"` です。明示する場合は以下のとおりです。
+
+```hcl
+chatlog_auth_mode = "entra"
+tenant_id         = "<your-entra-tenant-id>" # 省略時は現在の Azure CLI ログインテナントを使用
+```
+
+> [!IMPORTANT]
+> `entra` モードでは、PostgreSQL 側でログイン用ロールのブートストラップ（`azure_ad_user` ロールへの付与）が別途必要です。初期フェーズでは手動実施を想定しています（`terraform apply` 後に、PostgreSQL 管理者で接続して実行）。
+>
+> 例:
+>
+> ```sql
+> CREATE ROLE "app-inclusive-ai-labs" WITH LOGIN IN ROLE azure_ad_user;
+> GRANT ALL PRIVILEGES ON DATABASE chatlog TO "app-inclusive-ai-labs";
+> ```
+>
+> 実行時は `psql "host=<postgresql_server_fqdn> dbname=postgres user=<postgres_admin> sslmode=require"` などで接続し、上記 SQL を投入してください。
+
+## 📋 変数一覧
+
+### 必須変数
+
+| 名前                           | 説明                              |
+|--------------------------------|-----------------------------------|
+| `genai_azure_openai_api_key`   | Azure OpenAI API キー（機密情報） |
+
+### 基本設定
+
+| 名前       | デフォルト値            | 説明               |
+|------------|-------------------------|--------------------|
+| `name`     | `azureinclusiveailabs`  | リソースの基本名   |
+| `location` | `japaneast`             | Azure リージョン   |
+
+### PostgreSQL / Chatlog 設定
+
+> [!WARNING]
+> **既定では PostgreSQL Flexible Server を作成しません。** 利用するには `postgresql_enabled = true` を明示的に指定してください。詳細は [PostgreSQL（chatlog）を有効化する](#postgresqlchatlogを有効化する) を参照してください。
+
+| 名前                                    | デフォルト値       | 説明                                                                                                                      |
+|-----------------------------------------|--------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `postgresql_enabled`                    | `false`            | PostgreSQL Flexible Server を作成するか。`true` で chatlog 関連リソース一式（サーバー / DB / 拡張 / Entra 管理者）が作成される |
+| `postgresql_administrator_login`        | `psqladmin`        | PostgreSQL 管理者ユーザー                                                                                                 |
+| `postgresql_administrator_password`     | `null`             | PostgreSQL 管理者パスワード（`chatlog_auth_mode=password` の場合必須・非空である必要あり）                                 |
+| `postgresql_database_name`              | `chatlog`          | アプリ用データベース名                                                                                                    |
+| `postgresql_sku_name`                   | `B_Standard_B1ms`  | PostgreSQL の SKU                                                                                                         |
+| `postgresql_version`                    | `17`               | PostgreSQL バージョン                                                                                                     |
+| `chatlog_auth_mode`                     | `entra`            | Chatlog 認証モード（`password` / `entra`）                                                                                |
+| `chatlog_enabled`                       | `false`            | アプリ側の Chatlog 機能有効化（`true` にする場合は `postgresql_enabled = true` 必須）                                      |
+| `tenant_id`                             | `""`             | Entra テナント ID（空の場合は現在の Azure クライアントから自動取得）                                                      |
+
+### azure_inclusive_ai_labs コンテナ設定
+
+| 名前                                          | デフォルト値                              | 説明               |
+|-----------------------------------------------|-------------------------------------------|--------------------|
+| `azure_inclusive_ai_labs_image`               | `ks6088ts/inclusive-ai-labs:latest`       | Docker イメージ    |
+| `azure_inclusive_ai_labs_cpu`                 | `2.0`                                     | CPU コア数         |
+| `azure_inclusive_ai_labs_memory`              | `4Gi`                                     | メモリ             |
+| `azure_inclusive_ai_labs_min_replicas`        | `1`                                       | 最小レプリカ数     |
+| `azure_inclusive_ai_labs_max_replicas`        | `3`                                       | 最大レプリカ数     |
+
+### voicevox コンテナ設定
+
+| 名前                     | デフォルト値                                      | 説明               |
+|--------------------------|---------------------------------------------------|--------------------|
+| `voicevox_image`         | `voicevox/voicevox_engine:cpu-ubuntu20.04-latest` | Docker イメージ    |
+| `voicevox_cpu`           | `2.0`                                             | CPU コア数         |
+| `voicevox_memory`        | `4Gi`                                             | メモリ             |
+| `voicevox_min_replicas`  | `1`                                               | 最小レプリカ数     |
+| `voicevox_max_replicas`  | `3`                                               | 最大レプリカ数     |
+
+### Ollama コンテナ設定
+
+| 名前                       | デフォルト値            | 説明                       |
+|----------------------------|-------------------------|----------------------------|
+| `ollama_image`             | `ollama/ollama:latest`  | Docker イメージ            |
+| `ollama_model`             | `gemma3:270m`           | 起動時にダウンロードするモデル |
+| `ollama_cpu`               | `2.0`                   | CPU コア数                 |
+| `ollama_memory`            | `4Gi`                   | メモリ                     |
+| `ollama_storage_quota_gb`  | `10`                    | ストレージ容量 (GB)        |
+| `ollama_external_enabled`  | `false`                 | 外部公開するか             |
+
+### AI / 音声処理設定
+
+| 名前                                  | デフォルト値                      | 説明                                      |
+|---------------------------------------|-----------------------------------|-------------------------------------------|
+| `genai_default_provider`              | `ollama`                          | LLM プロバイダー（`ollama` または `azure-openai`） |
+| `genai_system_prompt`                 | `You are a helpful assistant.`    | GenAI プロバイダーのシステムプロンプト    |
+| `genai_azure_openai_endpoint`         | ``                                | Azure OpenAI エンドポイント URL           |
+| `genai_azure_openai_deployment_name`  | `gpt-4o`                          | デプロイメント名                          |
+| `genai_azure_openai_api_version`      | `2024-02-15-preview`              | Azure OpenAI API バージョン                |
+| `stt_default_provider`                | `whisper`                         | 音声認識プロバイダー                      |
+| `stt_whisper_model_size`              | `small`                           | Whisper モデルサイズ                      |
+| `stt_whisper_device`                  | `cpu`                             | Whisper デバイス（`cpu` / `cuda`）        |
+| `stt_whisper_compute_type`            | `int8`                            | Whisper 計算タイプ                        |
+| `stt_hf_home`                         | ``                                | Hugging Face モデルキャッシュディレクトリ |
+| `tts_default_provider`                | `voicevox`                        | 音声合成プロバイダー                      |
+| `tts_default_voice`                   | `en_US-lessac-medium`             | デフォルト音声（piper 用）                |
+| `tts_voicevox_default_speaker`        | `1`                               | voicevox スピーカー ID                    |
+| `tts_voicevox_timeout`                | `30.0`                            | voicevox リクエストタイムアウト（秒）     |
+| `tts_piper_voices_dir`                | ``                                | Piper 音声モデルディレクトリ              |
+
+詳細は [variables.tf](variables.tf) を参照してください。
+
+## 📤 出力値
+
+| 名前                              | 説明                                             |
+|-----------------------------------|--------------------------------------------------|
+| `azure_inclusive_ai_labs_url`     | azure_inclusive_ai_labs API の公開 URL           |
+| `azure_inclusive_ai_labs_fqdn`    | Container App の FQDN                            |
+| `voicevox_internal_fqdn`          | voicevox の内部 FQDN                             |
+| `ollama_internal_fqdn`            | ollama の内部 FQDN                               |
+| `ollama_url`                      | ollama の URL（外部 / 内部）                     |
+| `postgresql_server_fqdn`          | PostgreSQL Flexible Server の FQDN               |
+| `postgresql_database_name`        | Chatlog 用データベース名                         |
+| `chatlog_dsn`                     | Chatlog 接続用 DSN（sensitive）                  |
+
+## 🔗 内部通信の仕組み
+
+`azure_inclusive_ai_labs` コンテナは、Container Apps 環境内の内部 DNS を使用して他のコンテナと通信します。
+
+```mermaid
+flowchart LR
+    subgraph CAE["Container Apps 環境"]
+        IAL["azure_inclusive_ai_labs"]
+        VV["voicevox"]
+        OL["ollama"]
+
+        IAL -->|"TTS_VOICEVOX_BASE_URL<br/>http://app-voicevox"| VV
+        IAL -->|"GENAI_OLLAMA_BASE_URL<br/>http://app-ollama"| OL
+    end
+```
+
+環境変数で自動設定されます。
+
+* `TTS_VOICEVOX_BASE_URL=http://app-voicevox`
+* `GENAI_OLLAMA_BASE_URL=http://app-ollama`
+
+## 🗑️ リソースの削除
+
+`SCENARIO=azure_inclusive_ai_labs` を指定し、
+[標準の Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)に従って削除します。
+
+## 💡 ユースケース
+
+### ユースケース 1: アクセシブルな AI アシスタント
+
+```mermaid
+flowchart TB
+    subgraph User["利用者"]
+        Blind["👤 視覚障害者"]
+        Elder["👴 高齢者"]
+        Hands["🙋 両手がふさがっている人"]
+    end
+
+    subgraph System["システム"]
+        Voice["🎙️ 音声入力"]
+        AI["🧠 AI 処理"]
+        Speech["🔊 音声出力"]
+    end
+
+    User -->|"話しかける"| Voice
+    Voice --> AI
+    AI --> Speech
+    Speech -->|"音声で応答"| User
+```
+
+### ユースケース 2: 多言語対話システム
+
+```mermaid
+flowchart LR
+    subgraph Input["音声入力"]
+        JP["🇯🇵 日本語音声"]
+        EN["🇺🇸 英語音声"]
+        DE["🇩🇪 ドイツ語音声"]
+    end
+
+    subgraph STT_Module["STT モジュール"]
+        STT["🎧 Whisper<br/>（多言語対応）"]
+    end
+
+    subgraph GenAI_Module["GenAI モジュール"]
+        LLM["🧠 Ollama / Azure OpenAI"]
+    end
+
+    subgraph TTS_Module["TTS モジュール"]
+        VV["🎤 voicevox<br/>（日本語）"]
+        PP["🎤 piper<br/>（英語・ドイツ語など）"]
+    end
+
+    subgraph Output["音声出力"]
+        OutJP["🔊 日本語音声"]
+        OutEN["🔊 英語音声"]
+    end
+
+    JP --> STT
+    EN --> STT
+    DE --> STT
+    STT --> LLM
+    LLM --> VV
+    LLM --> PP
+    VV --> OutJP
+    PP --> OutEN
+
+    style VV fill:#2196F3,color:#fff
+    style PP fill:#00BCD4,color:#fff
+```
+
+## ⚠️ 注意事項
+
+* **voicevox** は言語モデルをロードするため、起動に 1〜2 分かかることがあります
+* **ollama** は最初の起動時にモデルをダウンロードするため、追加の時間がかかります
+* コールドスタートを避けるため、最小レプリカ数は 1 に設定されています
+* 開発環境でコストを最適化する場合は、`min_replicas` を 0 に設定できます
+* Ollama のモデルデータは Azure Storage に永続化されるため、コンテナ再起動後も保持されます
+* `azure.extensions` 設定（`VECTOR,PG_TRGM`）反映後は PostgreSQL Flexible Server の再起動が必要になる場合があります
+* ⚠️ **重要**: PostgreSQL モジュールはファイアウォールルール `AllowAll`（`0.0.0.0-255.255.255.255`）を作成します。検証用途向け設定のため、本番では必ずアクセス制限を追加してください（例: `azurerm_postgresql_flexible_server_firewall_rule` を個別 IP 範囲に限定、または将来課題の VNet / Private Endpoint 化）。
+
+## 📚 関連リソース
+
+* [Azure Container Apps ドキュメント](https://learn.microsoft.com/ja-jp/azure/container-apps/)
+* [voicevox エンジン](https://github.com/VOICEVOX/voicevox_engine)
+* [Ollama](https://ollama.ai/)
+* [OpenAI Whisper](https://github.com/openai/whisper)
+* [Azure OpenAI Service](https://learn.microsoft.com/ja-jp/azure/ai-services/openai/)
+
+## 🔧 トラブルシューティング
+
+### コンテナが起動しない場合
+
+```mermaid
+flowchart TD
+    Start["コンテナ起動失敗"] --> Check1{"ログを確認"}
+    Check1 -->|"メモリ不足"| Fix1["memory を増やす"]
+    Check1 -->|"イメージ取得失敗"| Fix2["イメージ名を確認"]
+    Check1 -->|"ヘルスチェック失敗"| Fix3["起動時間を待つ"]
+
+    Fix1 --> Retry["terraform apply で再デプロイ"]
+    Fix2 --> Retry
+    Fix3 --> Wait["2-3 分待ってから再確認"]
+```
+
+### ログの確認方法
+
+```bash
+# Azure CLI でログを確認
+az containerapp logs show \
+  --name app-inclusive-ai-labs \
+  --resource-group rg-azureinclusiveailabs \
+  --type console
+```

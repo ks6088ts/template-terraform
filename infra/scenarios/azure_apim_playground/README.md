@@ -1,3 +1,7 @@
+---
+description: Deploy Azure API Management Consumption tier for API gateway experimentation
+---
+
 # API Management Playground Scenario
 
 Deploy Azure API Management with Consumption SKU for API gateway experimentation.
@@ -11,9 +15,11 @@ This scenario creates:
 
 ## Prerequisites
 
-- Terraform CLI installed (>= 1.6.0)
-- Azure CLI installed and logged in (`az login`)
-- Azure subscription with permissions to create resources
+Use the shared guidance for [provider authentication](../../../docs/tips/provider-authentication.md),
+the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
+[Azure Blob remote state](../../../docs/tips/azure-blob-backend.md).
+
+Set `SCENARIO=azure_apim_playground` when using the repository Makefile.
 
 ## Architecture
 
@@ -30,24 +36,13 @@ flowchart TB
 
 ## How to use
 
+Follow the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md) with
+`SCENARIO=azure_apim_playground`.
+
+### Verify the deployment
+
 ```shell
-# Login to Azure
-az login
-
-# Initialize Terraform
-terraform init
-
-# Plan the deployment
-terraform plan
-
-# Apply the deployment
-terraform apply -auto-approve
-
-# Get the gateway URL
 terraform output api_management_gateway_url
-
-# Destroy the deployment
-terraform destroy -auto-approve
 ```
 
 ## Variables

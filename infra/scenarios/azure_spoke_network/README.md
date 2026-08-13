@@ -1,3 +1,7 @@
+---
+description: Deploy an Azure spoke network with Bastion, a VM, and private Blob access
+---
+
 # Azure Spoke Network
 
 This scenario deploys a spoke network configuration for Azure hub-spoke architecture.
@@ -40,28 +44,17 @@ flowchart TB
 ## Prerequisites
 
 - Azure subscription
-- Terraform >= 1.6.0
-- Azure CLI authenticated
+
+Follow the shared [Azure authentication](../../../docs/tips/provider-authentication.md),
+[Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
+[Azure Blob Storage backend](../../../docs/tips/azure-blob-backend.md) guidance.
+Set `SCENARIO=azure_spoke_network` when using the repository Makefile.
 
 ## Usage
 
-### Initialize Terraform
-
-```bash
-terraform init
-```
-
-### Plan
-
-```bash
-terraform plan
-```
-
-### Apply
-
-```bash
-terraform apply
-```
+Deploy the infrastructure with the shared workflow and
+`SCENARIO=azure_spoke_network`, then complete the following scenario-specific
+operations.
 
 ### Get SSH Private Key
 
