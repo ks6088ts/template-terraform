@@ -3,8 +3,9 @@ mock_provider "azurerm" {
 
   mock_resource "azurerm_search_service" {
     defaults = {
-      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.Search/searchServices/aisearchtest1234"
-      endpoint = "https://aisearchtest1234.search.windows.net"
+      id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.Search/searchServices/aisearchtest1234"
+      endpoint    = "https://aisearchtest1234.search.windows.net"
+      primary_key = "test-primary-key"
     }
   }
 }
@@ -57,16 +58,6 @@ run "azure_ai_search_disabled_by_default" {
   }
 
   assert {
-    condition     = length(azurerm_role_assignment.azure_ai_search_index_data_contributor) == 0
-    error_message = "The Search Index Data Contributor assignment must not be created when deployment is disabled."
-  }
-
-  assert {
-    condition     = length(azurerm_role_assignment.azure_ai_search_service_contributor) == 0
-    error_message = "The Search Service Contributor assignment must not be created when deployment is disabled."
-  }
-
-  assert {
     condition     = output.azure_ai_search_connection_id == null
     error_message = "The Azure AI Search connection output must be null when deployment is disabled."
   }
@@ -116,8 +107,13 @@ run "azure_ai_search_enabled" {
   }
 
   assert {
-    condition     = azapi_resource.azure_ai_search_connection[0].body.properties.authType == "AAD"
-    error_message = "The Azure AI Search connection must use Microsoft Entra ID authentication."
+    condition     = azapi_resource.azure_ai_search_connection[0].body.properties.authType == "ApiKey"
+    error_message = "The Azure AI Search connection must use API key authentication."
+  }
+
+  assert {
+    condition     = azapi_resource.azure_ai_search_connection[0].body.properties.isSharedToAll
+    error_message = "The Azure AI Search connection must be shared with all project users."
   }
 
   assert {
@@ -142,43 +138,12 @@ run "azure_ai_search_enabled" {
 
   assert {
     condition     = !contains(keys(azapi_resource.azure_ai_search_connection[0].body.properties), "credentials")
-    error_message = "The Microsoft Entra ID connection must not contain credentials."
+    error_message = "The Azure AI Search credentials must not be stored in the non-sensitive body."
   }
 
   assert {
-    condition     = length(azurerm_role_assignment.azure_ai_search_index_data_contributor) == 1
-    error_message = "One Search Index Data Contributor assignment must be created when deployment is enabled."
-  }
-
-  assert {
-    condition     = azurerm_role_assignment.azure_ai_search_index_data_contributor[0].role_definition_name == "Search Index Data Contributor"
-    error_message = "The project identity must receive the Search Index Data Contributor role."
-  }
-
-  assert {
-    condition = (
-      azurerm_role_assignment.azure_ai_search_index_data_contributor[0].scope == module.azure_ai_search[0].id &&
-      azurerm_role_assignment.azure_ai_search_index_data_contributor[0].principal_id == module.microsoft_foundry.project_principal_id
-    )
-    error_message = "The Search Index Data Contributor assignment must target the search service and project identity."
-  }
-
-  assert {
-    condition     = length(azurerm_role_assignment.azure_ai_search_service_contributor) == 1
-    error_message = "One Search Service Contributor assignment must be created when deployment is enabled."
-  }
-
-  assert {
-    condition     = azurerm_role_assignment.azure_ai_search_service_contributor[0].role_definition_name == "Search Service Contributor"
-    error_message = "The project identity must receive the Search Service Contributor role."
-  }
-
-  assert {
-    condition = (
-      azurerm_role_assignment.azure_ai_search_service_contributor[0].scope == module.azure_ai_search[0].id &&
-      azurerm_role_assignment.azure_ai_search_service_contributor[0].principal_id == module.microsoft_foundry.project_principal_id
-    )
-    error_message = "The Search Service Contributor assignment must target the search service and project identity."
+    condition     = nonsensitive(module.azure_ai_search[0].primary_key) == "test-primary-key"
+    error_message = "The Azure AI Search module must expose the primary admin key for the connection."
   }
 
   assert {

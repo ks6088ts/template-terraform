@@ -68,16 +68,22 @@ variable "model_deployments" {
       capacity = 1000
     },
     {
+      name     = "gpt-5.4-mini"
+      model    = "gpt-5.4-mini"
+      version  = "2026-03-17"
+      capacity = 1000
+    },
+    {
       name     = "text-embedding-3-large"
       model    = "text-embedding-3-large"
       version  = "1"
-      capacity = 100
+      capacity = 3000
     },
     {
       name     = "text-embedding-3-small"
       model    = "text-embedding-3-small"
       version  = "1"
-      capacity = 100
+      capacity = 3000
     }
   ]
 }
