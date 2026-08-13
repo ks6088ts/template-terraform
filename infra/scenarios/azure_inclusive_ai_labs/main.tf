@@ -79,6 +79,7 @@ resource "azurerm_container_app_environment" "this" {
   location                   = module.resource_group.location
   resource_group_name        = module.resource_group.name
   log_analytics_workspace_id = module.log_analytics.id
+  logs_destination           = "log-analytics"
   tags                       = var.tags
 }
 
@@ -86,12 +87,13 @@ resource "azurerm_container_app_environment" "this" {
 # Azure Storage for Ollama model persistence
 # -----------------------------------------------------------------------------
 resource "azurerm_storage_account" "ollama" {
-  name                     = substr("st${replace(var.name, "-", "")}ollama", 0, 24)
-  resource_group_name      = module.resource_group.name
-  location                 = module.resource_group.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-  tags                     = var.tags
+  name                            = substr("st${replace(var.name, "-", "")}ollama", 0, 24)
+  resource_group_name             = module.resource_group.name
+  location                        = module.resource_group.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  allow_nested_items_to_be_public = false
+  tags                            = var.tags
 }
 
 resource "azurerm_storage_share" "ollama" {

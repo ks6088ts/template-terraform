@@ -36,6 +36,7 @@ module "kubernetes_service" {
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   kubernetes_version  = var.kubernetes_version
+  oidc_issuer_enabled = var.oidc_issuer_enabled
   vm_size             = var.vm_size
   node_count          = var.node_count
   os_disk_size_gb     = var.os_disk_size_gb

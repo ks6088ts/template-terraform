@@ -1,12 +1,13 @@
 # Storage Account with Private Endpoint
 resource "azurerm_storage_account" "this" {
-  name                          = substr("sa${replace(var.name, "-", "")}${substr(md5(var.resource_group_id), 0, 8)}", 0, 24)
-  resource_group_name           = var.resource_group_name
-  location                      = var.location
-  account_tier                  = var.account_tier
-  account_replication_type      = var.account_replication_type
-  public_network_access_enabled = var.public_network_access_enabled
-  tags                          = var.tags
+  name                            = substr("sa${replace(var.name, "-", "")}${substr(md5(var.resource_group_id), 0, 8)}", 0, 24)
+  resource_group_name             = var.resource_group_name
+  location                        = var.location
+  account_tier                    = var.account_tier
+  account_replication_type        = var.account_replication_type
+  public_network_access_enabled   = var.public_network_access_enabled
+  allow_nested_items_to_be_public = false
+  tags                            = var.tags
 
   dynamic "identity" {
     for_each = var.enable_identity ? [1] : []
@@ -25,13 +26,12 @@ resource "azurerm_private_dns_zone" "blob" {
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "blob" {
-  count                 = var.enable_private_endpoint ? 1 : 0
-  name                  = "link-blob-${var.name}"
-  resource_group_name   = var.resource_group_name
-  private_dns_zone_name = azurerm_private_dns_zone.blob[0].name
-  virtual_network_id    = var.virtual_network_id
-  registration_enabled  = false
-  tags                  = var.tags
+  count                = var.enable_private_endpoint ? 1 : 0
+  name                 = "link-blob-${var.name}"
+  private_dns_zone_id  = azurerm_private_dns_zone.blob[0].id
+  virtual_network_id   = var.virtual_network_id
+  registration_enabled = false
+  tags                 = var.tags
 }
 
 # Private Endpoint for Blob Storage

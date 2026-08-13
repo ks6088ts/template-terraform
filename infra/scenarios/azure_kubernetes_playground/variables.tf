@@ -52,6 +52,12 @@ variable "kubernetes_version" {
   default     = null
 }
 
+variable "oidc_issuer_enabled" {
+  description = "Enable the OIDC issuer for AKS"
+  type        = bool
+  default     = false
+}
+
 variable "vm_size" {
   description = "VM size for AKS nodes"
   type        = string

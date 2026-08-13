@@ -4,6 +4,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   resource_group_name = var.resource_group_name
   dns_prefix          = var.dns_prefix != null ? var.dns_prefix : "aks-${var.name}"
   kubernetes_version  = var.kubernetes_version
+  oidc_issuer_enabled = var.oidc_issuer_enabled
   tags                = var.tags
 
   default_node_pool {
@@ -18,6 +19,10 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   identity {
     type = "SystemAssigned"
+  }
+
+  node_provisioning_profile {
+    mode = "Manual"
   }
 
   network_profile {
