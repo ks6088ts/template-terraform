@@ -36,19 +36,19 @@ variable "model_deployments" {
       name     = "gpt-5.6-luna"
       model    = "gpt-5.6-luna"
       version  = "2026-07-09"
-      capacity = 100
+      capacity = 1000
     },
     {
       name     = "gpt-5.6-terra"
       model    = "gpt-5.6-terra"
       version  = "2026-07-09"
-      capacity = 100
+      capacity = 1000
     },
     {
       name     = "gpt-5.6-sol"
       model    = "gpt-5.6-sol"
       version  = "2026-07-09"
-      capacity = 100
+      capacity = 1000
     },
     {
       name     = "text-embedding-3-large"
