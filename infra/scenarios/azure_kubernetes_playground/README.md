@@ -76,6 +76,7 @@ kubectl create deployment myapp --image=$ACR_NAME.azurecr.io/myapp:v1
 | `acr_sku` | SKU for Azure Container Registry | `string` | `"Basic"` | no |
 | `acr_admin_enabled` | Enable admin user for ACR | `bool` | `false` | no |
 | `kubernetes_version` | Kubernetes version (null for latest) | `string` | `null` | no |
+| `oidc_issuer_enabled` | Enable the AKS OIDC issuer | `bool` | `false` | no |
 | `vm_size` | VM size for AKS nodes | `string` | `"Standard_B2s"` | no |
 | `node_count` | Number of nodes in default node pool | `number` | `1` | no |
 | `os_disk_size_gb` | OS disk size in GB for AKS nodes | `number` | `30` | no |

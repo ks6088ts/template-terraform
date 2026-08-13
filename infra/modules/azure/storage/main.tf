@@ -30,9 +30,9 @@ resource "azurerm_storage_account" "this" {
 }
 
 resource "azurerm_storage_queue" "this" {
-  count                = var.create_queue ? 1 : 0
-  name                 = "st${var.name}-queue"
-  storage_account_name = azurerm_storage_account.this.name
+  count              = var.create_queue ? 1 : 0
+  name               = "st${var.name}-queue"
+  storage_account_id = azurerm_storage_account.this.id
 }
 
 resource "azurerm_storage_container" "this" {

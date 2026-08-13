@@ -69,13 +69,17 @@ terraform output
 terraform destroy
 ```
 
-AzureRM プロバイダーのバージョン 4 では、サブスクリプション ID が必要です。リポジトリの
+AzureRM プロバイダーのバージョン 4 以降では、サブスクリプション ID が必要です。リポジトリの
 Makefile を経由せずにコマンドを実行する場合は、Azure サブスクリプションを選択してから
 エクスポートします。
 
 ```bash
 export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
 ```
+
+Azure シナリオでは AzureRM v5 の自動リソースプロバイダー登録を無効にしています。各シナリオは
+必要な名前空間のみを明示的に登録し、プラン時の場所とリソースプロバイダーの検証を有効に保ちます。
+Azure Preflight Validation は有効にしません。
 
 シナリオの README に追加の変数、既定値以外のフラグ、出力の確認、デプロイ後の操作が指定されて
 いる場合は、その内容を優先します。

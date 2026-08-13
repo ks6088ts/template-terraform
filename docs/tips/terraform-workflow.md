@@ -70,13 +70,18 @@ terraform output
 terraform destroy
 ```
 
-AzureRM provider version 4 requires a subscription ID. When commands do not run
+AzureRM provider version 4 and later requires a subscription ID. When commands do not run
 through the repository Makefile, export it after selecting the Azure
 subscription:
 
 ```bash
 export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
 ```
+
+Azure scenarios use AzureRM v5 with automatic resource provider registration
+disabled. Each scenario explicitly registers only its required namespaces and
+keeps location and resource provider validation enabled at plan time. Azure
+Preflight Validation is not enabled.
 
 The scenario README takes precedence when it specifies additional variables,
 non-default flags, output checks, or post-deployment operations.

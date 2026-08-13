@@ -25,6 +25,12 @@ variable "kubernetes_version" {
   default     = null
 }
 
+variable "oidc_issuer_enabled" {
+  description = "Enable the OIDC issuer for the AKS cluster"
+  type        = bool
+  default     = false
+}
+
 variable "default_node_pool_name" {
   description = "Name of the default node pool"
   type        = string
