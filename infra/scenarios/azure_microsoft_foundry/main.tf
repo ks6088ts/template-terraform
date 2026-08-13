@@ -27,6 +27,21 @@ module "resource_group" {
 }
 
 # =============================================================================
+# Azure AI Search
+# =============================================================================
+
+module "azure_ai_search" {
+  source = "../../modules/azure/ai_search"
+  count  = var.deploy_azure_ai_search ? 1 : 0
+
+  name                = "aisearch${local.resource_suffix}"
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  sku                 = var.azure_ai_search_sku
+  tags                = var.tags
+}
+
+# =============================================================================
 # Microsoft Foundry
 # =============================================================================
 
