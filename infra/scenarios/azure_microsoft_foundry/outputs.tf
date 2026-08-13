@@ -32,3 +32,8 @@ output "azure_ai_search_endpoint" {
   description = "Endpoint of the Azure AI Search service"
   value       = var.deploy_azure_ai_search ? module.azure_ai_search[0].endpoint : null
 }
+
+output "azure_ai_search_connection_id" {
+  description = "ID of the Azure AI Search connection in the Microsoft Foundry project"
+  value       = var.deploy_azure_ai_search ? azapi_resource.azure_ai_search_connection[0].id : null
+}

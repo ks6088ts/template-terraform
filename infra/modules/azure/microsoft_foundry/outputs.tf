@@ -18,6 +18,11 @@ output "project_id" {
   value       = azapi_resource.project.id
 }
 
+output "project_principal_id" {
+  description = "The principal ID of the Microsoft Foundry project"
+  value       = azapi_resource.project.output.identity.principalId
+}
+
 output "project_name" {
   description = "The name of the Microsoft Foundry project"
   value       = azapi_resource.project.name

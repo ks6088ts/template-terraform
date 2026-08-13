@@ -14,12 +14,13 @@ flowchart TB
     Internet((インターネット))
 
     subgraph Azure["Azure リソース グループ"]
-        MF["Microsoft Foundry<br/>- AI ハブ<br/>- AI サービス"]
+        MF["Microsoft Foundry<br/>- アカウント<br/>- プロジェクト"]
         Search["Azure AI Search<br/>（オプション）"]
     end
 
     Internet -->|HTTPS| MF
     Internet -.->|有効化した場合の HTTPS| Search
+    MF -->|プロジェクト接続<br/>Microsoft Entra ID| Search
 ```
 
 ## 前提条件
@@ -33,7 +34,8 @@ flowchart TB
 
 ## 使用方法
 
-Azure AI Search は既定で無効です。デプロイするには、`terraform.tfvars` に次の値を追加します。
+Azure AI Search は既定で無効です。デプロイして Microsoft Foundry プロジェクトに接続するには、
+`terraform.tfvars` に次の値を追加します。
 
 ```hcl
 deploy_azure_ai_search = true
@@ -48,11 +50,22 @@ azure_ai_search_sku    = "free"
 > Azure AI Search の既定 SKU には、Foundry IQ の概念実証向けに案内されている
 > 最小コストの `free` を使用します。
 > 詳細については、[Azure AI Search の Terraform クイックスタート](https://learn.microsoft.com/en-us/azure/search/search-get-started-terraform)、
-> [Foundry IQ の概要](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/what-is-foundry-iq)、および
-> [Azure AI Search の stable REST API 仕様](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search/stable)を参照してください。
+> [Foundry IQ の概要](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/what-is-foundry-iq)、
+> [Azure AI Search の stable REST API 仕様](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search/stable)、および
+> [Microsoft Foundry プロジェクト接続の ARM スキーマ](https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)を参照してください。
 
-このオプションで作成されるのは Azure AI Search サービスだけです。ナレッジ ベース、ナレッジ ソース、
-インデックス、インデクサー、ロール割り当て、Foundry Agent への接続は作成されません。
+有効にすると、Terraform は Microsoft Entra ID 認証を使用するプロジェクト スコープの
+`CognitiveSearch` 接続を作成します。また、Foundry プロジェクトのシステム割り当てマネージド ID に、
+Azure AI Search サービスの `Search Index Data Contributor` ロールと
+`Search Service Contributor` ロールを付与します。この接続では、Azure AI Search の API キーを
+Terraform state に保存しません。
+
+Terraform は AzAPI を使用し、Azure Resource Manager のコントロール プレーンから接続を作成します。
+[Foundry Connections API](https://ai.azure.com/api-reference/connections/list)では、作成された接続を
+一覧表示および取得できますが、接続の作成はできません。
+
+このオプションでは、ナレッジ ベース、ナレッジ ソース、インデックス、インデクサー、
+またはエージェントは作成されません。
 
 標準の Makefile によるデプロイおよび破棄コマンドには、`-parallelism=1` のオーバーライドが含まれていません。
 このオーバーライドが必要な場合は、シナリオ ディレクトリから次のコマンドを直接実行します。

@@ -39,6 +39,9 @@ resource "azapi_resource" "project" {
   type                      = "Microsoft.CognitiveServices/accounts/projects@2025-06-01"
   parent_id                 = azapi_resource.account.id
   schema_validation_enabled = false
+  response_export_values = [
+    "identity.principalId",
+  ]
   body = {
     sku = {
       name = "S0"

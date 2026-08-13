@@ -15,12 +15,13 @@ flowchart TB
     Internet((Internet))
 
     subgraph Azure["Azure Resource Group"]
-        MF["Microsoft Foundry<br/>- AI Hub<br/>- AI Services"]
+        MF["Microsoft Foundry<br/>- Account<br/>- Project"]
         Search["Azure AI Search<br/>(optional)"]
     end
 
     Internet -->|HTTPS| MF
     Internet -.->|HTTPS when enabled| Search
+    MF -->|Project connection<br/>Microsoft Entra ID| Search
 ```
 
 ## Prerequisites
@@ -35,7 +36,8 @@ Set `SCENARIO=azure_microsoft_foundry` when using the repository Makefile.
 ## How to use
 
 Azure AI Search is disabled by default. Add the following values to a
-`terraform.tfvars` file to deploy it:
+`terraform.tfvars` file to deploy it and connect it to the Microsoft Foundry
+project:
 
 ```hcl
 deploy_azure_ai_search = true
@@ -51,11 +53,21 @@ tier. Availability and quota requirements vary by subscription and region.
 > Foundry IQ proof of concept. See the
 > [Azure AI Search Terraform quickstart](https://learn.microsoft.com/en-us/azure/search/search-get-started-terraform),
 > [Foundry IQ overview](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/what-is-foundry-iq),
-> and [Azure AI Search stable REST API specifications](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search/stable).
+> [Azure AI Search stable REST API specifications](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search/stable),
+> and [Microsoft Foundry project connection ARM schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts/projects/connections).
 
-This option creates the Azure AI Search service only. It does not create a
-knowledge base, knowledge source, index, indexer, role assignment, or connection
-to a Foundry agent.
+When enabled, Terraform creates a project-scoped `CognitiveSearch` connection
+that uses Microsoft Entra ID authentication. It grants the Foundry project
+system-assigned managed identity the `Search Index Data Contributor` and
+`Search Service Contributor` roles on the Azure AI Search service. The
+connection does not store an Azure AI Search API key in Terraform state.
+
+Terraform provisions the connection through the Azure Resource Manager control
+plane with AzAPI. The [Foundry Connections API](https://ai.azure.com/api-reference/connections/list)
+can list and retrieve the resulting connection but does not create it.
+
+This option does not create a knowledge base, knowledge source, index, indexer,
+or agent.
 
 The standard Makefile deploy and destroy commands do not include the
 `-parallelism=1` override. Run these direct commands from the scenario directory
