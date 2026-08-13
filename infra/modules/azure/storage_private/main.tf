@@ -1,6 +1,6 @@
 # Storage Account with Private Endpoint
 resource "azurerm_storage_account" "this" {
-  name                            = substr("sa${replace(var.name, "-", "")}${substr(md5(var.resource_group_id), 0, 8)}", 0, 24)
+  name                            = var.storage_account_name != null ? var.storage_account_name : substr("sa${replace(var.name, "-", "")}${substr(md5(var.resource_group_id), 0, 8)}", 0, 24)
   resource_group_name             = var.resource_group_name
   location                        = var.location
   account_tier                    = var.account_tier

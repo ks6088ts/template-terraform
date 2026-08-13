@@ -7,10 +7,13 @@ provider "azurerm" {
   }
 
   resource_provider_registrations = "none"
-  resource_providers_to_register = [
-    "Microsoft.CognitiveServices",
-    "Microsoft.Resources",
-  ]
+  resource_providers_to_register = concat(
+    [
+      "Microsoft.CognitiveServices",
+      "Microsoft.Resources",
+    ],
+    var.deploy_azure_ai_search ? ["Microsoft.Search"] : [],
+  )
 }
 
 provider "azapi" {

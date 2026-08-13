@@ -1,3 +1,19 @@
+module "random_string" {
+  source = "../../modules/common/random_string"
+
+  length      = 8
+  min_numeric = 0
+  numeric     = true
+  special     = false
+  lower       = true
+  upper       = false
+}
+
+locals {
+  resource_suffix = module.random_string.result
+  resource_name   = "${trim(substr(var.name, 0, 47), "-")}-${local.resource_suffix}"
+}
+
 # =============================================================================
 # Resource Group
 # =============================================================================
@@ -5,7 +21,7 @@
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = var.name
+  name     = local.resource_name
   location = var.location
   tags     = var.tags
 }
@@ -33,7 +49,7 @@ locals {
 module "postgresql" {
   source = "../../modules/azure/postgresql"
 
-  name                   = var.name
+  name                   = local.resource_name
   resource_group_name    = module.resource_group.name
   location               = module.resource_group.location
   tags                   = var.tags

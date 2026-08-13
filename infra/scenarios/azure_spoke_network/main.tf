@@ -1,3 +1,20 @@
+module "random_string" {
+  source = "../../modules/common/random_string"
+
+  length      = 8
+  min_numeric = 0
+  numeric     = true
+  special     = false
+  lower       = true
+  upper       = false
+}
+
+locals {
+  resource_suffix      = module.random_string.result
+  resource_name        = "${trim(substr(var.name, 0, 47), "-")}-${local.resource_suffix}"
+  storage_account_name = "sa${substr(replace(var.name, "-", ""), 0, 14)}${local.resource_suffix}"
+}
+
 # =============================================================================
 # Resource Group
 # =============================================================================
@@ -5,7 +22,7 @@
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = var.name
+  name     = local.resource_name
   location = var.location
   tags     = var.tags
 }
@@ -17,7 +34,7 @@ module "resource_group" {
 module "virtual_network" {
   source = "../../modules/azure/virtual_network"
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
@@ -60,7 +77,8 @@ module "virtual_network" {
 module "storage" {
   source = "../../modules/azure/storage_private"
 
-  name                       = var.name
+  name                       = local.resource_name
+  storage_account_name       = local.storage_account_name
   resource_group_name        = module.resource_group.name
   resource_group_id          = module.resource_group.id
   location                   = module.resource_group.location
@@ -78,7 +96,7 @@ module "storage" {
 module "linux_vm" {
   source = "../../modules/azure/linux_vm"
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
@@ -97,7 +115,7 @@ module "linux_vm" {
 resource "azurerm_public_ip" "nat_gateway" {
   count = var.enable_nat_gateway ? 1 : 0
 
-  name                = "pip-nat-${var.name}"
+  name                = "pip-nat-${local.resource_name}"
   location            = module.resource_group.location
   resource_group_name = module.resource_group.name
   allocation_method   = "Static"
@@ -109,7 +127,7 @@ resource "azurerm_public_ip" "nat_gateway" {
 resource "azurerm_nat_gateway" "this" {
   count = var.enable_nat_gateway ? 1 : 0
 
-  name                    = "nat-${var.name}"
+  name                    = "nat-${local.resource_name}"
   location                = module.resource_group.location
   resource_group_name     = module.resource_group.name
   sku_name                = "Standard"
@@ -139,7 +157,7 @@ resource "azurerm_subnet_nat_gateway_association" "vm_subnet" {
 module "bastion" {
   source = "../../modules/azure/bastion"
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags

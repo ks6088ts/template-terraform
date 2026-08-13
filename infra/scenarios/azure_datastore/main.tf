@@ -1,3 +1,19 @@
+module "random_string" {
+  source = "../../modules/common/random_string"
+
+  length      = 8
+  min_numeric = 0
+  numeric     = true
+  special     = false
+  lower       = true
+  upper       = false
+}
+
+locals {
+  resource_suffix = module.random_string.result
+  resource_name   = "${trim(substr(var.name, 0, 12), "-")}-${local.resource_suffix}"
+}
+
 # =============================================================================
 # Data sources
 # =============================================================================
@@ -11,7 +27,7 @@ data "azurerm_client_config" "current" {}
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = var.name
+  name     = local.resource_name
   location = var.location
   tags     = var.tags
 }
@@ -24,7 +40,7 @@ module "cosmosdb" {
   source = "../../modules/azure/cosmosdb"
   count  = var.deploy_cosmosdb ? 1 : 0
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
@@ -40,8 +56,8 @@ module "storage" {
   source = "../../modules/azure/storage"
   count  = var.deploy_storage_account ? 1 : 0
 
-  name                     = var.name
-  storage_account_name     = replace("st${var.name}", "-", "")
+  name                     = local.resource_name
+  storage_account_name     = replace("st${local.resource_name}", "-", "")
   resource_group_name      = module.resource_group.name
   location                 = module.resource_group.location
   tags                     = var.tags
@@ -59,7 +75,7 @@ module "keyvault" {
   source = "../../modules/azure/keyvault"
   count  = var.deploy_keyvault ? 1 : 0
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
@@ -76,7 +92,7 @@ module "postgresql" {
   source = "../../modules/azure/postgresql"
   count  = var.deploy_postgresql ? 1 : 0
 
-  name                   = var.name
+  name                   = local.resource_name
   resource_group_name    = module.resource_group.name
   location               = module.resource_group.location
   tags                   = var.tags
@@ -96,7 +112,7 @@ module "monitor" {
   source = "../../modules/azure/monitor"
   count  = var.deploy_monitor_workspace ? 1 : 0
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags

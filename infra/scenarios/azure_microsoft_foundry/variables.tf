@@ -21,6 +21,23 @@ variable "tags" {
   }
 }
 
+variable "deploy_azure_ai_search" {
+  description = "Deploy an Azure AI Search service for Foundry IQ"
+  type        = bool
+  default     = false
+}
+
+variable "azure_ai_search_sku" {
+  description = "SKU for the Azure AI Search service"
+  type        = string
+  default     = "free"
+
+  validation {
+    condition     = contains(["free", "basic", "standard", "standard2", "standard3", "storage_optimized_l1", "storage_optimized_l2"], var.azure_ai_search_sku)
+    error_message = "Azure AI Search SKU must be one of: free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
+  }
+}
+
 variable "model_deployments" {
   description = "Specifies the model deployments for Azure AI Foundry"
   type = list(object({
@@ -33,34 +50,40 @@ variable "model_deployments" {
   }))
   default = [
     {
-      name     = "gpt-5.1"
-      model    = "gpt-5.1"
-      version  = "2025-11-13"
-      capacity = 450
+      name     = "gpt-5.6-luna"
+      model    = "gpt-5.6-luna"
+      version  = "2026-07-09"
+      capacity = 1000
     },
     {
-      name     = "gpt-5"
-      model    = "gpt-5"
-      version  = "2025-08-07"
-      capacity = 450
+      name     = "gpt-5.6-terra"
+      model    = "gpt-5.6-terra"
+      version  = "2026-07-09"
+      capacity = 1000
     },
     {
-      name     = "gpt-4o"
-      model    = "gpt-4o"
-      version  = "2024-11-20"
-      capacity = 450
+      name     = "gpt-5.6-sol"
+      model    = "gpt-5.6-sol"
+      version  = "2026-07-09"
+      capacity = 1000
+    },
+    {
+      name     = "gpt-5.4-mini"
+      model    = "gpt-5.4-mini"
+      version  = "2026-03-17"
+      capacity = 1000
     },
     {
       name     = "text-embedding-3-large"
       model    = "text-embedding-3-large"
       version  = "1"
-      capacity = 450
+      capacity = 3000
     },
     {
       name     = "text-embedding-3-small"
       model    = "text-embedding-3-small"
       version  = "1"
-      capacity = 450
+      capacity = 3000
     }
   ]
 }

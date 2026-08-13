@@ -13,6 +13,11 @@ module "random_string" {
   upper       = false
 }
 
+locals {
+  resource_suffix = module.random_string.result
+  resource_name   = "${trim(substr(var.name, 0, 78), "-")}-${local.resource_suffix}"
+}
+
 # =============================================================================
 # Resource Group
 # =============================================================================
@@ -20,7 +25,7 @@ module "random_string" {
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = var.name
+  name     = local.resource_name
   location = var.location
   tags     = var.tags
 }
@@ -32,8 +37,8 @@ module "resource_group" {
 module "storage" {
   source = "../../modules/azure/storage"
 
-  name                                 = var.name
-  storage_account_name                 = "satfstates${module.random_string.result}"
+  name                                 = local.resource_name
+  storage_account_name                 = "satfstates${local.resource_suffix}"
   resource_group_name                  = module.resource_group.name
   location                             = var.location
   tags                                 = var.tags

@@ -1,3 +1,14 @@
+module "random_string" {
+  source = "../../modules/common/random_string"
+
+  length      = 8
+  min_numeric = 0
+  numeric     = true
+  special     = false
+  lower       = true
+  upper       = false
+}
+
 # =============================================================================
 # Resource Group
 # =============================================================================
@@ -5,19 +16,22 @@
 data "azurerm_client_config" "current" {}
 
 locals {
-  tenant_id              = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
-  entra_user_name        = "app-inclusive-ai-labs"
-  postgresql_password    = var.postgresql_administrator_password != null ? var.postgresql_administrator_password : ""
-  postgresql_server_fqdn = var.postgresql_enabled ? module.postgresql[0].server_fqdn : ""
-  chatlog_dsn_with_auth  = var.postgresql_enabled ? format("postgresql+asyncpg://%s:%s@%s:5432/%s?sslmode=require", urlencode(var.postgresql_administrator_login), urlencode(local.postgresql_password), local.postgresql_server_fqdn, var.postgresql_database_name) : ""
-  chatlog_dsn_without_pw = var.postgresql_enabled ? format("postgresql+asyncpg://%s@%s:5432/%s?sslmode=require", urlencode(local.entra_user_name), local.postgresql_server_fqdn, var.postgresql_database_name) : ""
-  chatlog_dsn            = var.postgresql_enabled ? (var.chatlog_auth_mode == "password" ? local.chatlog_dsn_with_auth : local.chatlog_dsn_without_pw) : ""
+  resource_suffix             = module.random_string.result
+  resource_name               = "${trim(substr(var.name, 0, 19), "-")}-${local.resource_suffix}"
+  ollama_storage_account_name = "st${substr(replace(var.name, "-", ""), 0, 8)}ollama${local.resource_suffix}"
+  tenant_id                   = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
+  entra_user_name             = "app-inclusive-ai-labs"
+  postgresql_password         = var.postgresql_administrator_password != null ? var.postgresql_administrator_password : ""
+  postgresql_server_fqdn      = var.postgresql_enabled ? module.postgresql[0].server_fqdn : ""
+  chatlog_dsn_with_auth       = var.postgresql_enabled ? format("postgresql+asyncpg://%s:%s@%s:5432/%s?sslmode=require", urlencode(var.postgresql_administrator_login), urlencode(local.postgresql_password), local.postgresql_server_fqdn, var.postgresql_database_name) : ""
+  chatlog_dsn_without_pw      = var.postgresql_enabled ? format("postgresql+asyncpg://%s@%s:5432/%s?sslmode=require", urlencode(local.entra_user_name), local.postgresql_server_fqdn, var.postgresql_database_name) : ""
+  chatlog_dsn                 = var.postgresql_enabled ? (var.chatlog_auth_mode == "password" ? local.chatlog_dsn_with_auth : local.chatlog_dsn_without_pw) : ""
 }
 
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = var.name
+  name     = local.resource_name
   location = var.location
   tags     = var.tags
 }
@@ -29,7 +43,7 @@ module "resource_group" {
 module "log_analytics" {
   source = "../../modules/azure/log_analytics"
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   tags                = var.tags
@@ -43,7 +57,7 @@ module "postgresql" {
   source = "../../modules/azure/postgresql"
   count  = var.postgresql_enabled ? 1 : 0
 
-  name                   = var.name
+  name                   = local.resource_name
   resource_group_name    = module.resource_group.name
   location               = module.resource_group.location
   tags                   = var.tags
@@ -75,7 +89,7 @@ resource "azurerm_postgresql_flexible_server_database" "chatlog" {
 # =============================================================================
 
 resource "azurerm_container_app_environment" "this" {
-  name                       = "env-${var.name}"
+  name                       = "env-${local.resource_name}"
   location                   = module.resource_group.location
   resource_group_name        = module.resource_group.name
   log_analytics_workspace_id = module.log_analytics.id
@@ -87,7 +101,7 @@ resource "azurerm_container_app_environment" "this" {
 # Azure Storage for Ollama model persistence
 # -----------------------------------------------------------------------------
 resource "azurerm_storage_account" "ollama" {
-  name                            = substr("st${replace(var.name, "-", "")}ollama", 0, 24)
+  name                            = local.ollama_storage_account_name
   resource_group_name             = module.resource_group.name
   location                        = module.resource_group.location
   account_tier                    = "Standard"

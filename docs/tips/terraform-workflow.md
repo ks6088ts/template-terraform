@@ -86,6 +86,27 @@ Preflight Validation is not enabled.
 The scenario README takes precedence when it specifies additional variables,
 non-default flags, output checks, or post-deployment operations.
 
+## Understand Azure resource names
+
+Azure scenarios, except `azure_github_oidc`, treat the `name` variable as a
+base name. On the first apply, each scenario generates one eight-character
+lowercase alphanumeric suffix and reuses it for resources that can collide at
+their Azure naming scope. For example, the base name `azurecontainerapps` can
+produce `azurecontainerapps-a1b2c3d4`. Long base names are truncated when an
+Azure service has a shorter name limit, but the suffix remains intact.
+
+The generated suffix is stored in Terraform state and remains stable in later
+plans and applies that use the same state. Azure-reserved names and selected
+child names with independent fixed inputs remain unchanged. The
+`azure_github_oidc` scenario is excluded so that its Entra and GitHub federation
+display names remain stable.
+
+> [!CAUTION]
+> Deleting or losing state, replacing the `random_string` resource, or applying
+> again after a destroy generates a different suffix. Because many Azure
+> resource names are immutable, this can cause Terraform to replace resources.
+> Preserve the state and review the plan before applying naming changes.
+
 ## Choose state storage
 
 Terraform uses local state unless the root module declares another backend. Use
