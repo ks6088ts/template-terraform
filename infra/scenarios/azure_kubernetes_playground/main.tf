@@ -1,3 +1,19 @@
+module "random_string" {
+  source = "../../modules/common/random_string"
+
+  length      = 8
+  min_numeric = 0
+  numeric     = true
+  special     = false
+  lower       = true
+  upper       = false
+}
+
+locals {
+  resource_suffix = module.random_string.result
+  resource_name   = "${trim(substr(var.name, 0, 40), "-")}-${local.resource_suffix}"
+}
+
 # =============================================================================
 # Resource Group
 # =============================================================================
@@ -5,7 +21,7 @@
 module "resource_group" {
   source = "../../modules/azure/resource_group"
 
-  name     = var.name
+  name     = local.resource_name
   location = var.location
   tags     = var.tags
 }
@@ -17,7 +33,7 @@ module "resource_group" {
 module "container_registry" {
   source = "../../modules/azure/container_registry"
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   sku                 = var.acr_sku
@@ -32,7 +48,7 @@ module "container_registry" {
 module "kubernetes_service" {
   source = "../../modules/azure/kubernetes_service"
 
-  name                = var.name
+  name                = local.resource_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
   kubernetes_version  = var.kubernetes_version

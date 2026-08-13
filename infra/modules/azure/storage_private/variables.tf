@@ -3,6 +3,17 @@ variable "name" {
   type        = string
 }
 
+variable "storage_account_name" {
+  description = "Explicit Storage Account name; uses deterministic naming when null"
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.storage_account_name == null || can(regex("^[a-z0-9]{3,24}$", var.storage_account_name))
+    error_message = "Storage Account name must contain 3 to 24 lowercase letters or numbers."
+  }
+}
+
 variable "resource_group_name" {
   description = "Name of the resource group"
   type        = string
