@@ -27,6 +27,7 @@ flowchart TB
 ## Prerequisites
 
 - Azure subscription
+- Azure CLI signed in to the target subscription
 - Terraform 1.11 or later
 
 Follow the shared [Azure authentication](../../../docs/tips/provider-authentication.md),
@@ -83,12 +84,11 @@ tier. Availability and quota requirements vary by subscription and region.
 > and [Microsoft Foundry project connection ARM schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts/projects/connections).
 
 When enabled, Terraform creates a project-scoped `CognitiveSearch` connection
-that uses the Azure AI Search primary admin key and shares the connection with
-all project users. AzAPI receives the key through its write-only
-`sensitive_body`, so the connection resource does not persist another copy in
-state. The AzureRM Search resource still retains its primary key as sensitive
-state data. Use an encrypted remote backend and restrict state read access to
-only the identities that require it.
+that uses the Azure AI Search primary admin key. AzAPI receives the key through
+its write-only `sensitive_body`, so the connection resource does not persist
+another copy in state. The AzureRM Search resource still retains its primary key
+as sensitive state data. Use an encrypted remote backend and restrict state read
+access to only the identities that require it.
 
 Terraform provisions the connection through the Azure Resource Manager control
 plane with AzAPI. The [Foundry Connections API](https://ai.azure.com/api-reference/connections/list)
@@ -97,18 +97,41 @@ can list and retrieve the resulting connection but does not create it.
 This option does not create a knowledge base, knowledge source, index, indexer,
 or agent.
 
+### Destroy and purge
+
+Deleting a Microsoft Foundry account normally soft-deletes it. Without a purge,
+the account name cannot be reused for 48 hours. This scenario registers a
+Terraform destroy-time hook that deletes the model deployments, project, and
+account, then runs `az cognitiveservices account purge` before deleting the
+resource group.
+
+> [!WARNING]
+> Purging is irreversible. All data and keys associated with the account are
+> permanently deleted. The identity running Terraform must have the
+> `Microsoft.CognitiveServices/locations/resourceGroups/deletedAccounts/delete`
+> permission. A resource-group-scoped `Contributor` assignment is not
+> sufficient; use a suitable role such as `Cognitive Services Contributor` or
+> `Contributor` at subscription scope. See
+> [Recover or purge deleted Microsoft Foundry resources](https://learn.microsoft.com/azure/ai-services/recover-purge-resources).
+
+The purge action must exist in Terraform state before destroy. After adding or
+upgrading to this configuration, run `terraform apply` once before the first
+`terraform destroy`. If the purge fails because permission is missing, grant the
+permission and rerun `terraform destroy`; the account remains soft-deleted until
+the purge succeeds.
+
 Model deployments in this scenario require sequential Terraform operations to
 avoid deployment conflicts. The standard Makefile deploy and destroy commands
 do not include the `-parallelism=1` override. When `model_deployments` is not
 empty, run these direct commands from the scenario directory:
 
 ```bash
-# Apply the deployment
+# Apply the deployment and register the destroy-time purge action
 terraform apply -auto-approve -parallelism=1
 
 # Confirm the output
 terraform output
 
-# Destroy the deployment
+# Destroy the deployment and permanently purge the Foundry account
 terraform destroy -auto-approve -parallelism=1
 ```

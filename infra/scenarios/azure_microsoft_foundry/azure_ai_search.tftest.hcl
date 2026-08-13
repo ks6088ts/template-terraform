@@ -1,6 +1,12 @@
 mock_provider "azurerm" {
   override_during = plan
 
+  mock_resource "azurerm_resource_group" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/azuremicrosoftfoundry-test1234"
+    }
+  }
+
   mock_resource "azurerm_search_service" {
     defaults = {
       id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.Search/searchServices/aisearchtest1234"
@@ -61,6 +67,26 @@ run "azure_ai_search_disabled_by_default" {
     condition     = output.azure_ai_search_connection_id == null
     error_message = "The Azure AI Search connection output must be null when deployment is disabled."
   }
+
+  assert {
+    condition     = terraform_data.purge_microsoft_foundry_account.input.account_name == "msfoundrytest1234"
+    error_message = "The Foundry purge hook must target the scenario account."
+  }
+
+  assert {
+    condition     = terraform_data.purge_microsoft_foundry_account.input.resource_group_name == "rg-azuremicrosoftfoundry-test1234"
+    error_message = "The Foundry purge hook must target the scenario resource group."
+  }
+
+  assert {
+    condition     = terraform_data.purge_microsoft_foundry_account.input.location == "japaneast"
+    error_message = "The Foundry purge hook must target the scenario location."
+  }
+
+  assert {
+    condition     = terraform_data.purge_microsoft_foundry_account.input.subscription_id == "00000000-0000-0000-0000-000000000000"
+    error_message = "The Foundry purge hook must target the resource group subscription."
+  }
 }
 
 run "azure_ai_search_enabled" {
@@ -109,11 +135,6 @@ run "azure_ai_search_enabled" {
   assert {
     condition     = azapi_resource.azure_ai_search_connection[0].body.properties.authType == "ApiKey"
     error_message = "The Azure AI Search connection must use API key authentication."
-  }
-
-  assert {
-    condition     = azapi_resource.azure_ai_search_connection[0].body.properties.isSharedToAll
-    error_message = "The Azure AI Search connection must be shared with all project users."
   }
 
   assert {

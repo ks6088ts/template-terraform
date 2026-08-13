@@ -26,6 +26,7 @@ flowchart TB
 ## 前提条件
 
 - Azure サブスクリプション
+- 対象のサブスクリプションへサインイン済みの Azure CLI
 - Terraform 1.11 以降
 
 共通の [Azure 認証](../../../docs/tips/provider-authentication.ja.md)、
@@ -79,8 +80,8 @@ azure_ai_search_sku    = "free"
 > [Microsoft Foundry プロジェクト接続の ARM スキーマ](https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)を参照してください。
 
 有効にすると、Terraform は Azure AI Search のプライマリ管理キーを使用するプロジェクト スコープの
-`CognitiveSearch` 接続を作成し、すべてのプロジェクト ユーザーと共有します。AzAPI には write-only の
-`sensitive_body` を通じてキーを渡すため、connection resource はキーの複製を state に保持しません。
+`CognitiveSearch` 接続を作成します。AzAPI には write-only の `sensitive_body` を通じてキーを渡すため、
+connection resource はキーの複製を state に保持しません。
 一方、AzureRM の Search resource はプライマリ キーを機密性の高い state data として保持します。
 暗号化されたリモート バックエンドを使用し、state の読み取りアクセスを必要な ID のみに制限してください。
 
@@ -91,17 +92,36 @@ Terraform は AzAPI を使用し、Azure Resource Manager のコントロール 
 このオプションでは、ナレッジ ベース、ナレッジ ソース、インデックス、インデクサー、
 またはエージェントは作成されません。
 
+### 破棄と purge
+
+Microsoft Foundry アカウントを通常どおり削除すると、soft-delete されます。purge しない場合、
+同じアカウント名を 48 時間再利用できません。このシナリオでは Terraform の destroy-time hook を登録し、
+モデル デプロイ、プロジェクト、アカウントを削除した後、リソース グループを削除する前に
+`az cognitiveservices account purge` を実行します。
+
+> [!WARNING]
+> purge は元に戻せません。アカウントに関連付けられたすべてのデータとキーが完全に削除されます。
+> Terraform の実行 ID には、
+> `Microsoft.CognitiveServices/locations/resourceGroups/deletedAccounts/delete` 権限が必要です。
+> リソース グループ スコープの `Contributor` では不十分です。サブスクリプション スコープで
+> `Cognitive Services Contributor` や `Contributor` などの適切なロールを割り当ててください。
+> 詳細については、[削除された Microsoft Foundry リソースの復旧または消去](https://learn.microsoft.com/azure/ai-services/recover-purge-resources)を参照してください。
+
+destroy の前に、purge action が Terraform state に存在する必要があります。この構成を追加または更新した後は、
+最初の `terraform destroy` より前に `terraform apply` を一度実行してください。権限不足で purge に失敗した場合は、
+権限を付与してから `terraform destroy` を再実行します。purge が成功するまで、アカウントは soft-delete 状態で残ります。
+
 このシナリオのモデル デプロイでは、デプロイの競合を避けるため Terraform の処理を逐次実行する必要があります。
 標準の Makefile によるデプロイおよび破棄コマンドには、`-parallelism=1` のオーバーライドが含まれていません。
 `model_deployments` が空でない場合は、シナリオ ディレクトリから次のコマンドを直接実行します。
 
 ```bash
-# デプロイを適用する
+# デプロイを適用し、destroy 時の purge action を登録する
 terraform apply -auto-approve -parallelism=1
 
 # 出力を確認する
 terraform output
 
-# デプロイを破棄する
+# デプロイを破棄し、Foundry アカウントを完全に purge する
 terraform destroy -auto-approve -parallelism=1
 ```

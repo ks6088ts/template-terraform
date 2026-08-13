@@ -10,8 +10,9 @@ module "random_string" {
 }
 
 locals {
-  resource_suffix = module.random_string.result
-  resource_name   = "${trim(substr(var.name, 0, 78), "-")}-${local.resource_suffix}"
+  resource_suffix        = module.random_string.result
+  resource_name          = "${trim(substr(var.name, 0, 78), "-")}-${local.resource_suffix}"
+  microsoft_foundry_name = "msfoundry${local.resource_suffix}"
 }
 
 # =============================================================================
@@ -48,9 +49,14 @@ module "azure_ai_search" {
 module "microsoft_foundry" {
   source = "../../modules/azure/microsoft_foundry"
 
-  name              = "msfoundry${local.resource_suffix}"
+  name              = local.microsoft_foundry_name
   resource_group_id = module.resource_group.id
   location          = var.location
   tags              = var.tags
   model_deployments = var.model_deployments
+
+  # The destroy-only purge action must outlive the Foundry account.
+  depends_on = [
+    terraform_data.purge_microsoft_foundry_account,
+  ]
 }

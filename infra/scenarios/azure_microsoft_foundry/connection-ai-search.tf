@@ -8,10 +8,9 @@ resource "azapi_resource" "azure_ai_search_connection" {
 
   body = {
     properties = {
-      category      = "CognitiveSearch"
-      target        = module.azure_ai_search[0].endpoint
-      authType      = "ApiKey"
-      isSharedToAll = true
+      category = "CognitiveSearch"
+      target   = module.azure_ai_search[0].endpoint
+      authType = "ApiKey"
       metadata = {
         ApiType    = "Azure"
         ResourceId = module.azure_ai_search[0].id
