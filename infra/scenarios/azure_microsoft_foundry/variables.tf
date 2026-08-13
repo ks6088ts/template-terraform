@@ -33,34 +33,34 @@ variable "model_deployments" {
   }))
   default = [
     {
-      name     = "gpt-5.1"
-      model    = "gpt-5.1"
-      version  = "2025-11-13"
-      capacity = 450
+      name     = "gpt-5.6-luna"
+      model    = "gpt-5.6-luna"
+      version  = "2026-07-09"
+      capacity = 100
     },
     {
-      name     = "gpt-5"
-      model    = "gpt-5"
-      version  = "2025-08-07"
-      capacity = 450
+      name     = "gpt-5.6-terra"
+      model    = "gpt-5.6-terra"
+      version  = "2026-07-09"
+      capacity = 100
     },
     {
-      name     = "gpt-4o"
-      model    = "gpt-4o"
-      version  = "2024-11-20"
-      capacity = 450
+      name     = "gpt-5.6-sol"
+      model    = "gpt-5.6-sol"
+      version  = "2026-07-09"
+      capacity = 100
     },
     {
       name     = "text-embedding-3-large"
       model    = "text-embedding-3-large"
       version  = "1"
-      capacity = 450
+      capacity = 100
     },
     {
       name     = "text-embedding-3-small"
       model    = "text-embedding-3-small"
       version  = "1"
-      capacity = 450
+      capacity = 100
     }
   ]
 }
