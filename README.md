@@ -18,38 +18,38 @@ provider authentication, and remote state guidance.
 
 | Scenario | Overview |
 | --- | --- |
-| [azure_terraform_backend](./infra/scenarios/azure_terraform_backend/README.md) | Terraform backend 用の Azure Storage Account を作成します。 |
-| [azure_github_oidc](./infra/scenarios/azure_github_oidc/README.md) | GitHub Actions から Azure に OIDC で接続するための Service Principal を作成し、必要な権限を割り当てます。 |
-| [azure_apim_playground](./infra/scenarios/azure_apim_playground/README.md) | Azure API Management (Consumption SKU) をデプロイします。サーバーレス API ゲートウェイの検証環境を構築します。 |
-| [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Azure Container Apps をデプロイします。Docker Hub イメージを使用し、外部アクセス可能なコンテナアプリを作成します。 |
-| [azure_datastore](./infra/scenarios/azure_datastore/README.md) | Azure のデータストア（Cosmos DB、Storage Account、Key Vault、PostgreSQL、Monitor）をデプロイします。テスト用途向けにパブリックアクセスを許可した構成です。 |
-| [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.md) | Azure Functions の Flex Consumption プランをデプロイします。サーバーレス関数の実行環境を最小構成で構築します。 |
-| [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Azure 上に Microsoft Foundry 環境をデプロイします。Microsoft Foundry ワークロードを実行するためのインフラストラクチャをセットアップします。 |
-| [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.md) | Azure Hub-Spoke アーキテクチャ用の Spoke ネットワークをデプロイします。VNet、Bastion、Storage Account (Private Endpoint)、VM を構築します。 |
-| [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.md) | Azure Container Apps 上に azure_inclusive_ai_labs アプリケーションをデプロイします。VOICEVOX と連携した音声合成機能を持つ API サーバーを構築します。 |
-| [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.md) | Azure Container Registry (ACR) と Azure Kubernetes Service (AKS) の最小構成をデプロイします。閉域構成なしで経済的なコンテナワークロード検証環境を構築します。 |
-| [azure_postgresql](./infra/scenarios/azure_postgresql/README.md) | Azure Database for PostgreSQL Flexible Server をデプロイします。管理者パスワードは自動生成され、接続 URI などの接続情報を出力から取得できます。 |
+| [azure_terraform_backend](./infra/scenarios/azure_terraform_backend/README.md) | Creates an Azure Storage account for a Terraform backend. |
+| [azure_github_oidc](./infra/scenarios/azure_github_oidc/README.md) | Creates a service principal and role assignments for connecting GitHub Actions to Azure through OIDC. |
+| [azure_apim_playground](./infra/scenarios/azure_apim_playground/README.md) | Deploys Azure API Management on the Consumption tier for testing a serverless API gateway. |
+| [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Deploys an externally accessible Azure Container App from a Docker Hub image. |
+| [azure_datastore](./infra/scenarios/azure_datastore/README.md) | Deploys Azure data stores, including Cosmos DB, Storage, Key Vault, PostgreSQL, and Monitor, with public access for testing. |
+| [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.md) | Deploys a minimal serverless Azure Functions environment on the Flex Consumption plan. |
+| [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Deploys the Azure infrastructure required to run Microsoft Foundry workloads. |
+| [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.md) | Deploys a spoke network for an Azure hub-and-spoke architecture with a VNet, Bastion, private Storage endpoint, and VM. |
+| [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.md) | Deploys the azure_inclusive_ai_labs API and its VOICEVOX-powered speech synthesis services on Azure Container Apps. |
+| [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.md) | Deploys a cost-conscious Azure Container Registry and Azure Kubernetes Service environment without private networking. |
+| [azure_postgresql](./infra/scenarios/azure_postgresql/README.md) | Deploys Azure Database for PostgreSQL Flexible Server with a generated administrator password and connection outputs. |
 
 ### AWS
 
 | Scenario | Overview |
 | --- | --- |
-| [aws_github_oidc](./infra/scenarios/aws_github_oidc/README.md) | GitHub Actions から AWS に OIDC で接続するための IAM ロールを作成し、必要な権限を割り当てます。 |
+| [aws_github_oidc](./infra/scenarios/aws_github_oidc/README.md) | Creates an IAM role and permissions for connecting GitHub Actions to AWS through OIDC. |
 
 ### Google Cloud
 
 | Scenario | Overview |
 | --- | --- |
-| [google_github_oidc](./infra/scenarios/google_github_oidc/README.md) | GitHub Actions から Google Cloud に OIDC で接続するための Workload Identity Federation を作成し、必要な権限を割り当てます。 |
+| [google_github_oidc](./infra/scenarios/google_github_oidc/README.md) | Creates Workload Identity Federation and permissions for connecting GitHub Actions to Google Cloud through OIDC. |
 
 ### GitHub
 
 | Scenario | Overview |
 | --- | --- |
-| [github_secrets](./infra/scenarios/github_secrets/README.md) | GitHub リポジトリの環境シークレットを作成・管理します。GitHub Actions ワークフローで使用できます。 |
+| [github_secrets](./infra/scenarios/github_secrets/README.md) | Creates and manages GitHub repository environment secrets for use in GitHub Actions workflows. |
 
-### その他
+### Other
 
 | Scenario | Overview |
 | --- | --- |
-| [hello_world](./infra/scenarios/hello_world/README.md) | Terraform の機能説明のための最小限のサンプル。random provider を使用してランダム文字列を生成します。 |
+| [hello_world](./infra/scenarios/hello_world/README.md) | Demonstrates basic Terraform behavior by generating a random string with the random provider. |

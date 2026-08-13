@@ -1,34 +1,34 @@
 ---
-description: Azure Database for PostgreSQL Flexible Server をデプロイするシナリオ
+description: Scenario for deploying Azure Database for PostgreSQL Flexible Server
 ---
 
 # azure_postgresql
 
-Azure Database for PostgreSQL Flexible Server をデプロイするシナリオです。
+This scenario deploys Azure Database for PostgreSQL Flexible Server.
 
-## 使い方
+## Usage
 
-共通の [Azure 認証](../../../docs/tips/provider-authentication.md)、
-[Terraform ワークフロー](../../../docs/tips/terraform-workflow.md)、および必要に応じて
-[Azure Blob Storage バックエンド](../../../docs/tips/azure-blob-backend.md)を設定してください。
-このシナリオの Makefile コマンドでは `SCENARIO=azure_postgresql` を指定します。
+Configure the shared [Azure authentication](../../../docs/tips/provider-authentication.md),
+[Terraform workflow](../../../docs/tips/terraform-workflow.md), and, when needed,
+[Azure Blob Storage backend](../../../docs/tips/azure-blob-backend.md).
+Specify `SCENARIO=azure_postgresql` when running Makefile commands for this scenario.
 
-既存のローカル `backend.tf` を利用していた場合は、共通ガイドへの移行について
-[PostgreSQL シナリオのアップグレード手順](../../../docs/tips/azure-blob-backend.md#upgrade-the-postgresql-scenario)
-を確認してください。
+If you previously used a local `backend.tf`, see the
+[PostgreSQL scenario upgrade instructions](../../../docs/tips/azure-blob-backend.md#upgrade-the-postgresql-scenario)
+to migrate to the shared guidance.
 
-管理者パスワードは自動生成されます。接続情報は出力から取得します。
+The administrator password is generated automatically. Retrieve the connection information from the outputs.
 
 ```bash
-# 接続 URI（パスワード込み）
+# Connection URI, including the password
 terraform output -raw postgresql_connection_uri
 
-# 個別に取得する場合
+# Retrieve individual values
 terraform output -raw postgresql_administrator_password
 terraform output postgresql_server_fqdn
 ```
 
-パスワードやデータベース名などを指定したい場合は変数を渡します。
+Pass variables to specify values such as the password or database name.
 
 ```bash
 terraform apply -auto-approve \
@@ -36,25 +36,25 @@ terraform apply -auto-approve \
   -var='database_name=mydb'
 ```
 
-## 変数
+## Variables
 
-| 変数 | 既定値 | 説明 |
-|------|--------|------|
-| `name` | `azurepostgresql` | リソースのベース名 |
-| `location` | `japaneast` | リージョン |
-| `administrator_login` | `psqladmin` | 管理者ログイン |
-| `administrator_password` | （自動生成） | 指定すると任意のパスワードを使用 |
-| `database_name` | `appdb` | 作成するデータベース名 |
-| `postgresql_version` | `17` | PostgreSQL バージョン |
-| `sku_name` | `B_Standard_B1ms` | SKU |
+| Variable                 | Default           | Description                               |
+|--------------------------|-------------------|-------------------------------------------|
+| `name`                   | `azurepostgresql` | Base name for resources                   |
+| `location`               | `japaneast`       | Region                                    |
+| `administrator_login`    | `psqladmin`       | Administrator login                       |
+| `administrator_password` | Generated         | Uses the specified password when provided |
+| `database_name`          | `appdb`           | Name of the database to create            |
+| `postgresql_version`     | `17`              | PostgreSQL version                        |
+| `sku_name`               | `B_Standard_B1ms` | SKU                                       |
 
-## 出力
+## Outputs
 
-| 出力 | 説明 |
-|------|------|
-| `resource_group_name` | リソースグループ名 |
-| `postgresql_connection_uri` | 接続 URI（`sensitive`） |
-| `postgresql_administrator_login` | 管理者ログイン |
-| `postgresql_administrator_password` | 管理者パスワード（`sensitive`） |
-| `postgresql_server_fqdn` | サーバー FQDN |
-| `postgresql_database_name` | データベース名 |
+| Output                              | Description                          |
+|-------------------------------------|--------------------------------------|
+| `resource_group_name`               | Resource group name                  |
+| `postgresql_connection_uri`         | Connection URI (`sensitive`)         |
+| `postgresql_administrator_login`    | Administrator login                  |
+| `postgresql_administrator_password` | Administrator password (`sensitive`) |
+| `postgresql_server_fqdn`            | Server FQDN                          |
+| `postgresql_database_name`          | Database name                        |

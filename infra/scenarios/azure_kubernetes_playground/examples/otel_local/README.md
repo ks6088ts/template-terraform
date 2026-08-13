@@ -1,12 +1,16 @@
+---
+description: Run an OpenTelemetry observability stack locally with Docker Compose
+---
+
 # OpenTelemetry Observability Stack
 
-Docker Compose で構成された OpenTelemetry ベースのオブザーバビリティスタックです。トレース・メトリクス・ログの収集・可視化を行います。
+This OpenTelemetry observability stack runs with Docker Compose. It collects and visualizes traces, metrics, and logs.
 
-## アーキテクチャ
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Generators["テレメトリ生成"]
+    subgraph Generators["Telemetry Generation"]
         GenTraces["telemetrygen<br/>(traces)"]
         GenMetrics["telemetrygen<br/>(metrics)"]
     end
@@ -18,7 +22,7 @@ flowchart LR
         OTLP_IN --> Batch
     end
 
-    subgraph Backends["バックエンド"]
+    subgraph Backends["Backends"]
         Jaeger["Jaeger<br/>UI :16686"]
         Prometheus["Prometheus<br/>UI :9090"]
     end
@@ -32,92 +36,92 @@ flowchart LR
     Batch -- "traces / metrics / logs" --> Debug["Debug<br/>(stdout)"]
 ```
 
-### コンポーネント一覧
+### Components
 
-| コンポーネント | イメージ | 役割 | 公開ポート |
-|---|---|---|---|
-| **Jaeger** | `jaegertracing/all-in-one` | 分散トレーシングバックエンド＆UI | `16686` (UI) |
-| **Prometheus** | `prom/prometheus` | メトリクス収集・クエリエンジン | `9090` (UI) |
-| **OpenTelemetry Collector** | `otel/opentelemetry-collector-contrib` | テレメトリの受信・処理・エクスポート | `4317` (gRPC), `4318` (HTTP) |
-| **telemetrygen (traces)** | `opentelemetry-collector-contrib/telemetrygen` | サンプルトレースを生成 | - |
-| **telemetrygen (metrics)** | `opentelemetry-collector-contrib/telemetrygen` | サンプルメトリクスを生成 | - |
+| Component                   | Image                                           | Role                                        | Exposed port                |
+|-----------------------------|-------------------------------------------------|---------------------------------------------|-----------------------------|
+| **Jaeger**                  | `jaegertracing/all-in-one`                      | Distributed tracing backend and UI          | `16686` (UI)                |
+| **Prometheus**              | `prom/prometheus`                               | Metrics collection and query engine         | `9090` (UI)                 |
+| **OpenTelemetry Collector** | `otel/opentelemetry-collector-contrib`          | Receives, processes, and exports telemetry  | `4317` (gRPC), `4318` (HTTP) |
+| **telemetrygen (traces)**   | `opentelemetry-collector-contrib/telemetrygen`  | Generates sample traces                     | -                           |
+| **telemetrygen (metrics)**  | `opentelemetry-collector-contrib/telemetrygen`  | Generates sample metrics                    | -                           |
 
-## データフロー
+## Data Flow
 
-### トレース
+### Traces
 
-```
-アプリ / telemetrygen → OTLP (gRPC :4317) → OTel Collector → Jaeger
-```
-
-### メトリクス
-
-```
-アプリ / telemetrygen → OTLP (gRPC :4317) → OTel Collector → Prometheus (Remote Write + Scrape)
+```text
+Application / telemetrygen → OTLP (gRPC :4317) → OTel Collector → Jaeger
 ```
 
-### ログ
+### Metrics
 
+```text
+Application / telemetrygen → OTLP (gRPC :4317) → OTel Collector → Prometheus (Remote Write + Scrape)
 ```
-アプリ → OTLP (gRPC :4317) → OTel Collector → Debug (stdout)
+
+### Logs
+
+```text
+Application → OTLP (gRPC :4317) → OTel Collector → Debug (stdout)
 ```
 
-## 利用方法
+## Usage
 
-### 起動
+### Start the stack
 
 ```shell
 cd src
 docker compose up -d
 ```
 
-### UI へのアクセス
+### Access the UIs
 
-| サービス | URL | 用途 |
-|---|---|---|
-| Jaeger UI | http://localhost:16686 | トレースの検索・可視化 |
-| Prometheus UI | http://localhost:9090 | メトリクスのクエリ・グラフ表示 |
+| Service       | URL                      | Purpose                          |
+|---------------|--------------------------|----------------------------------|
+| Jaeger UI     | <http://localhost:16686> | Search and visualize traces      |
+| Prometheus UI | <http://localhost:9090>  | Query metrics and display graphs |
 
-### 動作確認
+### Verify the stack
 
-起動後、`telemetrygen` が自動的にサンプルデータ（トレース・メトリクス）を 5 分間、1 req/s のレートで OpenTelemetry Collector へ送信します。
+After startup, `telemetrygen` automatically sends sample data (traces and metrics) to the OpenTelemetry Collector at a rate of 1 req/s for 5 minutes.
 
-1. **トレースの確認**: [Jaeger UI](http://localhost:16686) を開き、Service ドロップダウンから `telemetrygen` を選択して Search をクリック
-2. **メトリクスの確認**: [Prometheus UI](http://localhost:9090) を開き、クエリ入力欄に `gen` と入力して候補からメトリクスを選択
+1. **Verify traces**: Open the [Jaeger UI](http://localhost:16686), select `telemetrygen` from the Service dropdown, and click Search.
+2. **Verify metrics**: Open the [Prometheus UI](http://localhost:9090), enter `gen` in the query field, and select a metric from the suggestions.
 
-### 自分のアプリケーションからテレメトリを送信する
+### Send telemetry from your application
 
-OpenTelemetry SDK を使用して、以下のエンドポイントへテレメトリを送信できます。
+Use an OpenTelemetry SDK to send telemetry to the following endpoints.
 
-| プロトコル | エンドポイント |
-|---|---|
+| Protocol  | Endpoint         |
+|-----------|------------------|
 | OTLP gRPC | `localhost:4317` |
 | OTLP HTTP | `localhost:4318` |
 
-環境変数の設定例:
+Example environment variables:
 
 ```shell
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
 export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
 ```
 
-### 停止
+### Stop the stack
 
 ```shell
 docker compose down
 ```
 
-## 設定ファイル
+## Configuration Files
 
-| ファイル | 説明 |
-|---|---|
-| `compose.yaml` | Docker Compose によるサービス定義 |
-| `otel-collector-config.yaml` | OpenTelemetry Collector の受信・処理・エクスポート設定 |
-| `prometheus.yaml` | Prometheus のスクレイプ設定（OTel Collector の `:8889` を対象） |
+| File                         | Description                                                                |
+|------------------------------|----------------------------------------------------------------------------|
+| `compose.yaml`               | Service definitions for Docker Compose                                     |
+| `otel-collector-config.yaml` | OpenTelemetry Collector receiver, processor, and exporter configuration    |
+| `prometheus.yaml`            | Prometheus scrape configuration targeting the OTel Collector on `:8889`    |
 
-## OpenTelemetry Collector パイプライン構成
+## OpenTelemetry Collector Pipeline
 
-```
+```text
 receivers:
   otlp (gRPC + HTTP)
       │
