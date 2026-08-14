@@ -38,3 +38,22 @@ output "container_id" {
   description = "ID of the Storage Container"
   value       = var.create_container ? azurerm_storage_container.this[0].id : null
 }
+
+output "private_endpoint_id" {
+  description = "ID of the blob private endpoint"
+  value       = var.private_endpoint != null ? azurerm_private_endpoint.blob[0].id : null
+}
+
+output "private_endpoint_ip" {
+  description = "Private IP address of the blob private endpoint"
+  value       = var.private_endpoint != null ? azurerm_private_endpoint.blob[0].private_service_connection[0].private_ip_address : null
+}
+
+output "private_dns_zone_id" {
+  description = "ID of the blob private DNS zone"
+  value = var.private_endpoint != null ? (
+    var.private_endpoint.create_private_dns_zone
+    ? azurerm_private_dns_zone.blob[0].id
+    : var.private_endpoint.private_dns_zone_id
+  ) : null
+}

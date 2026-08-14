@@ -6,6 +6,11 @@ variable "name" {
 variable "storage_account_name" {
   description = "Name of the Storage Account (must be globally unique, 3-24 lowercase letters and numbers)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]{3,24}$", var.storage_account_name))
+    error_message = "Storage Account name must contain 3 to 24 lowercase letters or numbers."
+  }
 }
 
 variable "resource_group_name" {
@@ -28,12 +33,22 @@ variable "account_tier" {
   description = "Storage account tier"
   type        = string
   default     = "Standard"
+
+  validation {
+    condition     = contains(["Standard", "Premium"], var.account_tier)
+    error_message = "Storage account tier must be Standard or Premium."
+  }
 }
 
 variable "account_replication_type" {
   description = "Storage account replication type"
   type        = string
   default     = "LRS"
+
+  validation {
+    condition     = contains(["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"], var.account_replication_type)
+    error_message = "Storage account replication type must be one of: LRS, GRS, RAGRS, ZRS, GZRS, RAGZRS."
+  }
 }
 
 variable "is_hns_enabled" {
@@ -70,6 +85,36 @@ variable "shared_access_key_enabled" {
   description = "Enable shared access key"
   type        = bool
   default     = true
+}
+
+variable "enable_identity" {
+  description = "Enable a system-assigned managed identity"
+  type        = bool
+  default     = true
+}
+
+variable "private_endpoint" {
+  description = "Blob private endpoint configuration; set to null to disable it"
+  type = object({
+    subnet_id               = string
+    create_private_dns_zone = optional(bool, true)
+    virtual_network_id      = optional(string)
+    private_dns_zone_id     = optional(string)
+  })
+  default = null
+
+  validation {
+    condition = var.private_endpoint == null || (
+      trimspace(var.private_endpoint.subnet_id) != "" &&
+      (
+        var.private_endpoint.create_private_dns_zone ? (
+          var.private_endpoint.private_dns_zone_id == null &&
+          trimspace(coalesce(var.private_endpoint.virtual_network_id, "")) != ""
+        ) : trimspace(coalesce(var.private_endpoint.private_dns_zone_id, "")) != ""
+      )
+    )
+    error_message = "Private endpoint subnet_id is required. Set virtual_network_id when create_private_dns_zone is true, or set private_dns_zone_id when it is false."
+  }
 }
 
 variable "enable_blob_soft_delete" {

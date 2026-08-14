@@ -75,18 +75,22 @@ module "virtual_network" {
 # =============================================================================
 
 module "storage" {
-  source = "../../modules/azure/storage_private"
+  source = "../../modules/azure/storage"
 
-  name                       = local.resource_name
-  storage_account_name       = local.storage_account_name
-  resource_group_name        = module.resource_group.name
-  resource_group_id          = module.resource_group.id
-  location                   = module.resource_group.location
-  tags                       = var.tags
-  account_tier               = var.storage_account_tier
-  account_replication_type   = var.storage_account_replication_type
-  virtual_network_id         = module.virtual_network.vnet_id
-  private_endpoint_subnet_id = module.virtual_network.subnet_ids["snet-paas-${var.name}"]
+  name                          = local.resource_name
+  storage_account_name          = local.storage_account_name
+  resource_group_name           = module.resource_group.name
+  location                      = module.resource_group.location
+  tags                          = var.tags
+  account_tier                  = var.storage_account_tier
+  account_replication_type      = var.storage_account_replication_type
+  public_network_access_enabled = false
+  enable_identity               = false
+
+  private_endpoint = {
+    subnet_id          = module.virtual_network.subnet_ids["snet-paas-${var.name}"]
+    virtual_network_id = module.virtual_network.vnet_id
+  }
 }
 
 # =============================================================================

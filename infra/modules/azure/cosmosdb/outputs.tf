@@ -21,10 +21,20 @@ output "primary_key" {
 
 output "sql_database_name" {
   description = "Name of the Cosmos DB SQL database"
-  value       = azurerm_cosmosdb_sql_database.this.name
+  value       = try(azurerm_cosmosdb_sql_database.this[0].name, null)
+}
+
+output "sql_database_id" {
+  description = "ID of the Cosmos DB SQL database"
+  value       = try(azurerm_cosmosdb_sql_database.this[0].id, null)
 }
 
 output "sql_container_name" {
   description = "Name of the Cosmos DB SQL container"
-  value       = azurerm_cosmosdb_sql_container.this.name
+  value       = try(azurerm_cosmosdb_sql_container.this[0].name, null)
+}
+
+output "sql_container_id" {
+  description = "ID of the Cosmos DB SQL container"
+  value       = try(azurerm_cosmosdb_sql_container.this[0].id, null)
 }

@@ -21,8 +21,8 @@ variable "tags" {
   }
 }
 
-variable "deploy_azure_ai_search" {
-  description = "Deploy an Azure AI Search service for Foundry IQ"
+variable "deploy_standard_agent" {
+  description = "Deploy the resources required for a standard Microsoft Foundry agent"
   type        = bool
   default     = false
 }
@@ -30,11 +30,11 @@ variable "deploy_azure_ai_search" {
 variable "azure_ai_search_sku" {
   description = "SKU for the Azure AI Search service"
   type        = string
-  default     = "free"
+  default     = "standard"
 
   validation {
-    condition     = contains(["free", "basic", "standard", "standard2", "standard3", "storage_optimized_l1", "storage_optimized_l2"], var.azure_ai_search_sku)
-    error_message = "Azure AI Search SKU must be one of: free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
+    condition     = contains(["standard", "standard2", "standard3", "storage_optimized_l1", "storage_optimized_l2"], var.azure_ai_search_sku)
+    error_message = "Azure AI Search SKU must be one of: standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
   }
 }
 
