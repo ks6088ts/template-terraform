@@ -24,6 +24,12 @@ variable "sku" {
   }
 }
 
+variable "local_authentication_enabled" {
+  description = "Whether API key authentication is enabled for the Azure AI Search service"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Tags to apply to the Azure AI Search service"
   type        = map(string)

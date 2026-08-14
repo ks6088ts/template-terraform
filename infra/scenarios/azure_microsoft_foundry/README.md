@@ -5,9 +5,9 @@ description: Deploy a Microsoft Foundry environment on Azure with Terraform
 # Azure Microsoft Foundry Scenario
 
 This scenario deploys a Microsoft Foundry environment on Azure using Terraform.
-It can also deploy an Azure AI Search service for use as the retrieval
-infrastructure underlying Foundry IQ and an Azure Blob Storage account connected
-to the Foundry project.
+It can also deploy the bring-your-own data services and capability hosts required
+for a standard agent. Microsoft Entra ID and the Foundry project managed identity
+are used instead of resource keys.
 
 ## Architecture
 
@@ -16,23 +16,35 @@ flowchart TB
     Internet((Internet))
 
     subgraph Azure["Azure Resource Group"]
-        MF["Microsoft Foundry<br/>- Account<br/>- Project<br/>- Model deployments"]
-        Search["Azure AI Search<br/>(optional)"]
-        Storage["Azure Blob Storage<br/>(optional)"]
+        Account["Microsoft Foundry account<br/>Model deployments"]
+        Project["Microsoft Foundry project<br/>System-assigned identity"]
+        AccountHost["Account capability host<br/>Agents"]
+        ProjectHost["Project capability host"]
+        Search["Azure AI Search<br/>Vector store"]
+        Storage["Azure Storage<br/>Agent files"]
+        Cosmos["Azure Cosmos DB<br/>Agent threads"]
     end
 
-    Internet -->|HTTPS| MF
-    Internet -.->|HTTPS when enabled| Search
-    Internet -.->|HTTPS when enabled| Storage
-    MF -->|Project connection<br/>API key| Search
-    MF -->|Project connection<br/>Account key| Storage
+    Internet -->|HTTPS| Account
+    Account --> Project
+    Account --> AccountHost --> ProjectHost
+    Project -->|AAD connection| Search
+    Project -->|AAD connection| Storage
+    Project -->|AAD connection| Cosmos
+    Project -->|Managed identity and RBAC| Search
+    Project -->|Managed identity and RBAC| Storage
+    Project -->|Managed identity and RBAC| Cosmos
+    ProjectHost --> Search
+    ProjectHost --> Storage
+    ProjectHost --> Cosmos
 ```
 
 ## Prerequisites
 
-- Azure subscription
-- Azure CLI signed in to the target subscription
-- Terraform 1.11 or later
+* Azure subscription
+* Azure CLI signed in to the target subscription
+* Terraform 1.11 or later
+* Permission to create role assignments on the deployed data services
 
 Follow the shared [Azure authentication](../../../docs/tips/provider-authentication.md),
 [Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
@@ -46,14 +58,14 @@ Set `SCENARIO=azure_microsoft_foundry` when using the repository Makefile.
 By default, the scenario creates the following model deployments in the
 Microsoft Foundry account:
 
-| Deployment and model | Version | SKU | Capacity |
-| --- | --- | --- | ---: |
-| `gpt-5.6-luna` | `2026-07-09` | `GlobalStandard` | 1000 |
-| `gpt-5.6-terra` | `2026-07-09` | `GlobalStandard` | 1000 |
-| `gpt-5.6-sol` | `2026-07-09` | `GlobalStandard` | 1000 |
-| `gpt-5.4-mini` | `2026-03-17` | `GlobalStandard` | 1000 |
-| `text-embedding-3-large` | `1` | `GlobalStandard` | 3000 |
-| `text-embedding-3-small` | `1` | `GlobalStandard` | 3000 |
+| Deployment and model         | Version      | SKU              | Capacity |
+|------------------------------|--------------|------------------|---------:|
+| `gpt-5.6-luna`               | `2026-07-09` | `GlobalStandard` |     1000 |
+| `gpt-5.6-terra`              | `2026-07-09` | `GlobalStandard` |     1000 |
+| `gpt-5.6-sol`                | `2026-07-09` | `GlobalStandard` |     1000 |
+| `gpt-5.4-mini`               | `2026-03-17` | `GlobalStandard` |     1000 |
+| `text-embedding-3-large`     | `1`          | `GlobalStandard` |     3000 |
+| `text-embedding-3-small`     | `1`          | `GlobalStandard` |     3000 |
 
 Review and override `model_deployments` before applying to match the models,
 versions, capacity, and quota available in the target subscription and region.
@@ -64,80 +76,68 @@ deployments:
 model_deployments = []
 ```
 
-### Azure AI Search
+### Standard Agent resources
 
-The `deploy_azure_ai_search` input defaults to `false`. Add the following values
-to an environment-specific `terraform.tfvars` file to deploy Azure AI Search and
-connect it to the Microsoft Foundry project:
-
-```hcl
-deploy_azure_ai_search = true
-azure_ai_search_sku    = "free"
-```
-
-Set `azure_ai_search_sku` to `basic`, `standard`, `standard2`, `standard3`,
-`storage_optimized_l1`, or `storage_optimized_l2` to use another supported
-tier. Availability and quota requirements vary by subscription and region.
-
-> [!NOTE]
-> The default SKU is `free`, which is the lowest-cost option recommended for a
-> Foundry IQ proof of concept. See the
-> [Azure AI Search Terraform quickstart](https://learn.microsoft.com/en-us/azure/search/search-get-started-terraform),
-> [Foundry IQ overview](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/what-is-foundry-iq),
-> [Azure AI Search stable REST API specifications](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search/stable),
-> and [Microsoft Foundry project connection ARM schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts/projects/connections).
-
-When enabled, Terraform creates a project-scoped `CognitiveSearch` connection
-that uses the Azure AI Search primary admin key. AzAPI receives the key through
-its write-only `sensitive_body`, so the connection resource does not persist
-another copy in state. The AzureRM Search resource still retains its primary key
-as sensitive state data. Use an encrypted remote backend and restrict state read
-access to only the identities that require it.
-
-Terraform provisions the connection through the Azure Resource Manager control
-plane with AzAPI. The [Foundry Connections API](https://ai.azure.com/api-reference/connections/list)
-can list and retrieve the resulting connection but does not create it.
-
-This option does not create a knowledge base, knowledge source, index, indexer,
-or agent.
-
-### Azure Blob Storage
-
-The `deploy_blob_storage` input defaults to `false`. Add the following value to
-an environment-specific `terraform.tfvars` file to deploy an Azure Blob Storage
-account and connect it to the Microsoft Foundry project:
+The `deploy_standard_agent` input defaults to `false`. When disabled, the
+scenario creates only the Foundry account, project, and model deployments. Enable
+the complete standard agent resource set with the following values:
 
 ```hcl
-deploy_blob_storage = true
+deploy_standard_agent = true
+azure_ai_search_sku   = "standard"
 ```
 
-Enabling Blob Storage creates the Storage account, a private container named
-`default`, and the Microsoft Foundry project connection together. The container
-name and access type are fixed rather than exposed as scenario inputs.
+The checked-in `terraform.tfvars` enables this configuration. Terraform creates
+the following resources together:
 
-The Storage account configuration is intentionally fixed rather than exposed as
-scenario inputs. It uses Standard/LRS storage with a flat namespace, a public
-network endpoint, HTTPS with TLS 1.2, and no anonymous Blob access. Shared key
-authentication is enabled, while the Storage account managed identity and Blob
-soft delete are disabled.
+* Azure AI Search using `standard` or a higher supported SKU
+* Standard/ZRS Storage account without an explicitly managed container
+* Azure Cosmos DB for agent threads using Session consistency
+* Project-scoped AAD connections for Search, Storage, and Cosmos DB
+* Account and project capability hosts using the stable `2025-06-01` API
 
-When enabled, Terraform creates a project-scoped `AzureStorageAccount`
-connection that uses the Storage account primary access key. The Azure Resource
-Manager connection schema calls this authentication type `AccountKey`; it is the
-Storage equivalent of the key-based `ApiKey` connection used for Azure AI
-Search. AzAPI receives the key through its write-only `sensitive_body`, so the
-connection resource does not persist another copy in state. The AzureRM Storage
-resource still retains its primary access key as sensitive state data. Use an
-encrypted remote backend and restrict state read access to only the identities
-that require it.
+The data services use public network endpoints. AAD-only authentication removes
+resource keys from the authentication path, but it does not provide network
+isolation. This scenario does not create private endpoints, private DNS zones,
+Search indexes, knowledge bases, or agent application code.
 
-AzAPI provisions the connection through the same Azure Resource Manager control
-plane used for the Azure AI Search connection. No role assignment to the
-Foundry project identity is created.
+### Authentication and RBAC
 
-This option does not create a queue, private endpoint, or private DNS zone. Use
-the shared Storage module in a network-enabled scenario when those resources or
-a private network path are required.
+Local authentication is disabled for the Foundry account and all standard agent
+data services. The Foundry project system-assigned managed identity receives the
+following roles:
+
+| Scope                  | Role                                | Purpose                    |
+|------------------------|-------------------------------------|----------------------------|
+| Storage account        | Storage Blob Data Contributor       | Read and write agent files |
+| Azure AI Search        | Search Index Data Contributor       | Read and write index data  |
+| Azure AI Search        | Search Service Contributor          | Manage Search resources    |
+| Cosmos DB account      | Cosmos DB Operator                  | Manage account metadata    |
+| `enterprise_memory` DB | Cosmos DB Built-in Data Contributor | Read and write thread data |
+
+Terraform waits 60 seconds after the control-plane role assignments. It then
+creates the account capability host and project capability host with 60-minute
+create timeouts. The project host creates the `enterprise_memory` database, so
+its Cosmos DB data-plane role assignment is applied last.
+
+The Terraform identity needs `Microsoft.Authorization/roleAssignments/write` at
+the target scopes. Contributor alone cannot create role assignments. Use Owner,
+User Access Administrator combined with the required resource permissions, or a
+custom role that grants the required actions.
+
+### Migration from standalone inputs
+
+The `deploy_azure_ai_search` and `deploy_blob_storage` inputs have been removed.
+Use `deploy_standard_agent` to deploy all three data services as one supported
+configuration. The Search `free` and `basic` SKUs are no longer accepted.
+
+> [!WARNING]
+> Migrating an existing deployment can replace the LRS Storage account with a
+> ZRS account and remove the previously managed `default` container. Review the
+> plan and preserve any required data before applying. Switching connections to
+> AAD removes active key references from configuration, but keys recorded in
+> earlier remote state versions are not deleted automatically. Retain, rotate,
+> or remove state history according to your backend security policy.
 
 ### Destroy and purge
 

@@ -5,8 +5,8 @@ description: Terraform を使用して Azure に Microsoft Foundry 環境をデ�
 # Azure Microsoft Foundry シナリオ
 
 このシナリオでは、Terraform を使用して Azure に Microsoft Foundry 環境をデプロイします。
-Foundry IQ の検索基盤として使用する Azure AI Search サービスと、Foundry プロジェクトに接続する
-Azure Blob Storage アカウントも必要に応じてデプロイできます。
+Standard Agent に必要な Bring Your Own データ サービスと capability host もデプロイできます。
+リソース キーは使用せず、Microsoft Entra ID と Foundry プロジェクトの managed identity を使用します。
 
 ## アーキテクチャ
 
@@ -15,23 +15,35 @@ flowchart TB
     Internet((インターネット))
 
     subgraph Azure["Azure リソース グループ"]
-        MF["Microsoft Foundry<br/>- アカウント<br/>- プロジェクト<br/>- モデル デプロイ"]
-        Search["Azure AI Search<br/>（オプション）"]
-        Storage["Azure Blob Storage<br/>（オプション）"]
+        Account["Microsoft Foundry account<br/>モデル デプロイ"]
+        Project["Microsoft Foundry project<br/>System-assigned identity"]
+        AccountHost["Account capability host<br/>Agents"]
+        ProjectHost["Project capability host"]
+        Search["Azure AI Search<br/>Vector store"]
+        Storage["Azure Storage<br/>Agent files"]
+        Cosmos["Azure Cosmos DB<br/>Agent threads"]
     end
 
-    Internet -->|HTTPS| MF
-    Internet -.->|有効化した場合の HTTPS| Search
-    Internet -.->|有効化した場合の HTTPS| Storage
-    MF -->|プロジェクト接続<br/>API キー| Search
-    MF -->|プロジェクト接続<br/>アカウント キー| Storage
+    Internet -->|HTTPS| Account
+    Account --> Project
+    Account --> AccountHost --> ProjectHost
+    Project -->|AAD connection| Search
+    Project -->|AAD connection| Storage
+    Project -->|AAD connection| Cosmos
+    Project -->|Managed identity と RBAC| Search
+    Project -->|Managed identity と RBAC| Storage
+    Project -->|Managed identity と RBAC| Cosmos
+    ProjectHost --> Search
+    ProjectHost --> Storage
+    ProjectHost --> Cosmos
 ```
 
 ## 前提条件
 
-- Azure サブスクリプション
-- 対象のサブスクリプションへサインイン済みの Azure CLI
-- Terraform 1.11 以降
+* Azure サブスクリプション
+* 対象のサブスクリプションへサインイン済みの Azure CLI
+* Terraform 1.11 以降
+* デプロイ対象のデータ サービスに role assignment を作成する権限
 
 共通の [Azure 認証](../../../docs/tips/provider-authentication.ja.md)、
 [Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)、および必要に応じて
@@ -44,14 +56,14 @@ flowchart TB
 
 既定では、Microsoft Foundry アカウントに次のモデルをデプロイします。
 
-| デプロイ名およびモデル | バージョン | SKU | Capacity |
-| --- | --- | --- | ---: |
-| `gpt-5.6-luna` | `2026-07-09` | `GlobalStandard` | 1000 |
-| `gpt-5.6-terra` | `2026-07-09` | `GlobalStandard` | 1000 |
-| `gpt-5.6-sol` | `2026-07-09` | `GlobalStandard` | 1000 |
-| `gpt-5.4-mini` | `2026-03-17` | `GlobalStandard` | 1000 |
-| `text-embedding-3-large` | `1` | `GlobalStandard` | 3000 |
-| `text-embedding-3-small` | `1` | `GlobalStandard` | 3000 |
+| デプロイ名およびモデル       | バージョン   | SKU              | Capacity |
+|------------------------------|----------------|------------------|---------:|
+| `gpt-5.6-luna`               | `2026-07-09`   | `GlobalStandard` |     1000 |
+| `gpt-5.6-terra`              | `2026-07-09`   | `GlobalStandard` |     1000 |
+| `gpt-5.6-sol`                | `2026-07-09`   | `GlobalStandard` |     1000 |
+| `gpt-5.4-mini`               | `2026-03-17`   | `GlobalStandard` |     1000 |
+| `text-embedding-3-large`     | `1`            | `GlobalStandard` |     3000 |
+| `text-embedding-3-small`     | `1`            | `GlobalStandard` |     3000 |
 
 適用前に `model_deployments` を確認し、対象のサブスクリプションおよびリージョンで利用できる
 モデル、バージョン、capacity、クォータに合わせて上書きしてください。モデルをデプロイせずに
@@ -61,74 +73,64 @@ flowchart TB
 model_deployments = []
 ```
 
-### Azure AI Search
+### Standard Agent リソース
 
-`deploy_azure_ai_search` の既定値は `false` です。Azure AI Search をデプロイして
-Microsoft Foundry プロジェクトに接続するには、環境固有の `terraform.tfvars` に次の値を追加します。
-
-```hcl
-deploy_azure_ai_search = true
-azure_ai_search_sku    = "free"
-```
-
-別のサポート対象 tier を使用する場合は、`azure_ai_search_sku` に `basic`、`standard`、
-`standard2`、`standard3`、`storage_optimized_l1`、または `storage_optimized_l2` を指定します。
-利用可否とクォータ要件は、サブスクリプションおよびリージョンによって異なります。
-
-> [!NOTE]
-> Azure AI Search の既定 SKU には、Foundry IQ の概念実証向けに案内されている
-> 最小コストの `free` を使用します。
-> 詳細については、[Azure AI Search の Terraform クイックスタート](https://learn.microsoft.com/en-us/azure/search/search-get-started-terraform)、
-> [Foundry IQ の概要](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/what-is-foundry-iq)、
-> [Azure AI Search の stable REST API 仕様](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search/stable)、および
-> [Microsoft Foundry プロジェクト接続の ARM スキーマ](https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)を参照してください。
-
-有効にすると、Terraform は Azure AI Search のプライマリ管理キーを使用するプロジェクト スコープの
-`CognitiveSearch` 接続を作成します。AzAPI には write-only の `sensitive_body` を通じてキーを渡すため、
-connection resource はキーの複製を state に保持しません。
-一方、AzureRM の Search resource はプライマリ キーを機密性の高い state data として保持します。
-暗号化されたリモート バックエンドを使用し、state の読み取りアクセスを必要な ID のみに制限してください。
-
-Terraform は AzAPI を使用し、Azure Resource Manager のコントロール プレーンから接続を作成します。
-[Foundry Connections API](https://ai.azure.com/api-reference/connections/list)では、作成された接続を
-一覧表示および取得できますが、接続の作成はできません。
-
-このオプションでは、ナレッジ ベース、ナレッジ ソース、インデックス、インデクサー、
-またはエージェントは作成されません。
-
-### Azure Blob Storage
-
-`deploy_blob_storage` の既定値は `false` です。Azure Blob Storage アカウントをデプロイして
-Microsoft Foundry プロジェクトに接続するには、環境固有の `terraform.tfvars` に次の値を追加します。
+`deploy_standard_agent` の既定値は `false` です。無効な場合は Foundry account、project、
+model deployments のみを作成します。Standard Agent のリソース一式を有効にするには、
+次の値を指定します。
 
 ```hcl
-deploy_blob_storage = true
+deploy_standard_agent = true
+azure_ai_search_sku   = "standard"
 ```
 
-Blob Storage を有効にすると、Storage アカウント、`default` という名前の private container、
-Microsoft Foundry プロジェクトの connection をまとめて作成します。container の名前と access type は
-シナリオの入力として公開せず、固定しています。
+リポジトリに含まれる `terraform.tfvars` ではこの構成を有効にしています。Terraform は次のリソースを
+まとめて作成します。
 
-Storage アカウントの構成はシナリオの入力として公開せず、固定しています。Standard/LRS、
-階層型名前空間無効、public network endpoint 有効、HTTPS および TLS 1.2、匿名 Blob access 無効の
-構成です。shared key 認証は有効で、Storage アカウントの managed identity および Blob soft delete は
-無効です。
+* `standard` 以上のサポート対象 SKU を使用する Azure AI Search
+* 明示的な container を管理しない Standard/ZRS Storage account
+* Session consistency を使用する Agent thread 用 Azure Cosmos DB
+* Search、Storage、Cosmos DB に対する project-scope の AAD connection
+* stable `2025-06-01` API を使用する account および project capability host
 
-有効にすると、Terraform は Storage アカウントの primary access key を使用するプロジェクト スコープの
-`AzureStorageAccount` connection を作成します。Azure Resource Manager の connection schema では
-この認証方式を `AccountKey` と呼びます。これは Azure AI Search で使用する key-based の
-`ApiKey` connection に相当する Storage 向けの認証方式です。AzAPI には write-only の
-`sensitive_body` を通じてキーを渡すため、connection resource はキーの複製を state に保持しません。
-一方、AzureRM の Storage resource は primary access key を機密性の高い state data として保持します。
-暗号化された remote backend を使用し、state の読み取りアクセスを必要な ID のみに制限してください。
+データ サービスでは public network endpoint を使用します。AAD-only 認証では認証経路から
+リソース キーを排除できますが、ネットワークは分離されません。このシナリオでは private endpoint、
+private DNS zone、Search index、knowledge base、agent application code は作成しません。
 
-Azure AI Search connection と同様に、AzAPI を使用して Azure Resource Manager の
-コントロール プレーンから作成します。Foundry プロジェクトの identity に対する role assignment は
-作成しません。
+### 認証と RBAC
 
-このオプションでは、queue、private endpoint、または private DNS zone は作成されません。
-これらのリソースや private network path が必要な場合は、network を構成したシナリオで
-共通の Storage module を使用してください。
+Foundry account とすべての Standard Agent データ サービスで local authentication を無効にします。
+Foundry project の system-assigned managed identity に次の role を割り当てます。
+
+| Scope                  | Role                                | 用途                         |
+|------------------------|-------------------------------------|------------------------------|
+| Storage account        | Storage Blob Data Contributor       | Agent file の読み書き        |
+| Azure AI Search        | Search Index Data Contributor       | Index data の読み書き        |
+| Azure AI Search        | Search Service Contributor          | Search resource の管理       |
+| Cosmos DB account      | Cosmos DB Operator                  | Account metadata の管理      |
+| `enterprise_memory` DB | Cosmos DB Built-in Data Contributor | Thread data の読み書き       |
+
+Terraform は control-plane role assignment の後に 60 秒待機します。その後、作成 timeout を 60 分に設定した
+account capability host と project capability host を作成します。Project host が `enterprise_memory`
+database を作成するため、Cosmos DB data-plane role assignment は最後に適用します。
+
+Terraform の実行 identity には、対象 scope に対する
+`Microsoft.Authorization/roleAssignments/write` が必要です。Contributor だけでは role assignment を
+作成できません。Owner、必要な resource 権限と組み合わせた User Access Administrator、または必要な
+action を付与した custom role を使用してください。
+
+### 単独展開用 input からの移行
+
+`deploy_azure_ai_search` と `deploy_blob_storage` は削除されました。3 つのデータ サービスを一つの
+サポート対象構成としてデプロイするには `deploy_standard_agent` を使用します。Search の `free` と
+`basic` SKU は指定できません。
+
+> [!WARNING]
+> 既存環境を移行すると、LRS Storage account から ZRS account への置換と、以前管理していた
+> `default` container の削除が発生する可能性があります。apply の前に plan を確認し、必要なデータを
+> 保全してください。Connection を AAD に変更すると現在の構成から key 参照はなくなりますが、過去の
+> remote state version に記録された key は自動削除されません。Backend のセキュリティ ポリシーに
+> 従って state history を保持、ローテーション、または削除してください。
 
 ### 破棄と purge
 
