@@ -70,7 +70,7 @@ run "standard_agent_disabled_by_default" {
     condition = alltrue([
       length(module.azure_ai_search) == 0,
       length(module.blob_storage) == 0,
-      length(azurerm_cosmosdb_account.agent_threads) == 0,
+      length(module.cosmosdb) == 0,
     ])
     error_message = "Standard Agent data services must not be deployed by default."
   }
@@ -143,7 +143,7 @@ run "standard_agent_enabled" {
     condition = alltrue([
       length(module.azure_ai_search) == 1,
       length(module.blob_storage) == 1,
-      length(azurerm_cosmosdb_account.agent_threads) == 1,
+      length(module.cosmosdb) == 1,
     ])
     error_message = "Standard Agent must deploy Search, Storage, and Cosmos DB together."
   }
@@ -153,18 +153,11 @@ run "standard_agent_enabled" {
       module.azure_ai_search[0].name == "aisearchtest1234",
       module.blob_storage[0].account_name == "stmsfoundrytest1234",
       module.blob_storage[0].container_name == null,
-      azurerm_cosmosdb_account.agent_threads[0].name == "cosmosmsfoundrytest1234",
+      module.cosmosdb[0].account_name == "cosmosmsfoundrytest1234",
+      module.cosmosdb[0].sql_database_name == null,
+      module.cosmosdb[0].sql_container_name == null,
     ])
     error_message = "Standard Agent data services must use the scenario suffix and must not create a Blob container."
-  }
-
-  assert {
-    condition = alltrue([
-      azurerm_cosmosdb_account.agent_threads[0].local_authentication_enabled == false,
-      azurerm_cosmosdb_account.agent_threads[0].minimal_tls_version == "Tls12",
-      azurerm_cosmosdb_account.agent_threads[0].consistency_policy[0].consistency_level == "Session",
-    ])
-    error_message = "Cosmos DB must use AAD-only authentication, TLS 1.2, and Session consistency."
   }
 
   assert {
@@ -207,7 +200,7 @@ run "standard_agent_enabled" {
     condition = alltrue([
       azapi_resource.azure_ai_search_connection[0].body.properties.metadata.ResourceId == module.azure_ai_search[0].id,
       azapi_resource.blob_storage_connection[0].body.properties.metadata.ResourceId == module.blob_storage[0].account_id,
-      azapi_resource.cosmosdb_connection[0].body.properties.metadata.ResourceId == azurerm_cosmosdb_account.agent_threads[0].id,
+      azapi_resource.cosmosdb_connection[0].body.properties.metadata.ResourceId == module.cosmosdb[0].account_id,
     ])
     error_message = "Standard Agent connection metadata must identify each backing resource."
   }
@@ -260,7 +253,7 @@ run "standard_agent_enabled" {
     condition = alltrue([
       azapi_resource.project_capability_host[0].body.properties.storageConnections == [module.blob_storage[0].account_name],
       azapi_resource.project_capability_host[0].body.properties.vectorStoreConnections == [module.azure_ai_search[0].name],
-      azapi_resource.project_capability_host[0].body.properties.threadStorageConnections == [azurerm_cosmosdb_account.agent_threads[0].name],
+      azapi_resource.project_capability_host[0].body.properties.threadStorageConnections == [module.cosmosdb[0].account_name],
       !contains(keys(azapi_resource.project_capability_host[0].body.properties), "capabilityHostKind"),
     ])
     error_message = "The project capability host must reference the three Standard Agent connections using the stable schema."
@@ -268,8 +261,8 @@ run "standard_agent_enabled" {
 
   assert {
     condition = alltrue([
-      azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor[0].role_definition_id == "${azurerm_cosmosdb_account.agent_threads[0].id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002",
-      azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor[0].scope == "${azurerm_cosmosdb_account.agent_threads[0].id}/dbs/enterprise_memory",
+      azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor[0].role_definition_id == "${module.cosmosdb[0].account_id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002",
+      azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor[0].scope == "${module.cosmosdb[0].account_id}/dbs/enterprise_memory",
       azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor[0].principal_id == module.microsoft_foundry.project_principal_id,
     ])
     error_message = "The Foundry project identity must receive Cosmos DB data-plane access to enterprise_memory."

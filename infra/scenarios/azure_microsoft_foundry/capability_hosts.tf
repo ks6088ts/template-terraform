@@ -37,7 +37,7 @@ resource "azapi_resource" "project_capability_host" {
     properties = {
       storageConnections       = [module.blob_storage[0].account_name]
       vectorStoreConnections   = [module.azure_ai_search[0].name]
-      threadStorageConnections = [azurerm_cosmosdb_account.agent_threads[0].name]
+      threadStorageConnections = [module.cosmosdb[0].account_name]
     }
   }
 

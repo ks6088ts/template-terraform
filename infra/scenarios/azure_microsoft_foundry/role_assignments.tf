@@ -25,7 +25,7 @@ resource "azurerm_role_assignment" "search_service_contributor" {
 resource "azurerm_role_assignment" "cosmos_db_operator" {
   count = var.deploy_standard_agent ? 1 : 0
 
-  scope                = azurerm_cosmosdb_account.agent_threads[0].id
+  scope                = module.cosmosdb[0].account_id
   role_definition_name = "Cosmos DB Operator"
   principal_id         = module.microsoft_foundry.project_principal_id
 }
@@ -47,10 +47,10 @@ resource "azurerm_cosmosdb_sql_role_assignment" "cosmos_data_contributor" {
   count = var.deploy_standard_agent ? 1 : 0
 
   resource_group_name = module.resource_group.name
-  account_name        = azurerm_cosmosdb_account.agent_threads[0].name
-  role_definition_id  = "${azurerm_cosmosdb_account.agent_threads[0].id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
+  account_name        = module.cosmosdb[0].account_name
+  role_definition_id  = "${module.cosmosdb[0].account_id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
   principal_id        = module.microsoft_foundry.project_principal_id
-  scope               = "${azurerm_cosmosdb_account.agent_threads[0].id}/dbs/enterprise_memory"
+  scope               = "${module.cosmosdb[0].account_id}/dbs/enterprise_memory"
 
   depends_on = [
     azapi_resource.project_capability_host,

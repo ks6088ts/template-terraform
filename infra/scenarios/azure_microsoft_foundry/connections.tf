@@ -55,18 +55,18 @@ resource "azapi_resource" "cosmosdb_connection" {
   count = var.deploy_standard_agent ? 1 : 0
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01"
-  name                      = azurerm_cosmosdb_account.agent_threads[0].name
+  name                      = module.cosmosdb[0].account_name
   parent_id                 = module.microsoft_foundry.project_id
   schema_validation_enabled = false
 
   body = {
     properties = {
       category = "CosmosDb"
-      target   = azurerm_cosmosdb_account.agent_threads[0].endpoint
+      target   = module.cosmosdb[0].account_endpoint
       authType = "AAD"
       metadata = {
         ApiType    = "Azure"
-        ResourceId = azurerm_cosmosdb_account.agent_threads[0].id
+        ResourceId = module.cosmosdb[0].account_id
         location   = var.location
       }
     }

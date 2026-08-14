@@ -60,17 +60,17 @@ output "blob_storage_connection_id" {
 
 output "cosmosdb_account_id" {
   description = "ID of the Cosmos DB account used for agent threads"
-  value       = var.deploy_standard_agent ? azurerm_cosmosdb_account.agent_threads[0].id : null
+  value       = var.deploy_standard_agent ? module.cosmosdb[0].account_id : null
 }
 
 output "cosmosdb_account_name" {
   description = "Name of the Cosmos DB account used for agent threads"
-  value       = var.deploy_standard_agent ? azurerm_cosmosdb_account.agent_threads[0].name : null
+  value       = var.deploy_standard_agent ? module.cosmosdb[0].account_name : null
 }
 
 output "cosmosdb_endpoint" {
   description = "Endpoint of the Cosmos DB account used for agent threads"
-  value       = var.deploy_standard_agent ? azurerm_cosmosdb_account.agent_threads[0].endpoint : null
+  value       = var.deploy_standard_agent ? module.cosmosdb[0].account_endpoint : null
 }
 
 output "cosmosdb_connection_id" {
