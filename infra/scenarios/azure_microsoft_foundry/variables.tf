@@ -38,6 +38,12 @@ variable "azure_ai_search_sku" {
   }
 }
 
+variable "operator_principal_id" {
+  description = "Object ID of the principal that runs the Foundry IQ setup scripts; defaults to the Terraform client principal"
+  type        = string
+  default     = null
+}
+
 variable "model_deployments" {
   description = "Specifies the model deployments for Azure AI Foundry"
   type = list(object({

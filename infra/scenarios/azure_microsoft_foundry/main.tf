@@ -16,6 +16,8 @@ locals {
   blob_storage_account_name = "stmsfoundry${local.resource_suffix}"
 }
 
+data "azurerm_client_config" "current" {}
+
 # =============================================================================
 # Resource Group
 # =============================================================================
@@ -26,6 +28,12 @@ module "resource_group" {
   name     = local.resource_name
   location = var.location
   tags     = var.tags
+}
+
+locals {
+  operator_principal_id                      = coalesce(var.operator_principal_id, data.azurerm_client_config.current.object_id)
+  foundry_user_role_definition_id            = "/subscriptions/${split("/", module.resource_group.id)[2]}/providers/Microsoft.Authorization/roleDefinitions/53ca6127-db72-4b80-b1b0-d745d6d5456d"
+  foundry_project_manager_role_definition_id = "/subscriptions/${split("/", module.resource_group.id)[2]}/providers/Microsoft.Authorization/roleDefinitions/eadc314b-1a2d-4efa-be10-5d325db5065e"
 }
 
 # =============================================================================
@@ -41,6 +49,7 @@ module "azure_ai_search" {
   location                     = module.resource_group.location
   sku                          = var.azure_ai_search_sku
   local_authentication_enabled = false
+  enable_identity              = true
   tags                         = var.tags
 }
 

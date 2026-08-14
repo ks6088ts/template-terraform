@@ -5,4 +5,11 @@ resource "azurerm_search_service" "this" {
   sku                          = var.sku
   local_authentication_enabled = var.local_authentication_enabled
   tags                         = var.tags
+
+  dynamic "identity" {
+    for_each = var.enable_identity ? [1] : []
+    content {
+      type = "SystemAssigned"
+    }
+  }
 }
