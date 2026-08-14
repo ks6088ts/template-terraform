@@ -24,7 +24,7 @@ flowchart TB
     Internet -.->|有効化した場合の HTTPS| Search
     Internet -.->|有効化した場合の HTTPS| Storage
     MF -->|プロジェクト接続<br/>API キー| Search
-    MF -->|プロジェクト接続<br/>Microsoft Entra ID| Storage
+    MF -->|プロジェクト接続<br/>アカウント キー| Storage
 ```
 
 ## 前提条件
@@ -107,22 +107,20 @@ deploy_blob_storage = true
 
 Storage アカウントの構成はシナリオの入力として公開せず、固定しています。Standard/LRS、
 階層型名前空間無効、public network endpoint 有効、HTTPS および TLS 1.2、匿名 Blob access 無効の
-構成です。shared key 認証、Storage アカウントの managed identity、および Blob soft delete は
-無効です。Blob data plane へのすべてのアクセスには Microsoft Entra ID を使用する必要があります。
+構成です。shared key 認証は有効で、Storage アカウントの managed identity および Blob soft delete は
+無効です。
 
-有効にすると、Terraform は `AAD` 認証を使用するプロジェクト スコープの
-`AzureStorageAccount` 接続を作成し、Foundry プロジェクトの system-assigned managed identity に
-Storage アカウント スコープの `Storage Blob Data Contributor` ロールを割り当てます。
-connection には Storage アカウント キーなどの保存済み credential を含めません。Azure AI Search
-connection と同様に、AzAPI を使用して Azure Resource Manager のコントロール プレーンから作成します。
+有効にすると、Terraform は Storage アカウントの primary access key を使用するプロジェクト スコープの
+`AzureStorageAccount` connection を作成します。Azure Resource Manager の connection schema では
+この認証方式を `AccountKey` と呼びます。これは Azure AI Search で使用する key-based の
+`ApiKey` connection に相当する Storage 向けの認証方式です。AzAPI には write-only の
+`sensitive_body` を通じてキーを渡すため、connection resource はキーの複製を state に保持しません。
+一方、AzureRM の Storage resource は primary access key を機密性の高い state data として保持します。
+暗号化された remote backend を使用し、state の読み取りアクセスを必要な ID のみに制限してください。
 
-> [!IMPORTANT]
-> Terraform の実行 ID には、Storage アカウント スコープの
-> `Microsoft.Authorization/roleAssignments/write` 権限が必要です。`Contributor` ロールには
-> この権限が含まれません。適切なスコープで `Role Based Access Control Administrator` または
-> `User Access Administrator` などのロールを割り当ててください。詳細については、
-> [Terraform を使用した Azure ロールの割り当て](https://learn.microsoft.com/ja-jp/azure/role-based-access-control/role-assignments-terraform)および
-> [Storage Blob Data Contributor](https://learn.microsoft.com/ja-jp/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor)を参照してください。
+Azure AI Search connection と同様に、AzAPI を使用して Azure Resource Manager の
+コントロール プレーンから作成します。Foundry プロジェクトの identity に対する role assignment は
+作成しません。
 
 このオプションでは、Blob container、queue、private endpoint、または private DNS zone は
 作成されません。これらのリソースや private network path が必要な場合は、network を構成した

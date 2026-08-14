@@ -25,7 +25,7 @@ flowchart TB
     Internet -.->|HTTPS when enabled| Search
     Internet -.->|HTTPS when enabled| Storage
     MF -->|Project connection<br/>API key| Search
-    MF -->|Project connection<br/>Microsoft Entra ID| Storage
+    MF -->|Project connection<br/>Account key| Storage
 ```
 
 ## Prerequisites
@@ -114,24 +114,22 @@ deploy_blob_storage = true
 The Storage account configuration is intentionally fixed rather than exposed as
 scenario inputs. It uses Standard/LRS storage with a flat namespace, a public
 network endpoint, HTTPS with TLS 1.2, and no anonymous Blob access. Shared key
-authentication, the Storage account managed identity, and Blob soft delete are
-disabled. All Blob data-plane access must use Microsoft Entra ID.
+authentication is enabled, while the Storage account managed identity and Blob
+soft delete are disabled.
 
 When enabled, Terraform creates a project-scoped `AzureStorageAccount`
-connection with `AAD` authentication and grants the Foundry project's
-system-assigned managed identity the `Storage Blob Data Contributor` role at the
-Storage account scope. The connection does not contain an account key or another
-stored credential. AzAPI provisions it through the same Azure Resource Manager
-control plane used for the Azure AI Search connection.
+connection that uses the Storage account primary access key. The Azure Resource
+Manager connection schema calls this authentication type `AccountKey`; it is the
+Storage equivalent of the key-based `ApiKey` connection used for Azure AI
+Search. AzAPI receives the key through its write-only `sensitive_body`, so the
+connection resource does not persist another copy in state. The AzureRM Storage
+resource still retains its primary access key as sensitive state data. Use an
+encrypted remote backend and restrict state read access to only the identities
+that require it.
 
-> [!IMPORTANT]
-> The identity running Terraform needs the
-> `Microsoft.Authorization/roleAssignments/write` permission at the Storage
-> account scope. The `Contributor` role does not include this permission. Assign
-> a role such as `Role Based Access Control Administrator` or `User Access
-> Administrator` at an appropriate scope. See
-> [Assign Azure roles using Terraform](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-terraform)
-> and [Storage Blob Data Contributor](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor).
+AzAPI provisions the connection through the same Azure Resource Manager control
+plane used for the Azure AI Search connection. No role assignment to the
+Foundry project identity is created.
 
 This option does not create a Blob container, queue, private endpoint, or private
 DNS zone. Use the shared Storage module in a network-enabled scenario when those

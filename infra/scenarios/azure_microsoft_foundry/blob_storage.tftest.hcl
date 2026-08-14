@@ -11,6 +11,7 @@ mock_provider "azurerm" {
     defaults = {
       id                    = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.Storage/storageAccounts/stmsfoundrytest1234"
       primary_blob_endpoint = "https://stmsfoundrytest1234.blob.core.windows.net/"
+      primary_access_key    = "test-storage-account-key"
     }
   }
 }
@@ -55,11 +56,6 @@ run "blob_storage_disabled_by_default" {
   }
 
   assert {
-    condition     = length(azurerm_role_assignment.blob_storage_data_contributor) == 0
-    error_message = "The Blob Storage role assignment must not be created when deployment is disabled."
-  }
-
-  assert {
     condition     = length(azapi_resource.blob_storage_connection) == 0
     error_message = "The Blob Storage connection must not be created when deployment is disabled."
   }
@@ -95,31 +91,6 @@ run "blob_storage_enabled" {
   }
 
   assert {
-    condition     = length(azurerm_role_assignment.blob_storage_data_contributor) == 1
-    error_message = "One Blob Storage role assignment must be created when deployment is enabled."
-  }
-
-  assert {
-    condition     = azurerm_role_assignment.blob_storage_data_contributor[0].scope == module.blob_storage[0].account_id
-    error_message = "The Blob Storage role assignment scope must be the Storage account."
-  }
-
-  assert {
-    condition     = azurerm_role_assignment.blob_storage_data_contributor[0].role_definition_name == "Storage Blob Data Contributor"
-    error_message = "The Foundry project identity must receive the Storage Blob Data Contributor role."
-  }
-
-  assert {
-    condition     = azurerm_role_assignment.blob_storage_data_contributor[0].principal_id == module.microsoft_foundry.project_principal_id
-    error_message = "The Blob Storage role assignment principal must be the Microsoft Foundry project identity."
-  }
-
-  assert {
-    condition     = azurerm_role_assignment.blob_storage_data_contributor[0].principal_type == "ServicePrincipal"
-    error_message = "The Blob Storage role assignment principal type must be ServicePrincipal."
-  }
-
-  assert {
     condition     = length(azapi_resource.blob_storage_connection) == 1
     error_message = "One Blob Storage connection must be created when deployment is enabled."
   }
@@ -145,8 +116,8 @@ run "blob_storage_enabled" {
   }
 
   assert {
-    condition     = azapi_resource.blob_storage_connection[0].body.properties.authType == "AAD"
-    error_message = "The Blob Storage connection must use AAD authentication."
+    condition     = azapi_resource.blob_storage_connection[0].body.properties.authType == "AccountKey"
+    error_message = "The Blob Storage connection must use account key authentication."
   }
 
   assert {
@@ -171,7 +142,12 @@ run "blob_storage_enabled" {
 
   assert {
     condition     = !contains(keys(azapi_resource.blob_storage_connection[0].body.properties), "credentials")
-    error_message = "The AAD Blob Storage connection must not contain credentials."
+    error_message = "The Blob Storage account key must not be stored in the non-sensitive body."
+  }
+
+  assert {
+    condition     = nonsensitive(module.blob_storage[0].primary_access_key) == "test-storage-account-key"
+    error_message = "The Blob Storage module must expose the primary access key for the connection."
   }
 
   assert {

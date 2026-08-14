@@ -63,7 +63,7 @@ module "blob_storage" {
   allow_nested_items_to_be_public = false
   https_traffic_only_enabled      = true
   min_tls_version                 = "TLS1_2"
-  shared_access_key_enabled       = false
+  shared_access_key_enabled       = true
   enable_identity                 = false
   private_endpoint                = null
   enable_blob_soft_delete         = false

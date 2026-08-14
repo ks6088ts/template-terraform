@@ -1,12 +1,3 @@
-resource "azurerm_role_assignment" "blob_storage_data_contributor" {
-  count = var.deploy_blob_storage ? 1 : 0
-
-  scope                = module.blob_storage[0].account_id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = module.microsoft_foundry.project_principal_id
-  principal_type       = "ServicePrincipal"
-}
-
 resource "azapi_resource" "blob_storage_connection" {
   count = var.deploy_blob_storage ? 1 : 0
 
@@ -19,7 +10,7 @@ resource "azapi_resource" "blob_storage_connection" {
     properties = {
       category = "AzureStorageAccount"
       target   = module.blob_storage[0].primary_blob_endpoint
-      authType = "AAD"
+      authType = "AccountKey"
       metadata = {
         ApiType    = "Azure"
         ResourceId = module.blob_storage[0].account_id
@@ -28,7 +19,11 @@ resource "azapi_resource" "blob_storage_connection" {
     }
   }
 
-  depends_on = [
-    azurerm_role_assignment.blob_storage_data_contributor,
-  ]
+  sensitive_body = {
+    properties = {
+      credentials = {
+        key = module.blob_storage[0].primary_access_key
+      }
+    }
+  }
 }
