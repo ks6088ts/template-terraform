@@ -15,7 +15,8 @@ description: Bastion、VM、Blob へのプライベート アクセスを備え�
   - `AzureBastionSubnet`: Azure Bastion 用 (/26 以上)
   - `snet-paas-*`: PaaS プライベート エンドポイント用
   - `snet-vm-*`: 仮想マシン用
-- **ストレージ アカウント**: Blob Storage 用のプライベート エンドポイントを構成
+- **ストレージ アカウント**: 共通 Storage モジュールを使用し、パブリック ネットワーク アクセスを無効化して Blob 用プライベート エンドポイントを構成
+- **プライベート DNS**: `privatelink.blob.core.windows.net` を作成し、スポーク VNet にリンク
 - **仮想マシン**: SSH キー認証を使用する Ubuntu 24.04 LTS
 - **Azure Bastion**: パブリック IP を使用せずに VM へ安全にアクセス
 

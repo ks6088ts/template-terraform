@@ -12,8 +12,11 @@ resource "azurerm_storage_account" "this" {
   min_tls_version                 = var.min_tls_version
   shared_access_key_enabled       = var.shared_access_key_enabled
 
-  identity {
-    type = "SystemAssigned"
+  dynamic "identity" {
+    for_each = var.enable_identity ? [1] : []
+    content {
+      type = "SystemAssigned"
+    }
   }
 
   dynamic "blob_properties" {
@@ -40,4 +43,48 @@ resource "azurerm_storage_container" "this" {
   name                  = var.container_name
   storage_account_id    = azurerm_storage_account.this.id
   container_access_type = var.container_access_type
+}
+
+resource "azurerm_private_dns_zone" "blob" {
+  count = var.private_endpoint == null ? 0 : (var.private_endpoint.create_private_dns_zone ? 1 : 0)
+
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "blob" {
+  count = var.private_endpoint == null ? 0 : (var.private_endpoint.create_private_dns_zone ? 1 : 0)
+
+  name                 = "link-blob-${var.name}"
+  private_dns_zone_id  = azurerm_private_dns_zone.blob[0].id
+  virtual_network_id   = var.private_endpoint.virtual_network_id
+  registration_enabled = false
+  tags                 = var.tags
+}
+
+resource "azurerm_private_endpoint" "blob" {
+  count = var.private_endpoint == null ? 0 : 1
+
+  name                = "pe-blob-${var.name}"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  subnet_id           = var.private_endpoint.subnet_id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "psc-blob-${var.name}"
+    private_connection_resource_id = azurerm_storage_account.this.id
+    is_manual_connection           = false
+    subresource_names              = ["blob"]
+  }
+
+  private_dns_zone_group {
+    name = "pdz-blob-${var.name}"
+    private_dns_zone_ids = [
+      var.private_endpoint.create_private_dns_zone
+      ? azurerm_private_dns_zone.blob[0].id
+      : var.private_endpoint.private_dns_zone_id
+    ]
+  }
 }

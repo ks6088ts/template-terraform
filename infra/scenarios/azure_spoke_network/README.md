@@ -15,7 +15,8 @@ This configuration creates:
   - `AzureBastionSubnet`: For Azure Bastion (/26 or larger)
   - `snet-paas-*`: For PaaS Private Endpoints
   - `snet-vm-*`: For Virtual Machines
-- **Storage Account**: With private endpoint for blob storage
+- **Storage Account**: Uses the shared storage module with public network access disabled and a private endpoint for Blob storage
+- **Private DNS**: Creates `privatelink.blob.core.windows.net` and links it to the spoke VNet
 - **Virtual Machine**: Ubuntu 24.04 LTS with SSH key authentication
 - **Azure Bastion**: For secure VM access without public IPs
 
