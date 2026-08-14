@@ -57,3 +57,13 @@ output "blob_storage_connection_id" {
   description = "ID of the Azure Blob Storage connection in the Microsoft Foundry project"
   value       = var.deploy_blob_storage ? azapi_resource.blob_storage_connection[0].id : null
 }
+
+output "blob_storage_container_id" {
+  description = "ID of the optional private Blob Storage container"
+  value       = var.deploy_blob_storage ? module.blob_storage[0].container_id : null
+}
+
+output "blob_storage_container_name" {
+  description = "Name of the optional private Blob Storage container"
+  value       = var.deploy_blob_storage ? module.blob_storage[0].container_name : null
+}

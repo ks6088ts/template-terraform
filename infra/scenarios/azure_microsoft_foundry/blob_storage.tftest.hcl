@@ -14,6 +14,12 @@ mock_provider "azurerm" {
       primary_access_key    = "test-storage-account-key"
     }
   }
+
+  mock_resource "azurerm_storage_container" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.Storage/storageAccounts/stmsfoundrytest1234/blobServices/default/containers/default"
+    }
+  }
 }
 
 mock_provider "azapi" {
@@ -66,6 +72,8 @@ run "blob_storage_disabled_by_default" {
       output.blob_storage_account_name == null,
       output.blob_storage_endpoint == null,
       output.blob_storage_connection_id == null,
+      output.blob_storage_container_id == null,
+      output.blob_storage_container_name == null,
     ])
     error_message = "The Blob Storage outputs must be null when deployment is disabled."
   }
@@ -88,6 +96,11 @@ run "blob_storage_enabled" {
   assert {
     condition     = module.blob_storage[0].account_name == "stmsfoundrytest1234"
     error_message = "The Storage account name must use the scenario resource suffix."
+  }
+
+  assert {
+    condition     = module.blob_storage[0].container_name == "default"
+    error_message = "A private Blob Storage container named default must be created with the Storage account."
   }
 
   assert {
@@ -156,6 +169,8 @@ run "blob_storage_enabled" {
       output.blob_storage_account_name == module.blob_storage[0].account_name,
       output.blob_storage_endpoint == module.blob_storage[0].primary_blob_endpoint,
       output.blob_storage_connection_id == azapi_resource.blob_storage_connection[0].id,
+      output.blob_storage_container_id == module.blob_storage[0].container_id,
+      output.blob_storage_container_name == module.blob_storage[0].container_name,
     ])
     error_message = "The Blob Storage outputs must match the created resources."
   }

@@ -105,6 +105,10 @@ Microsoft Foundry プロジェクトに接続するには、環境固有の `ter
 deploy_blob_storage = true
 ```
 
+Blob Storage を有効にすると、Storage アカウント、`default` という名前の private container、
+Microsoft Foundry プロジェクトの connection をまとめて作成します。container の名前と access type は
+シナリオの入力として公開せず、固定しています。
+
 Storage アカウントの構成はシナリオの入力として公開せず、固定しています。Standard/LRS、
 階層型名前空間無効、public network endpoint 有効、HTTPS および TLS 1.2、匿名 Blob access 無効の
 構成です。shared key 認証は有効で、Storage アカウントの managed identity および Blob soft delete は
@@ -122,9 +126,9 @@ Azure AI Search connection と同様に、AzAPI を使用して Azure Resource M
 コントロール プレーンから作成します。Foundry プロジェクトの identity に対する role assignment は
 作成しません。
 
-このオプションでは、Blob container、queue、private endpoint、または private DNS zone は
-作成されません。これらのリソースや private network path が必要な場合は、network を構成した
-シナリオで共通の Storage module を使用してください。
+このオプションでは、queue、private endpoint、または private DNS zone は作成されません。
+これらのリソースや private network path が必要な場合は、network を構成したシナリオで
+共通の Storage module を使用してください。
 
 ### 破棄と purge
 

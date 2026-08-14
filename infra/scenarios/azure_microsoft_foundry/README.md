@@ -111,6 +111,10 @@ account and connect it to the Microsoft Foundry project:
 deploy_blob_storage = true
 ```
 
+Enabling Blob Storage creates the Storage account, a private container named
+`default`, and the Microsoft Foundry project connection together. The container
+name and access type are fixed rather than exposed as scenario inputs.
+
 The Storage account configuration is intentionally fixed rather than exposed as
 scenario inputs. It uses Standard/LRS storage with a flat namespace, a public
 network endpoint, HTTPS with TLS 1.2, and no anonymous Blob access. Shared key
@@ -131,9 +135,9 @@ AzAPI provisions the connection through the same Azure Resource Manager control
 plane used for the Azure AI Search connection. No role assignment to the
 Foundry project identity is created.
 
-This option does not create a Blob container, queue, private endpoint, or private
-DNS zone. Use the shared Storage module in a network-enabled scenario when those
-resources or a private network path are required.
+This option does not create a queue, private endpoint, or private DNS zone. Use
+the shared Storage module in a network-enabled scenario when those resources or
+a private network path are required.
 
 ### Destroy and purge
 

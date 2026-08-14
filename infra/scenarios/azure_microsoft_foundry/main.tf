@@ -68,7 +68,9 @@ module "blob_storage" {
   private_endpoint                = null
   enable_blob_soft_delete         = false
   create_queue                    = false
-  create_container                = false
+  create_container                = true
+  container_name                  = "default"
+  container_access_type           = "private"
 }
 
 # =============================================================================
