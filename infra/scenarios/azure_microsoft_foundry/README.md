@@ -6,7 +6,8 @@ description: Deploy a Microsoft Foundry environment on Azure with Terraform
 
 This scenario deploys a Microsoft Foundry environment on Azure using Terraform.
 It can also deploy an Azure AI Search service for use as the retrieval
-infrastructure underlying Foundry IQ.
+infrastructure underlying Foundry IQ and an Azure Blob Storage account connected
+to the Foundry project.
 
 ## Architecture
 
@@ -17,11 +18,14 @@ flowchart TB
     subgraph Azure["Azure Resource Group"]
         MF["Microsoft Foundry<br/>- Account<br/>- Project<br/>- Model deployments"]
         Search["Azure AI Search<br/>(optional)"]
+        Storage["Azure Blob Storage<br/>(optional)"]
     end
 
     Internet -->|HTTPS| MF
     Internet -.->|HTTPS when enabled| Search
+    Internet -.->|HTTPS when enabled| Storage
     MF -->|Project connection<br/>API key| Search
+    MF -->|Project connection<br/>Microsoft Entra ID| Storage
 ```
 
 ## Prerequisites
@@ -96,6 +100,42 @@ can list and retrieve the resulting connection but does not create it.
 
 This option does not create a knowledge base, knowledge source, index, indexer,
 or agent.
+
+### Azure Blob Storage
+
+The `deploy_blob_storage` input defaults to `false`. Add the following value to
+an environment-specific `terraform.tfvars` file to deploy an Azure Blob Storage
+account and connect it to the Microsoft Foundry project:
+
+```hcl
+deploy_blob_storage = true
+```
+
+The Storage account configuration is intentionally fixed rather than exposed as
+scenario inputs. It uses Standard/LRS storage with a flat namespace, a public
+network endpoint, HTTPS with TLS 1.2, and no anonymous Blob access. Shared key
+authentication, the Storage account managed identity, and Blob soft delete are
+disabled. All Blob data-plane access must use Microsoft Entra ID.
+
+When enabled, Terraform creates a project-scoped `AzureStorageAccount`
+connection with `AAD` authentication and grants the Foundry project's
+system-assigned managed identity the `Storage Blob Data Contributor` role at the
+Storage account scope. The connection does not contain an account key or another
+stored credential. AzAPI provisions it through the same Azure Resource Manager
+control plane used for the Azure AI Search connection.
+
+> [!IMPORTANT]
+> The identity running Terraform needs the
+> `Microsoft.Authorization/roleAssignments/write` permission at the Storage
+> account scope. The `Contributor` role does not include this permission. Assign
+> a role such as `Role Based Access Control Administrator` or `User Access
+> Administrator` at an appropriate scope. See
+> [Assign Azure roles using Terraform](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-terraform)
+> and [Storage Blob Data Contributor](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor).
+
+This option does not create a Blob container, queue, private endpoint, or private
+DNS zone. Use the shared Storage module in a network-enabled scenario when those
+resources or a private network path are required.
 
 ### Destroy and purge
 

@@ -27,6 +27,12 @@ variable "deploy_azure_ai_search" {
   default     = false
 }
 
+variable "deploy_blob_storage" {
+  description = "Deploy an Azure Blob Storage account and connect it to the Microsoft Foundry project"
+  type        = bool
+  default     = false
+}
+
 variable "azure_ai_search_sku" {
   description = "SKU for the Azure AI Search service"
   type        = string

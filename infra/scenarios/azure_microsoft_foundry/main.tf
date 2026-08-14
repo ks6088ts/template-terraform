@@ -10,9 +10,10 @@ module "random_string" {
 }
 
 locals {
-  resource_suffix        = module.random_string.result
-  resource_name          = "${trim(substr(var.name, 0, 78), "-")}-${local.resource_suffix}"
-  microsoft_foundry_name = "msfoundry${local.resource_suffix}"
+  resource_suffix           = module.random_string.result
+  resource_name             = "${trim(substr(var.name, 0, 78), "-")}-${local.resource_suffix}"
+  microsoft_foundry_name    = "msfoundry${local.resource_suffix}"
+  blob_storage_account_name = "stmsfoundry${local.resource_suffix}"
 }
 
 # =============================================================================
@@ -40,6 +41,34 @@ module "azure_ai_search" {
   location            = module.resource_group.location
   sku                 = var.azure_ai_search_sku
   tags                = var.tags
+}
+
+# =============================================================================
+# Azure Blob Storage
+# =============================================================================
+
+module "blob_storage" {
+  source = "../../modules/azure/storage"
+  count  = var.deploy_blob_storage ? 1 : 0
+
+  name                            = local.resource_name
+  storage_account_name            = local.blob_storage_account_name
+  resource_group_name             = module.resource_group.name
+  location                        = module.resource_group.location
+  tags                            = var.tags
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  is_hns_enabled                  = false
+  public_network_access_enabled   = true
+  allow_nested_items_to_be_public = false
+  https_traffic_only_enabled      = true
+  min_tls_version                 = "TLS1_2"
+  shared_access_key_enabled       = false
+  enable_identity                 = false
+  private_endpoint                = null
+  enable_blob_soft_delete         = false
+  create_queue                    = false
+  create_container                = false
 }
 
 # =============================================================================

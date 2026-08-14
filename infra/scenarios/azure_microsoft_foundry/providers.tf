@@ -13,6 +13,7 @@ provider "azurerm" {
       "Microsoft.Resources",
     ],
     var.deploy_azure_ai_search ? ["Microsoft.Search"] : [],
+    var.deploy_blob_storage ? ["Microsoft.Storage"] : [],
   )
 }
 

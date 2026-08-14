@@ -5,7 +5,8 @@ description: Terraform を使用して Azure に Microsoft Foundry 環境をデ�
 # Azure Microsoft Foundry シナリオ
 
 このシナリオでは、Terraform を使用して Azure に Microsoft Foundry 環境をデプロイします。
-Foundry IQ の検索基盤として使用する Azure AI Search サービスも必要に応じてデプロイできます。
+Foundry IQ の検索基盤として使用する Azure AI Search サービスと、Foundry プロジェクトに接続する
+Azure Blob Storage アカウントも必要に応じてデプロイできます。
 
 ## アーキテクチャ
 
@@ -16,11 +17,14 @@ flowchart TB
     subgraph Azure["Azure リソース グループ"]
         MF["Microsoft Foundry<br/>- アカウント<br/>- プロジェクト<br/>- モデル デプロイ"]
         Search["Azure AI Search<br/>（オプション）"]
+        Storage["Azure Blob Storage<br/>（オプション）"]
     end
 
     Internet -->|HTTPS| MF
     Internet -.->|有効化した場合の HTTPS| Search
+    Internet -.->|有効化した場合の HTTPS| Storage
     MF -->|プロジェクト接続<br/>API キー| Search
+    MF -->|プロジェクト接続<br/>Microsoft Entra ID| Storage
 ```
 
 ## 前提条件
@@ -91,6 +95,38 @@ Terraform は AzAPI を使用し、Azure Resource Manager のコントロール 
 
 このオプションでは、ナレッジ ベース、ナレッジ ソース、インデックス、インデクサー、
 またはエージェントは作成されません。
+
+### Azure Blob Storage
+
+`deploy_blob_storage` の既定値は `false` です。Azure Blob Storage アカウントをデプロイして
+Microsoft Foundry プロジェクトに接続するには、環境固有の `terraform.tfvars` に次の値を追加します。
+
+```hcl
+deploy_blob_storage = true
+```
+
+Storage アカウントの構成はシナリオの入力として公開せず、固定しています。Standard/LRS、
+階層型名前空間無効、public network endpoint 有効、HTTPS および TLS 1.2、匿名 Blob access 無効の
+構成です。shared key 認証、Storage アカウントの managed identity、および Blob soft delete は
+無効です。Blob data plane へのすべてのアクセスには Microsoft Entra ID を使用する必要があります。
+
+有効にすると、Terraform は `AAD` 認証を使用するプロジェクト スコープの
+`AzureStorageAccount` 接続を作成し、Foundry プロジェクトの system-assigned managed identity に
+Storage アカウント スコープの `Storage Blob Data Contributor` ロールを割り当てます。
+connection には Storage アカウント キーなどの保存済み credential を含めません。Azure AI Search
+connection と同様に、AzAPI を使用して Azure Resource Manager のコントロール プレーンから作成します。
+
+> [!IMPORTANT]
+> Terraform の実行 ID には、Storage アカウント スコープの
+> `Microsoft.Authorization/roleAssignments/write` 権限が必要です。`Contributor` ロールには
+> この権限が含まれません。適切なスコープで `Role Based Access Control Administrator` または
+> `User Access Administrator` などのロールを割り当ててください。詳細については、
+> [Terraform を使用した Azure ロールの割り当て](https://learn.microsoft.com/ja-jp/azure/role-based-access-control/role-assignments-terraform)および
+> [Storage Blob Data Contributor](https://learn.microsoft.com/ja-jp/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor)を参照してください。
+
+このオプションでは、Blob container、queue、private endpoint、または private DNS zone は
+作成されません。これらのリソースや private network path が必要な場合は、network を構成した
+シナリオで共通の Storage module を使用してください。
 
 ### 破棄と purge
 
