@@ -11,23 +11,118 @@ identity を使用します。デプロイ後は、連番の POSIX shell script 
 データをアップロードし、Foundry IQ knowledge source と knowledge base、MCP 接続を使用する
 Prompt Agent、Q&A を構築できます。
 
+## この README を読むための基礎用語
+
+この章では、Microsoft Foundry を初めて使用する場合でも後続の構成と処理を追えるように、
+このシナリオで使う用語だけを先に説明します。製品名や API の object 名は公式ドキュメントと
+照合できるよう英語表記を残します。
+
+### Foundry の構成単位
+
+| 用語 | 平易な説明 | このシナリオでの位置づけ |
+| --- | --- | --- |
+| [Microsoft Foundry account](https://learn.microsoft.com/azure/foundry/what-is-foundry) | Project と model deployment をまとめる親の Azure resource です。 | Terraform が 1 つ作成します。 |
+| [Foundry project](https://learn.microsoft.com/azure/foundry/how-to/create-projects) | Agent、接続、会話などをまとめる workspace です。同じ project の Agent は接続済みの保存先を共有し、別 project のデータとは分離されます。 | Account 内に 1 つ作成します。 |
+| [Model deployment](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) | 選択した model と version を、名前、処理方式（SKU）、capacity とともに API から呼び出せるようにしたものです。Agent 自体ではありません。 | Terraform が `model_deployments` の指定に従って作成します。 |
+| [Foundry Agent Service](https://learn.microsoft.com/azure/foundry/agents/overview) | Agent の定義、実行、会話状態を管理する Microsoft のサービスです。単独の大規模言語モデル（LLM）ではなく、model と tool を組み合わせて Agent を実行する runtime です。 | 後述の Prompt Agent を実行します。 |
+| [Prompt Agent](https://learn.microsoft.com/azure/foundry/agents/quickstarts/prompt-agent) | Instructions、使用する model、tool を設定として定義し、Foundry が実行する Agent です。利用者が Agent 用の application code や container をホストする Hosted Agent とは異なります。 | Script `07` が version を作成します。 |
+
+### Basic setup と Standard setup
+
+ここでいう **setup** は、Agent の種類ではなく、Agent Service が状態データをどこに保存するかを決める
+環境構成です。状態データには upload file、検索用の vector store、conversation、Agent definition などが
+含まれます。公式の比較は
+[Agent 環境の構築](https://learn.microsoft.com/azure/foundry/agents/environment-setup#choose-your-setup)を
+参照してください。
+
+| Setup | 状態データの保存先 | 利用者が管理するもの | このシナリオ |
+| --- | --- | --- | --- |
+| [Basic setup](https://learn.microsoft.com/azure/foundry/agents/environment-setup#choose-your-setup) | Microsoft が管理する platform 内の保存先 | Foundry account、project、model など | 使用しない |
+| [Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup) | 利用者の Azure subscription 内にある、その利用者専用の Storage、Search、Cosmos DB | Basic setup の resource に加えて 3 つの data service、接続、権限 | 使用する |
+| [Standard setup with Bring Your Own（BYO）VNet](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) | Standard setup と同じ利用者管理 resource。通信経路も利用者の virtual network 内に制限する | Private endpoint、DNS、network policy なども必要 | 対象外 |
+
+したがって、**Standard はデータ保存方式の選択であり、model、model SKU、Agent の種類、推論性能を
+表す名前ではありません**。このシナリオは public endpoint を使う Standard setup 上で Prompt Agent を
+動かします。
+
+### リソース接続と認証
+
+| 用語 | この README での意味 |
+| --- | --- |
+| [Managed identity](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview) | Azure resource に割り当てる Microsoft Entra ID の identity です。Azure が credential を管理するため、code や Terraform state に password や resource key を保存せず access token を取得できます。このシナリオでは主に Foundry project identity と Search identity を使います。 |
+| [Keyless 認証](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry) | Storage や Search の resource key、API key、connection string ではなく、Microsoft Entra ID が発行する短時間有効な access token で認証する方式です。「認証がない」という意味ではありません。 |
+| [Azure RBAC](https://learn.microsoft.com/azure/role-based-access-control/overview) | 「どの identity が、どの scope で、何を実行できるか」を role assignment で決める認可方式です。Identity が token を取得できても、対象 resource に必要な role がなければ request は `403` になります。 |
+| [Project connection](https://learn.microsoft.com/azure/foundry/how-to/connections-add) | Foundry project から外部 resource を参照するための構成 object です。対象 API の URL（endpoint）、resource ID、認証方式などを保持しますが、Storage や Search のデータ本体を複製するものではありません。 |
+| [Capability host](https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts) | Foundry account または project 配下に作る ARM の構成 object で、Agent Service が使用する connection を指定します。Application を実行する host や server ではありません。Account capability host は Agent Service を account で有効にし、project capability host は Storage、Search、Cosmos DB のどの connection を使うかを選びます。 |
+| [Access token の audience](https://learn.microsoft.com/entra/identity-platform/access-tokens) | Token を受け取る API を表す識別子です。ARM、Storage、Search、Foundry は別の API なので、同じ identity を使う場合でも audience ごとに token を取得します。`https://search.azure.com/.default` などの scope は、その API 向け token を Microsoft Entra ID に要求する値です。 |
+
+#### Capability host の役割と存在意義
+
+Project connection と capability host は一緒に使いますが、役割は異なります。平易に言えば、
+**connection は接続先を登録したアドレス帳、capability host は Agent Service が用途ごとにどの登録を
+使うかを決める割り当て表**です。
+
+Foundry project には、Search や Storage などへの connection を複数登録できます。しかし、connection が
+存在するだけでは、Agent Service は「どれを file の保存先にするか」「どれを conversation の保存先に
+するか」を判断できません。Capability host が connection に用途を割り当てることで、同じ project の
+すべての Agent が同じ保存先を一貫して使用できます。Connection の再利用可能な接続情報と、Agent Service
+固有の保存先設定を分離できることが capability host の存在意義です。
+
+| 構成要素 | 担当すること | 担当しないこと |
+| --- | --- | --- |
+| Project connection | 対象 resource の endpoint、resource ID、認証方式を登録する | Agent Service での用途を決めない |
+| Account capability host | Foundry account で Agent Service を有効にする | Project の保存先を自動的に選ばない |
+| Project capability host | `storageConnections` に Storage、`vectorStoreConnections` に Search、`threadStorageConnections` に Cosmos DB の connection を割り当てる | データを自身に保存したり、request を中継したりしない |
+| Managed identity と RBAC | 割り当てられた resource を実際に利用する identity と権限を提供する | 保存先の選択は行わない |
+
+Basic setup では capability host を作成せず、Agent Service は Microsoft 管理の既定の保存先を使用します。
+Standard setup では account と project の両方に capability host が必要です。実行時には Agent Service が
+project capability host を読み、用途に対応する connection を解決し、managed identity と RBAC を使用して
+対象の Storage、Search、Cosmos DB へアクセスします。
+
+Capability host 自体は database、compute、network gateway ではなく、データを保持せず、権限も付与しません。
+各 account と project で有効にできる capability host は 1 つだけで、保存先を変更する場合は既存のものを
+削除して新しい構成で作り直します。
+
+### Knowledge retrieval
+
+| 用語 | この README での意味 |
+| --- | --- |
+| [Foundry IQ](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq) | Agent が独自データを検索できるようにする knowledge layer です。Azure AI Search 上の knowledge source と knowledge base をまとめて利用します。 |
+| [Knowledge source](https://learn.microsoft.com/azure/search/agentic-knowledge-source-overview) | 検索対象データへの接続と取り込み方法を表す object です。このシナリオでは Blob 上の CSV を指定し、service が長い content を検索しやすい単位へ分割する chunking、embedding の生成、検索 index の作成を行う pipeline を生成します。 |
+| [Embedding と vector search](https://learn.microsoft.com/azure/search/vector-search-overview) | Embedding は文章の意味を数値の並びで表現する処理です。Vector search は質問と意味が近い文章を、その数値同士の近さから探します。 |
+| [Knowledge base](https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base) | 1 つ以上の knowledge source と検索方法をまとめ、関連箇所を取得する retrieval API として公開する top-level object です。Index 自体や Agent と同じものではありません。 |
+| [Agentic retrieval](https://learn.microsoft.com/azure/search/agentic-retrieval-overview) | 質問を必要に応じて複数の検索へ分解し、結果を再順位付けして、根拠となる情報をまとめて返す検索処理です。このシナリオの `minimal` 設定では LLM による query planning を行いません。 |
+| [Model Context Protocol（MCP）](https://modelcontextprotocol.io/introduction) | AI application が外部の tool や data source を共通形式で呼ぶための open protocol です。RemoteTool connection は Search knowledge base の MCP endpoint を Prompt Agent に見せる project connection です。 |
+| [Grounded answer と citation](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq#capabilities) | Grounded answer は取得したデータを根拠に生成した回答、citation はその根拠を追跡するための参照情報です。Model が事前学習だけから推測した回答と区別します。 |
+
+このシナリオの処理を一文で表すと、**CSV を Blob に保存し、knowledge source が検索用 index を作り、
+knowledge base が関連箇所を取得し、Prompt Agent が MCP 経由でその結果を受け取り、根拠付きの回答を
+生成する**という流れです。
+
 ## シナリオの目的
 
-### 「Standard Agent」の意味
+### このシナリオでいう「Standard Agent」
 
-Foundry Agent Service における **Standard setup は環境とデータの保存方式であり、Agent の種類、
-model SKU、runtime tier ではありません**。Basic setup は Agent state を Microsoft 管理の storage に
-保存します。Standard setup は Foundry project を利用者の subscription 内にある single-tenant の
-リソースへ接続します。
+Terraform input の `deploy_standard_agent` と一部の説明にある「Standard Agent」は、
+**Standard setup 用 infrastructure 上で動く Agent** という意味です。正式な Agent 種別名ではありません。
+この README では、次の 2 つを分けて扱います。
+
+| 選択するもの | このシナリオの選択 | 何が決まるか |
+| --- | --- | --- |
+| Agent Service の setup | Public network を使う Standard setup | Agent state の保存先と network 構成 |
+| Agent の種類 | Prompt Agent | Agent を instructions、model、tool の設定として管理する実装方式 |
+
+Standard setup は Foundry project を利用者の subscription 内にある利用者専用の resource へ接続します。
+各 resource の担当は次のとおりです。
 
 * Azure Storage は file と upload data を保存します。
 * Azure AI Search は vector store と retrieval index を保存します。
 * Azure Cosmos DB は conversation、response、Agent metadata を保存します。
 
-Account と project の capability host が、Agent Service で使用する接続済みリソースを指定します。
-Script `07` が後から作成する Agent は **Prompt Agent** であり、Terraform が構築した Standard setup 上で
-動作します。このシナリオは public network と Microsoft Entra による keyless 認証を使用します。
-Bring Your Own VNet を使用する network-isolated Standard setup ではありません。
+Account と project の capability host が、これらの接続済み resource を Agent Service に指定します。
+このシナリオは Microsoft Entra ID による keyless 認証を使いますが、public network endpoint は有効です。
+したがって、認証から resource key を排除しますが、通信を private network に分離する構成ではありません。
 
 ### このシナリオで構築するもの
 
@@ -70,37 +165,74 @@ request 実行時に各 surface が通信するタイミングを表します。
 
 ### ARM Control Plane と service Data Plane
 
-この図が示す内容は、**object が Azure resource なのか service 内の runtime object なのか、
-このシナリオではどの tool が管理するのか**です。
+以下の図が示す内容は、**object が Azure resource なのか service 内の runtime object なのか、
+このシナリオではどの tool が管理するのか**です。すべての要素を一つの大きな枠に入れず、
+Azure resource ごとに分けて示します。各図の Control Plane は Azure Resource Manager（ARM）で
+resource の構成を管理する面、Data Plane は作成済み resource 内のデータや Agent の実行時に作成・利用する
+object を扱う面です。ここで object は、API から作成、取得、削除する構成またはデータの単位を指します。
+
+#### Microsoft Foundry account と project
 
 ```mermaid
-flowchart TB
-        subgraph ControlPlane["ARM Control Plane - management.azure.com"]
-        direction LR
-                ControlClients["Terraform<br/>script 06、09 の ARM REST"]
-                ArmObjects["Azure resource<br/>Foundry account、project、model、connection、capability host<br/>Search、Storage、Cosmos DB、managed identity、RBAC"]
-                ControlClients -->|"作成および管理"| ArmObjects
+flowchart LR
+    subgraph Foundry["Microsoft Foundry account と project"]
+        direction TB
+        FoundryArm["Control Plane<br/>account、project、model deployment<br/>connection、capability host"]
+        FoundryData["Data Plane<br/>Prompt Agent version<br/>conversation、response"]
+        FoundryArm -.->|"project の runtime 境界"| FoundryData
     end
 
-        subgraph DataPlanes["Service Data Plane"]
-        direction LR
-                DataClients["Service REST API<br/>script 01 から 05、07 から 09"]
-                StorageData["Storage Data Plane<br/>private container と CSV"]
-                SearchData["Search Data Plane<br/>knowledge source、自動生成 pipeline<br/>knowledge base、retrieve、MCP"]
-                FoundryData["Foundry project Data Plane<br/>Prompt Agent、conversation、response"]
-                ModelData["Model Data Plane<br/>embedding と inference"]
-                CosmosData["Cosmos DB Data Plane<br/>Agent Service state"]
-                DataClients --> StorageData
-                DataClients --> SearchData
-                DataClients --> FoundryData
-                FoundryData -->|"MCP で retrieve"| SearchData
-                FoundryData -->|"managed state を保存"| CosmosData
-                SearchData -->|"source を読み取り"| StorageData
-                SearchData -->|"embedding を生成"| ModelData
+    Terraform["Terraform"] -->|"ARM API"| FoundryArm
+    ArmScripts["script 06 と 09"] -->|"ARM REST"| FoundryArm
+    FoundryScripts["script 07 から 09"] -->|"Foundry project API"| FoundryData
+```
+
+#### Azure Storage
+
+```mermaid
+flowchart LR
+    subgraph Storage["Azure Storage"]
+        direction TB
+        StorageArm["Control Plane<br/>Storage account<br/>local authentication の無効化"]
+        StorageData["Data Plane<br/>private container<br/>restaurant review CSV"]
+        StorageArm -.->|"account 内のデータ"| StorageData
     end
 
-        %% API call を意味せず、management を runtime より上に固定します。
-        ArmObjects ~~~ DataClients
+    Terraform["Terraform"] -->|"ARM API"| StorageArm
+    BlobScripts["script 01 と 09"] -->|"Blob REST API"| StorageData
+    SearchIdentity["Search managed identity"] -->|"ingestion 時に CSV を読み取る"| StorageData
+```
+
+#### Azure AI Search
+
+```mermaid
+flowchart LR
+    subgraph Search["Azure AI Search"]
+        direction TB
+        SearchArm["Control Plane<br/>Search service<br/>managed identity と認証設定"]
+        SearchData["Data Plane<br/>knowledge source と自動生成 pipeline<br/>knowledge base、retrieve、MCP endpoint"]
+        SearchArm -.->|"service 内の object"| SearchData
+    end
+
+    Terraform["Terraform"] -->|"ARM API"| SearchArm
+    SearchScripts["script 02 から 05 と 09"] -->|"Search REST API"| SearchData
+    PromptAgent["Prompt Agent"] -->|"MCP で retrieve"| SearchData
+    SearchData -->|"ingestion 時に embedding を生成"| EmbeddingModel["Foundry model deployment"]
+```
+
+#### Azure Cosmos DB
+
+```mermaid
+flowchart LR
+    subgraph Cosmos["Azure Cosmos DB"]
+        direction TB
+        CosmosArm["Control Plane<br/>Cosmos DB account<br/>project connection"]
+        CosmosData["Data Plane<br/>enterprise_memory<br/>conversation と Agent metadata"]
+        CosmosArm -.->|"account 内の managed state"| CosmosData
+    end
+
+    Terraform["Terraform"] -->|"ARM API"| CosmosArm
+    AgentService["Foundry Agent Service"] -->|"実行時に読み書き"| CosmosData
 ```
 
 境界は `terraform apply` の前後ではなく、使用する API で決まります。たとえば script `06` は Search
@@ -608,18 +740,27 @@ terraform destroy -parallelism=1 \
 
 ### 概念とアーキテクチャ
 
+* [Microsoft Foundry とは](https://learn.microsoft.com/azure/foundry/what-is-foundry)
 * [Microsoft Foundry Agent Service とは](https://learn.microsoft.com/azure/foundry/agents/overview)
+* [Prompt Agent quickstart](https://learn.microsoft.com/azure/foundry/agents/quickstarts/prompt-agent)
 * [Agent 環境の構築: Basic setup と Standard setup](https://learn.microsoft.com/azure/foundry/agents/environment-setup)
 * [Standard Agent リソースの構築](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)
 * [Capability host](https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts)
+* [Foundry project への connection の追加](https://learn.microsoft.com/azure/foundry/how-to/connections-add)
 * [Microsoft Foundry architecture](https://learn.microsoft.com/azure/foundry/concepts/architecture)
 * [認証と認可: Control Plane と Data Plane](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry#control-plane-and-data-plane)
 * [Azure Control Plane と Data Plane](https://learn.microsoft.com/azure/azure-resource-manager/management/control-plane-and-data-plane)
+* [Azure resource の managed identity](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview)
+* [Azure RBAC とは](https://learn.microsoft.com/azure/role-based-access-control/overview)
+* [Microsoft identity platform の access token](https://learn.microsoft.com/entra/identity-platform/access-tokens)
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service の制限、quota、リージョン](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
 * [Foundry model deployment type とデータ処理](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types)
 * [Foundry IQ とは](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq)
 * [Foundry IQ FAQ](https://learn.microsoft.com/azure/foundry/agents/concepts/foundry-iq-faq)
+* [Azure AI Search の vector search](https://learn.microsoft.com/azure/search/vector-search-overview)
+* [Azure AI Search の agentic retrieval](https://learn.microsoft.com/azure/search/agentic-retrieval-overview)
+* [Model Context Protocol の概要](https://modelcontextprotocol.io/introduction)
 
 ### API と Data Plane の実装
 

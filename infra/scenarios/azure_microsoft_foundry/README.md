@@ -12,25 +12,124 @@ scripts can then upload a fictional restaurant review dataset, create a Foundry
 IQ knowledge source and knowledge base, connect them to a prompt agent over MCP,
 and run grounded Q&A.
 
+## Concepts used in this README
+
+This section defines the terms needed to follow the scenario without requiring
+prior Microsoft Foundry context. Product and API object names remain in English
+so that they can be matched directly to the portal and official documentation.
+
+### Foundry building blocks
+
+| Term | Plain-language meaning | Use in this scenario |
+| --- | --- | --- |
+| [Microsoft Foundry account](https://learn.microsoft.com/azure/foundry/what-is-foundry) | The parent Azure resource that groups projects and model deployments. | Terraform creates one account. |
+| [Foundry project](https://learn.microsoft.com/azure/foundry/how-to/create-projects) | A workspace that groups agents, connections, and conversations. Agents in one project share its connected stores, while data is isolated from other projects. | Terraform creates one project in the account. |
+| [Model deployment](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) | A selected model and version made callable through an API under a deployment name, processing mode (SKU), and capacity. It isn't an agent. | Terraform creates the entries specified by `model_deployments`. |
+| [Foundry Agent Service](https://learn.microsoft.com/azure/foundry/agents/overview) | A Microsoft service that manages agent definitions, execution, and conversation state. It isn't a large language model (LLM) by itself; it runs agents that combine models and tools. | It runs the prompt agent described below. |
+| [Prompt agent](https://learn.microsoft.com/azure/foundry/agents/quickstarts/prompt-agent) | An agent defined as configuration: instructions, a model, and tools. Foundry runs it, unlike a hosted agent for which the developer supplies application code or a container. | Script `07` creates a prompt agent version. |
+
+### Basic setup and Standard setup
+
+A **setup** is the Agent Service environment configuration that determines where
+the service stores state. State includes uploaded files, retrieval vector stores,
+conversations, and agent definitions. See
+[Set up your agent environment](https://learn.microsoft.com/azure/foundry/agents/environment-setup#choose-your-setup)
+for the official comparison.
+
+| Setup | Where agent state is stored | What the customer manages | Used here |
+| --- | --- | --- | --- |
+| [Basic setup](https://learn.microsoft.com/azure/foundry/agents/environment-setup#choose-your-setup) | Built-in, Microsoft-managed platform stores | Foundry account, project, models, and related configuration | No |
+| [Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup) | Storage, Search, and Cosmos DB resources dedicated to the customer in the customer's Azure subscription | The Basic resources plus the three data services, connections, and permissions | Yes |
+| [Standard setup with Bring Your Own (BYO) virtual network](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) | The same customer-managed resources as Standard setup, with traffic restricted to the customer's virtual network | Private endpoints, DNS, network policy, and related resources as well | No |
+
+Therefore, **Standard describes the data-storage setup, not a model, model SKU,
+agent type, or inference-performance tier**. This scenario runs a prompt agent on
+Standard setup with public endpoints.
+
+### Resource connections and authentication
+
+| Term | Meaning in this README |
+| --- | --- |
+| [Managed identity](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview) | A Microsoft Entra identity assigned to an Azure resource. Azure manages its credentials, so the resource can obtain access tokens without storing passwords or resource keys in code or Terraform state. This scenario primarily uses the Foundry project identity and Search identity. |
+| [Keyless authentication](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry) | Authentication with short-lived access tokens issued by Microsoft Entra ID instead of Storage or Search resource keys, API keys, or connection strings. It doesn't mean that authentication is absent. |
+| [Azure RBAC](https://learn.microsoft.com/azure/role-based-access-control/overview) | Authorization through role assignments that answer "which identity can perform which actions at which scope?" An identity can obtain a token but still receive `403` if it lacks the required role on the target resource. |
+| [Project connection](https://learn.microsoft.com/azure/foundry/how-to/connections-add) | A configuration object that tells a Foundry project how to refer to an external resource. It records details such as the target API URL (endpoint), resource ID, and authentication method; it doesn't copy the Storage or Search data. |
+| [Capability host](https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts) | An ARM configuration object under a Foundry account or project that tells Agent Service which connections to use. It isn't an application host or server. The account capability host enables Agent Service for the account; the project capability host selects the Storage, Search, and Cosmos DB connections for that project. |
+| [Access-token audience](https://learn.microsoft.com/entra/identity-platform/access-tokens) | The identifier of the API that should accept a token. ARM, Storage, Search, and Foundry are separate APIs, so the same identity obtains a token for each audience. A scope such as `https://search.azure.com/.default` asks Microsoft Entra ID for a token intended for that API. |
+
+#### Why capability hosts exist
+
+Project connections and capability hosts work together, but they have different
+jobs. In plain terms, **a connection is an address-book entry for a resource; a
+capability host is an assignment table that tells Agent Service which entry to
+use for each purpose**.
+
+A Foundry project can contain multiple connections to services such as Search
+and Storage. The presence of a connection alone doesn't tell Agent Service which
+one should store files or which one should store conversations. A capability
+host assigns those purposes to connections so that every agent in the project
+uses the same stores consistently. Its reason for existing is to keep reusable
+connection details separate from Agent Service-specific storage configuration.
+
+| Configuration element | What it does | What it doesn't do |
+| --- | --- | --- |
+| Project connection | Registers the target resource's endpoint, resource ID, and authentication method | Doesn't select its purpose in Agent Service |
+| Account capability host | Enables Agent Service for the Foundry account | Doesn't automatically select stores for a project |
+| Project capability host | Assigns a Storage connection to `storageConnections`, Search to `vectorStoreConnections`, and Cosmos DB to `threadStorageConnections` | Doesn't store data itself or proxy requests |
+| Managed identity and RBAC | Provide the identity and permissions that can actually use the assigned resource | Don't select which store Agent Service uses |
+
+With Basic setup, no capability hosts are created and Agent Service uses the
+Microsoft-managed default stores. Standard setup requires capability hosts at
+both account and project scopes. At runtime, Agent Service reads the project
+capability host, resolves the connection for each purpose, and uses managed
+identity and RBAC to access the target Storage, Search, or Cosmos DB service.
+
+A capability host isn't a database, compute host, or network gateway. It holds
+no agent data and grants no permissions. Only one capability host can be active
+at each account or project scope; changing the selected stores requires deleting
+it and recreating it with the new configuration.
+
+### Knowledge retrieval
+
+| Term | Meaning in this README |
+| --- | --- |
+| [Foundry IQ](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq) | A knowledge layer that lets agents search private data. It brings together knowledge sources and knowledge bases backed by Azure AI Search. |
+| [Knowledge source](https://learn.microsoft.com/azure/search/agentic-knowledge-source-overview) | An object that describes where searchable data comes from and how to ingest it. Here it points to the CSV in Blob Storage, and the service generates a pipeline that splits long content into searchable passages (chunking), creates embeddings, and builds a search index. |
+| [Embeddings and vector search](https://learn.microsoft.com/azure/search/vector-search-overview) | An embedding represents the meaning of text as numbers. Vector search uses the distance between those numbers to find passages whose meaning is close to a question. |
+| [Knowledge base](https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base) | A top-level object that combines one or more knowledge sources and search settings behind an API that retrieves relevant passages. It isn't the index itself or an agent. |
+| [Agentic retrieval](https://learn.microsoft.com/azure/search/agentic-retrieval-overview) | Retrieval that can decompose a question into searches, rerank results, and return the evidence as one response. The `minimal` setting in this scenario doesn't use LLM query planning. |
+| [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) | An open protocol through which AI applications call external tools and data sources in a common format. The RemoteTool connection exposes the Search knowledge base MCP endpoint to the prompt agent. |
+| [Grounded answer and citation](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq#capabilities) | A grounded answer is generated from retrieved evidence. A citation identifies evidence that can be traced back to the source, distinguishing the result from an answer based only on model training. |
+
+In one sentence, the scenario **stores a CSV in Blob Storage, lets a knowledge
+source build a search index, retrieves relevant passages through a knowledge base,
+passes them to a prompt agent over MCP, and generates an evidence-based answer**.
+
 ## Scenario purpose
 
-### What "standard agent" means
+### What "Standard Agent" means in this scenario
 
-In Foundry Agent Service, **Standard setup is an environment and data-storage
-model, not an agent type, model SKU, or runtime tier**. Basic setup stores agent
-state in Microsoft-managed storage. Standard setup connects a Foundry project to
-single-tenant resources in the customer's subscription:
+The Terraform input `deploy_standard_agent` and some descriptions use
+"Standard Agent" as shorthand for **an agent running on Standard setup
+infrastructure**. It isn't an official agent type. This README keeps two choices
+separate:
+
+| Choice | Selection in this scenario | What it determines |
+| --- | --- | --- |
+| Agent Service setup | Standard setup with public networking | Where agent state is stored and how the environment is networked |
+| Agent type | Prompt agent | Whether the agent is managed as instructions, model, and tool configuration |
+
+Standard setup connects a Foundry project to customer-dedicated resources in the
+customer's subscription. Each resource has a distinct responsibility:
 
 * Azure Storage stores files and uploads.
 * Azure AI Search stores vector stores and retrieval indexes.
 * Azure Cosmos DB stores conversations, responses, and agent metadata.
 
 Account and project capability hosts tell Agent Service which connected
-resources to use. The agent created later by script `07` is a **prompt agent**;
-it runs on the Standard setup provisioned by Terraform. This scenario uses
-Standard setup with public networking and keyless Microsoft Entra authentication.
-It is not the network-isolated Standard setup with a bring-your-own virtual
-network.
+resources to use. This scenario uses keyless Microsoft Entra authentication but
+keeps public network endpoints enabled. It therefore removes resource keys from
+the authentication path without providing private-network isolation.
 
 ### What this scenario delivers
 
@@ -79,37 +178,76 @@ a user request.
 
 ### ARM control plane and service data planes
 
-This view answers: **is an object an Azure resource or a runtime object inside a
-service, and which tool manages it in this scenario?**
+The following views answer: **is an object an Azure resource or a runtime object
+inside a service, and which tool manages it in this scenario?** Instead of
+placing every object in one large boundary, each Azure resource has its own view.
+In each view, the control plane configures the resource through Azure Resource
+Manager (ARM), while the data plane handles data or objects created and used as
+the agent runs. Here, an object is one unit of configuration or data that an API
+can create, retrieve, or delete.
+
+#### Microsoft Foundry account and project
 
 ```mermaid
-flowchart TB
-    subgraph ControlPlane["ARM control plane - management.azure.com"]
-        direction LR
-        ControlClients["Terraform<br/>ARM REST in scripts 06 and 09"]
-        ArmObjects["Azure resources<br/>Foundry account, project, models, connections, capability hosts<br/>Search, Storage, Cosmos DB, managed identities, and RBAC"]
-        ControlClients -->|"create and manage"| ArmObjects
+flowchart LR
+    subgraph Foundry["Microsoft Foundry account and project"]
+        direction TB
+        FoundryArm["Control plane<br/>account, project, model deployments<br/>connections, capability hosts"]
+        FoundryData["Data plane<br/>prompt agent versions<br/>conversations, responses"]
+        FoundryArm -.->|"project runtime boundary"| FoundryData
     end
 
-        subgraph DataPlanes["Service data planes"]
-                direction LR
-        DataClients["Service REST APIs<br/>scripts 01 through 05 and 07 through 09"]
-                StorageData["Storage data plane<br/>private container and CSV"]
-                SearchData["Search data plane<br/>knowledge source, generated pipeline<br/>knowledge base, retrieve, and MCP"]
-                FoundryData["Foundry project data plane<br/>prompt agent, conversations, responses"]
-                ModelData["Model data plane<br/>embeddings and inference"]
-                CosmosData["Cosmos DB data plane<br/>Agent Service state"]
-        DataClients --> StorageData
-        DataClients --> SearchData
-        DataClients --> FoundryData
-        FoundryData -->|"retrieve over MCP"| SearchData
-        FoundryData -->|"persist managed state"| CosmosData
-        SearchData -->|"read source"| StorageData
-        SearchData -->|"generate embeddings"| ModelData
-        end
+    Terraform["Terraform"] -->|"ARM API"| FoundryArm
+    ArmScripts["scripts 06 and 09"] -->|"ARM REST"| FoundryArm
+    FoundryScripts["scripts 07 through 09"] -->|"Foundry project API"| FoundryData
+```
 
-    %% Keep management above runtime without implying an API call.
-    ArmObjects ~~~ DataClients
+#### Azure Storage
+
+```mermaid
+flowchart LR
+    subgraph Storage["Azure Storage"]
+        direction TB
+        StorageArm["Control plane<br/>Storage account<br/>local authentication disabled"]
+        StorageData["Data plane<br/>private container<br/>restaurant review CSV"]
+        StorageArm -.->|"data in the account"| StorageData
+    end
+
+    Terraform["Terraform"] -->|"ARM API"| StorageArm
+    BlobScripts["scripts 01 and 09"] -->|"Blob REST API"| StorageData
+    SearchIdentity["Search managed identity"] -->|"read CSV during ingestion"| StorageData
+```
+
+#### Azure AI Search
+
+```mermaid
+flowchart LR
+    subgraph Search["Azure AI Search"]
+        direction TB
+        SearchArm["Control plane<br/>Search service<br/>managed identity and authentication settings"]
+        SearchData["Data plane<br/>knowledge source and generated pipeline<br/>knowledge base, retrieve, MCP endpoint"]
+        SearchArm -.->|"objects in the service"| SearchData
+    end
+
+    Terraform["Terraform"] -->|"ARM API"| SearchArm
+    SearchScripts["scripts 02 through 05 and 09"] -->|"Search REST API"| SearchData
+    PromptAgent["Prompt agent"] -->|"retrieve over MCP"| SearchData
+    SearchData -->|"generate embeddings during ingestion"| EmbeddingModel["Foundry model deployment"]
+```
+
+#### Azure Cosmos DB
+
+```mermaid
+flowchart LR
+    subgraph Cosmos["Azure Cosmos DB"]
+        direction TB
+        CosmosArm["Control plane<br/>Cosmos DB account<br/>project connection"]
+        CosmosData["Data plane<br/>enterprise_memory<br/>conversations and agent metadata"]
+        CosmosArm -.->|"managed state in the account"| CosmosData
+    end
+
+    Terraform["Terraform"] -->|"ARM API"| CosmosArm
+    AgentService["Foundry Agent Service"] -->|"read and write at runtime"| CosmosData
 ```
 
 The boundary is determined by the API, not by whether an operation happens
@@ -658,18 +796,27 @@ configuration. The Search `free` and `basic` SKUs are no longer accepted.
 
 ### Concepts and architecture
 
+* [What is Microsoft Foundry?](https://learn.microsoft.com/azure/foundry/what-is-foundry)
 * [What is Microsoft Foundry Agent Service?](https://learn.microsoft.com/azure/foundry/agents/overview)
+* [Quickstart: Create a prompt agent](https://learn.microsoft.com/azure/foundry/agents/quickstarts/prompt-agent)
 * [Set up your agent environment: Basic and Standard setup](https://learn.microsoft.com/azure/foundry/agents/environment-setup)
 * [Set up Standard agent resources](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)
 * [Capability hosts](https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts)
+* [Add a connection to a Foundry project](https://learn.microsoft.com/azure/foundry/how-to/connections-add)
 * [Microsoft Foundry architecture](https://learn.microsoft.com/azure/foundry/concepts/architecture)
 * [Authentication and authorization: control plane and data plane](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry#control-plane-and-data-plane)
 * [Azure control plane and data plane](https://learn.microsoft.com/azure/azure-resource-manager/management/control-plane-and-data-plane)
+* [Managed identities for Azure resources](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview)
+* [What is Azure RBAC?](https://learn.microsoft.com/azure/role-based-access-control/overview)
+* [Access tokens in the Microsoft identity platform](https://learn.microsoft.com/entra/identity-platform/access-tokens)
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service limits, quotas, and regional support](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
 * [Foundry model deployment types and data processing](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types)
 * [What is Foundry IQ?](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq)
 * [Foundry IQ frequently asked questions](https://learn.microsoft.com/azure/foundry/agents/concepts/foundry-iq-faq)
+* [Vector search in Azure AI Search](https://learn.microsoft.com/azure/search/vector-search-overview)
+* [Agentic retrieval in Azure AI Search](https://learn.microsoft.com/azure/search/agentic-retrieval-overview)
+* [Model Context Protocol introduction](https://modelcontextprotocol.io/introduction)
 
 ### API and data-plane implementation
 
