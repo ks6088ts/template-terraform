@@ -13,9 +13,19 @@ output "account_endpoint" {
   value       = "https://${var.name}.cognitiveservices.azure.com/"
 }
 
+output "openai_endpoint" {
+  description = "The Azure OpenAI endpoint of the Microsoft Foundry account"
+  value       = "https://${var.name}.openai.azure.com/"
+}
+
 output "project_id" {
   description = "The ID of the Microsoft Foundry project"
   value       = azapi_resource.project.id
+}
+
+output "project_endpoint" {
+  description = "The data-plane endpoint of the Microsoft Foundry project"
+  value       = "https://${var.name}.services.ai.azure.com/api/projects/${azapi_resource.project.name}"
 }
 
 output "project_principal_id" {

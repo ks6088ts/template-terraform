@@ -1,6 +1,12 @@
 mock_provider "azurerm" {
   override_during = plan
 
+  mock_data "azurerm_client_config" {
+    defaults = {
+      object_id = "00000000-0000-0000-0000-000000000005"
+    }
+  }
+
   mock_resource "azurerm_resource_group" {
     defaults = {
       id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/azuremicrosoftfoundry-test1234"
@@ -11,6 +17,10 @@ mock_provider "azurerm" {
     defaults = {
       id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.Search/searchServices/aisearchtest1234"
       endpoint = "https://aisearchtest1234.search.windows.net"
+      identity = {
+        principal_id = "00000000-0000-0000-0000-000000000002"
+        tenant_id    = "00000000-0000-0000-0000-000000000003"
+      }
     }
   }
 
@@ -91,6 +101,15 @@ run "standard_agent_disabled_by_default" {
       length(azurerm_role_assignment.storage_blob_data_contributor) == 0,
       length(azurerm_role_assignment.search_index_data_contributor) == 0,
       length(azurerm_role_assignment.search_service_contributor) == 0,
+      length(azurerm_role_assignment.search_index_data_reader) == 0,
+      length(azurerm_role_assignment.search_storage_blob_data_reader) == 0,
+      length(azurerm_role_assignment.search_cognitive_services_user) == 0,
+      length(azurerm_role_assignment.project_foundry_user) == 0,
+      length(azurerm_role_assignment.operator_storage_blob_data_contributor) == 0,
+      length(azurerm_role_assignment.operator_search_index_data_contributor) == 0,
+      length(azurerm_role_assignment.operator_search_index_data_reader) == 0,
+      length(azurerm_role_assignment.operator_search_service_contributor) == 0,
+      length(azurerm_role_assignment.operator_foundry_project_manager) == 0,
       length(azurerm_role_assignment.cosmos_db_operator) == 0,
       length(time_sleep.wait_for_rbac) == 0,
       length(azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor) == 0,
@@ -101,12 +120,18 @@ run "standard_agent_disabled_by_default" {
   assert {
     condition = alltrue([
       output.azure_ai_search_id == null,
+      output.azure_ai_search_identity_principal_id == null,
       output.blob_storage_account_id == null,
       output.cosmosdb_account_id == null,
       output.account_capability_host_id == null,
       output.project_capability_host_id == null,
     ])
     error_message = "Standard Agent outputs must be null when deployment is disabled."
+  }
+
+  assert {
+    condition     = output.operator_principal_id == "00000000-0000-0000-0000-000000000005"
+    error_message = "The operator principal must default to the Terraform client principal."
   }
 
   assert {
@@ -137,6 +162,7 @@ run "standard_agent_enabled" {
     deploy_standard_agent = true
     azure_ai_search_sku   = "standard"
     model_deployments     = []
+    operator_principal_id = "00000000-0000-0000-0000-000000000004"
   }
 
   assert {
@@ -151,6 +177,7 @@ run "standard_agent_enabled" {
   assert {
     condition = alltrue([
       module.azure_ai_search[0].name == "aisearchtest1234",
+      module.azure_ai_search[0].identity_principal_id == "00000000-0000-0000-0000-000000000002",
       module.blob_storage[0].account_name == "stmsfoundrytest1234",
       module.blob_storage[0].container_name == null,
       module.cosmosdb[0].account_name == "cosmosmsfoundrytest1234",
@@ -210,9 +237,18 @@ run "standard_agent_enabled" {
       length(azurerm_role_assignment.storage_blob_data_contributor) == 1,
       length(azurerm_role_assignment.search_index_data_contributor) == 1,
       length(azurerm_role_assignment.search_service_contributor) == 1,
+      length(azurerm_role_assignment.search_index_data_reader) == 1,
+      length(azurerm_role_assignment.search_storage_blob_data_reader) == 1,
+      length(azurerm_role_assignment.search_cognitive_services_user) == 1,
+      length(azurerm_role_assignment.project_foundry_user) == 1,
+      length(azurerm_role_assignment.operator_storage_blob_data_contributor) == 1,
+      length(azurerm_role_assignment.operator_search_index_data_contributor) == 1,
+      length(azurerm_role_assignment.operator_search_index_data_reader) == 1,
+      length(azurerm_role_assignment.operator_search_service_contributor) == 1,
+      length(azurerm_role_assignment.operator_foundry_project_manager) == 1,
       length(azurerm_role_assignment.cosmos_db_operator) == 1,
     ])
-    error_message = "Standard Agent must create the four required ARM role assignments."
+    error_message = "Standard Agent must create all required ARM role assignments."
   }
 
   assert {
@@ -220,6 +256,15 @@ run "standard_agent_enabled" {
       azurerm_role_assignment.storage_blob_data_contributor[0].role_definition_name == "Storage Blob Data Contributor",
       azurerm_role_assignment.search_index_data_contributor[0].role_definition_name == "Search Index Data Contributor",
       azurerm_role_assignment.search_service_contributor[0].role_definition_name == "Search Service Contributor",
+      azurerm_role_assignment.search_index_data_reader[0].role_definition_name == "Search Index Data Reader",
+      azurerm_role_assignment.search_storage_blob_data_reader[0].role_definition_name == "Storage Blob Data Reader",
+      azurerm_role_assignment.search_cognitive_services_user[0].role_definition_name == "Cognitive Services User",
+      endswith(azurerm_role_assignment.project_foundry_user[0].role_definition_id, "/53ca6127-db72-4b80-b1b0-d745d6d5456d"),
+      azurerm_role_assignment.operator_storage_blob_data_contributor[0].role_definition_name == "Storage Blob Data Contributor",
+      azurerm_role_assignment.operator_search_index_data_contributor[0].role_definition_name == "Search Index Data Contributor",
+      azurerm_role_assignment.operator_search_index_data_reader[0].role_definition_name == "Search Index Data Reader",
+      azurerm_role_assignment.operator_search_service_contributor[0].role_definition_name == "Search Service Contributor",
+      endswith(azurerm_role_assignment.operator_foundry_project_manager[0].role_definition_id, "/eadc314b-1a2d-4efa-be10-5d325db5065e"),
       azurerm_role_assignment.cosmos_db_operator[0].role_definition_name == "Cosmos DB Operator",
     ])
     error_message = "Standard Agent must assign the required built-in ARM roles."
@@ -230,9 +275,28 @@ run "standard_agent_enabled" {
       azurerm_role_assignment.storage_blob_data_contributor[0].principal_id == module.microsoft_foundry.project_principal_id,
       azurerm_role_assignment.search_index_data_contributor[0].principal_id == module.microsoft_foundry.project_principal_id,
       azurerm_role_assignment.search_service_contributor[0].principal_id == module.microsoft_foundry.project_principal_id,
+      azurerm_role_assignment.search_index_data_reader[0].principal_id == module.microsoft_foundry.project_principal_id,
+      azurerm_role_assignment.project_foundry_user[0].principal_id == module.microsoft_foundry.project_principal_id,
+      azurerm_role_assignment.search_storage_blob_data_reader[0].principal_id == module.azure_ai_search[0].identity_principal_id,
+      azurerm_role_assignment.search_cognitive_services_user[0].principal_id == module.azure_ai_search[0].identity_principal_id,
+      azurerm_role_assignment.operator_storage_blob_data_contributor[0].principal_id == "00000000-0000-0000-0000-000000000004",
+      azurerm_role_assignment.operator_search_index_data_contributor[0].principal_id == "00000000-0000-0000-0000-000000000004",
+      azurerm_role_assignment.operator_search_index_data_reader[0].principal_id == "00000000-0000-0000-0000-000000000004",
+      azurerm_role_assignment.operator_search_service_contributor[0].principal_id == "00000000-0000-0000-0000-000000000004",
+      azurerm_role_assignment.operator_foundry_project_manager[0].principal_id == "00000000-0000-0000-0000-000000000004",
       azurerm_role_assignment.cosmos_db_operator[0].principal_id == module.microsoft_foundry.project_principal_id,
     ])
-    error_message = "Standard Agent roles must be assigned to the Foundry project managed identity."
+    error_message = "Standard Agent roles must be assigned to the intended managed identities and operator."
+  }
+
+  assert {
+    condition = alltrue([
+      azurerm_role_assignment.search_storage_blob_data_reader[0].scope == module.blob_storage[0].account_id,
+      azurerm_role_assignment.search_cognitive_services_user[0].scope == module.microsoft_foundry.account_id,
+      azurerm_role_assignment.project_foundry_user[0].scope == module.microsoft_foundry.account_id,
+      azurerm_role_assignment.operator_foundry_project_manager[0].scope == module.microsoft_foundry.account_id,
+    ])
+    error_message = "Foundry IQ role assignments must use the intended resource scopes."
   }
 
   assert {
@@ -271,12 +335,24 @@ run "standard_agent_enabled" {
   assert {
     condition = alltrue([
       output.azure_ai_search_connection_id == azapi_resource.azure_ai_search_connection[0].id,
+      output.azure_ai_search_identity_principal_id == module.azure_ai_search[0].identity_principal_id,
       output.blob_storage_connection_id == azapi_resource.blob_storage_connection[0].id,
       output.cosmosdb_connection_id == azapi_resource.cosmosdb_connection[0].id,
       output.account_capability_host_id == azapi_resource.account_capability_host[0].id,
       output.project_capability_host_id == azapi_resource.project_capability_host[0].id,
     ])
     error_message = "Standard Agent outputs must match the created connections and capability hosts."
+  }
+
+  assert {
+    condition = alltrue([
+      output.microsoft_foundry_project_id == module.microsoft_foundry.project_id,
+      output.microsoft_foundry_project_endpoint == "https://msfoundrytest1234.services.ai.azure.com/api/projects/msfoundrytest1234project",
+      output.microsoft_foundry_openai_endpoint == "https://msfoundrytest1234.openai.azure.com/",
+      output.microsoft_foundry_deployment_ids == {},
+      output.operator_principal_id == "00000000-0000-0000-0000-000000000004",
+    ])
+    error_message = "Foundry IQ setup outputs must expose the project, model, and operator values used by scripts."
   }
 }
 
@@ -287,6 +363,7 @@ run "standard_agent_rejects_free_search_sku" {
     deploy_standard_agent = true
     azure_ai_search_sku   = "free"
     model_deployments     = []
+    operator_principal_id = "00000000-0000-0000-0000-000000000004"
   }
 
   expect_failures = [

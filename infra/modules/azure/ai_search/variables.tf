@@ -30,6 +30,12 @@ variable "local_authentication_enabled" {
   default     = true
 }
 
+variable "enable_identity" {
+  description = "Whether to enable a system-assigned managed identity for the Azure AI Search service"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags to apply to the Azure AI Search service"
   type        = map(string)

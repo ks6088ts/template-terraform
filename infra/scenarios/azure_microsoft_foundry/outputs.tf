@@ -13,9 +13,34 @@ output "microsoft_foundry_account_endpoint" {
   description = "Microsoft Foundry account endpoint"
 }
 
+output "microsoft_foundry_openai_endpoint" {
+  value       = module.microsoft_foundry.openai_endpoint
+  description = "Azure OpenAI endpoint of the Microsoft Foundry account"
+}
+
 output "microsoft_foundry_project_name" {
   value       = module.microsoft_foundry.project_name
   description = "Microsoft Foundry project name"
+}
+
+output "microsoft_foundry_project_id" {
+  value       = module.microsoft_foundry.project_id
+  description = "Microsoft Foundry project resource ID"
+}
+
+output "microsoft_foundry_project_endpoint" {
+  value       = module.microsoft_foundry.project_endpoint
+  description = "Microsoft Foundry project data-plane endpoint"
+}
+
+output "microsoft_foundry_deployment_ids" {
+  value       = module.microsoft_foundry.deployment_ids
+  description = "Microsoft Foundry model deployment resource IDs"
+}
+
+output "operator_principal_id" {
+  value       = local.operator_principal_id
+  description = "Object ID of the principal authorized to run the Foundry IQ setup scripts"
 }
 
 output "azure_ai_search_id" {
@@ -31,6 +56,11 @@ output "azure_ai_search_name" {
 output "azure_ai_search_endpoint" {
   description = "Endpoint of the Azure AI Search service"
   value       = var.deploy_standard_agent ? module.azure_ai_search[0].endpoint : null
+}
+
+output "azure_ai_search_identity_principal_id" {
+  description = "Principal ID of the Azure AI Search system-assigned managed identity"
+  value       = var.deploy_standard_agent ? module.azure_ai_search[0].identity_principal_id : null
 }
 
 output "azure_ai_search_connection_id" {
