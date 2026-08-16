@@ -27,6 +27,12 @@ variable "deploy_standard_agent" {
   default     = false
 }
 
+variable "enable_tracing" {
+  description = "Enable server-side Foundry agent tracing with workspace-based Application Insights"
+  type        = bool
+  default     = false
+}
+
 variable "azure_ai_search_sku" {
   description = "SKU for the Azure AI Search service"
   type        = string

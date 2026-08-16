@@ -43,6 +43,36 @@ output "operator_principal_id" {
   description = "Object ID of the principal authorized to run the Foundry IQ setup scripts"
 }
 
+output "log_analytics_workspace_id" {
+  description = "ID of the Log Analytics workspace that stores Foundry agent traces"
+  value       = var.enable_tracing ? module.log_analytics[0].id : null
+}
+
+output "log_analytics_workspace_name" {
+  description = "Name of the Log Analytics workspace that stores Foundry agent traces"
+  value       = var.enable_tracing ? module.log_analytics[0].name : null
+}
+
+output "application_insights_id" {
+  description = "ID of the Application Insights resource connected to the Microsoft Foundry project"
+  value       = var.enable_tracing ? module.application_insights[0].id : null
+}
+
+output "application_insights_name" {
+  description = "Name of the Application Insights resource connected to the Microsoft Foundry project"
+  value       = var.enable_tracing ? module.application_insights[0].name : null
+}
+
+output "application_insights_app_id" {
+  description = "Application ID of the Application Insights resource connected to the Microsoft Foundry project"
+  value       = var.enable_tracing ? module.application_insights[0].app_id : null
+}
+
+output "application_insights_connection_id" {
+  description = "ID of the Application Insights connection in the Microsoft Foundry project"
+  value       = var.enable_tracing ? azapi_resource.application_insights_connection[0].id : null
+}
+
 output "azure_ai_search_id" {
   description = "ID of the Azure AI Search service"
   value       = var.deploy_standard_agent ? module.azure_ai_search[0].id : null

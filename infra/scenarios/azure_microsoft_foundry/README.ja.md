@@ -7,9 +7,10 @@ description: Terraform を使用して Azure に Microsoft Foundry 環境をデ�
 このシナリオでは、Terraform を使用して Azure に Microsoft Foundry 環境をデプロイします。
 Foundry Agent Service Standard setup に必要な Bring Your Own データ サービスと capability host も
 デプロイできます。リソース キーは使用せず、Microsoft Entra ID と Foundry プロジェクトの managed
-identity を使用します。デプロイ後は、連番の POSIX shell script を使用して架空の飲食店レビュー
-データをアップロードし、Foundry IQ knowledge source と knowledge base、MCP 接続を使用する
-Prompt Agent、Q&A を構築できます。
+identity を使用します。オプションの server-side Agent tracing では、OpenTelemetry span を
+workspace-based Application Insights へ送信します。デプロイ後は、連番の POSIX shell script を
+使用して架空の飲食店レビュー データをアップロードし、Foundry IQ knowledge source と knowledge
+base、MCP 接続を使用する Prompt Agent、Q&A を構築できます。
 
 ## この README を読むための基礎用語
 
@@ -55,6 +56,20 @@ Prompt Agent、Q&A を構築できます。
 | [Project connection](https://learn.microsoft.com/azure/foundry/how-to/connections-add) | Foundry project から外部 resource を参照するための構成 object です。対象 API の URL（endpoint）、resource ID、認証方式などを保持しますが、Storage や Search のデータ本体を複製するものではありません。 |
 | [Capability host](https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts) | Foundry account または project 配下に作る ARM の構成 object で、Agent Service が使用する connection を指定します。Application を実行する host や server ではありません。Account capability host は Agent Service を account で有効にし、project capability host は Storage、Search、Cosmos DB のどの connection を使うかを選びます。 |
 | [Access token の audience](https://learn.microsoft.com/entra/identity-platform/access-tokens) | Token を受け取る API を表す識別子です。ARM、Storage、Search、Foundry は別の API なので、同じ identity を使う場合でも audience ごとに token を取得します。`https://search.azure.com/.default` などの scope は、その API 向け token を Microsoft Entra ID に要求する値です。 |
+
+### Agent state と tracing
+
+Agent state と observability trace には似た実行情報が含まれますが、目的と保存先が異なります。
+
+| データ | 目的 | このシナリオでの保存先 |
+| --- | --- | --- |
+| Conversation、response、run state、Agent definition | Stateful な Agent 実行と multi-turn context | Cosmos DB `enterprise_memory` |
+| Model call、tool call、latency、token 使用量、error の OpenTelemetry span | Debug、監視、trace を使用した分析 | Log Analytics を backing store とする Application Insights |
+
+Tracing が無効でも、Foundry Agent Service から conversation result を確認できます。Foundry の
+**Traces** 画面は、この result と取り込まれた span を並べて表示できるため、同じ保存機能に見えることが
+あります。Application Insights の span が収集されるのは、`enable_tracing` によって `AppInsights`
+project connection を作成した後だけです。
 
 #### Capability host の役割と存在意義
 
@@ -235,6 +250,22 @@ flowchart LR
     AgentService["Foundry Agent Service"] -->|"実行時に読み書き"| CosmosData
 ```
 
+#### Azure Monitor
+
+```mermaid
+flowchart LR
+    subgraph Monitor["Azure Monitor"]
+        direction TB
+        MonitorArm["Control Plane<br/>Log Analytics workspace<br/>Application Insights と project connection"]
+        MonitorData["Data Plane<br/>OpenTelemetry Agent trace<br/>span と実行 telemetry"]
+        MonitorArm -.->|"workspace-based telemetry"| MonitorData
+    end
+
+    Terraform["Terraform"] -->|"ARM API"| MonitorArm
+    AgentService["Foundry Agent Service"] -->|"project managed identity"| MonitorData
+    Operator["Operator"] -->|"保持された trace を query"| MonitorData
+```
+
 境界は `terraform apply` の前後ではなく、使用する API で決まります。たとえば script `06` は Search
 Data Plane の構築後に実行しますが、ARM で project connection を作成するため Control Plane 操作です。
 Knowledge source と knowledge base は Search Service Data Plane の top-level object であり、ARM child
@@ -249,6 +280,7 @@ resource ではありません。Prompt Agent version、conversation、response 
 | Foundry project Data Plane | `https://ai.azure.com/.default` | Prompt Agent version、conversation、Responses API call | Script `07` から `09` |
 | Model Data Plane | Foundry OpenAI endpoint | Embedding と最終回答の生成 | Runtime の Search managed identity と Agent Service |
 | Cosmos DB Data Plane | Project capability-host connection | `enterprise_memory` と Agent Service state | Agent Service。Script から Cosmos DB は直接呼び出さない |
+| Azure Monitor Data Plane | Application Insights ingestion と Log Analytics query endpoint | OpenTelemetry span と実行 telemetry | Agent Service が trace を取り込み、Operator が query |
 
 Terraform は ARM resource lifecycle と RBAC の管理に適しています。この実装では Search と Foundry の
 Data Plane object を Terraform state に保持せず、連番 script が service REST API で管理します。
@@ -322,6 +354,7 @@ sequenceDiagram
     participant KB as Search Data Plane knowledge base
     participant Index as 自動生成された Search index
     participant Model as Model Data Plane gpt-5.4-mini
+    participant Monitor as Application Insights trace
 
     User->>Agent: Responses API で質問
     Agent->>Cosmos: Conversation と thread state を保存
@@ -334,6 +367,9 @@ sequenceDiagram
     Agent->>Model: Evidence から回答を生成
     Model-->>Agent: Grounded answer を返却
     Agent->>Cosmos: Conversation state を更新
+    opt enable_tracing
+        Agent->>Monitor: Server-side OpenTelemetry span を export
+    end
     Agent-->>User: 回答と citation を返却
 ```
 
@@ -368,10 +404,10 @@ ingestion 時です。Q&A リクエストごとには呼び出されません。
 | Capability host | 設定後の capability host は update できない。接続する state service の変更では replacement または project の再作成が必要になる場合がある |
 | Network security | Microsoft Entra 認証で key は排除するが traffic は分離しない。Private endpoint、private DNS、firewall policy、egress control は作成しない |
 | Data authorization | Document-level ACL synchronization と end-user token passthrough は構成しない。この Agent を呼び出せる principal は同じ架空 corpus を使用する |
-| API stability | Search は `2026-05-01-preview`、RemoteTool connection は `2025-10-01-preview` を使用する。Preview の動作は変更される可能性があり SLA はない |
+| API stability | Search は `2026-05-01-preview`、RemoteTool connection は `2025-10-01-preview` を使用し、`ProjectManagedIdentity` trace ingestion は preview。Preview の動作は変更される可能性があり SLA はない |
 | Data processing | 既定の model deployment は `GlobalStandard` を使用し、Azure 管理の複数 region で request が処理される場合がある。`location = "japaneast"` だけから model processing が単一 region と判断しない |
-| Production readiness | Customer-managed Key Vault/CMK、private network、application UI、observability stack、evaluation suite、application 固有の Responsible AI test は含まない |
-| Cost | Search、Cosmos DB、Storage、model token、agentic retrieval に料金が発生する可能性がある。デプロイ前に quota、throughput、無料枠、最新価格を確認する |
+| Production readiness | オプションの Agent tracing は含むが、Customer-managed Key Vault/CMK、private network、application UI、alert、dashboard、evaluation suite、application 固有の Responsible AI test は含まない |
+| Cost | Search、Cosmos DB、Storage、model token、agentic retrieval、オプションの Application Insights ingestion と保持に料金が発生する可能性がある。デプロイ前に quota、throughput、無料枠、保持期間、最新価格を確認する |
 
 ## 構成
 
@@ -427,6 +463,38 @@ private DNS zone、Search data-plane object、Agent version を作成しませ�
 連番 script が Blob container、Search 管理の ingestion resource、Foundry IQ object、RemoteTool
 connection、Prompt Agent を作成します。
 
+### Agent tracing
+
+Tracing は顧客データを収集し、Azure Monitor の料金が発生する可能性があるため、既定では無効です。
+Standard setup とは独立して有効化します。
+
+```hcl
+enable_tracing = true
+```
+
+Terraform は次のリソースを作成します。
+
+* 保持期間を 30 日に設定した Log Analytics workspace
+* Sampling を 100% に設定した workspace-based Application Insights
+* Project scope の `AppInsights` connection 1 つ
+* Identity-based ingestion と Operator の読み取りに必要な role assignment
+
+Application Insights resource は Microsoft Entra 認証による telemetry だけを受け入れます。Connection は
+Foundry project managed identity を使用し、`credentials` block を持たず、project scope のままで、
+すべての project user へ共有されません。Foundry は Prompt Agent の server-side trace を自動的に
+出力するため、連番 script に client-side OpenTelemetry instrumentation は不要です。この
+identity-based trace ingestion は現在 preview です。
+
+Connection metadata には、Foundry が telemetry endpoint を解決するために provider が計算した
+Application Insights connection string が含まれます。Local authentication は無効で、この値を root
+output に公開せず、API key credential としても使用しません。ただし Terraform state には表現されるため、
+backend とその version history を保護してください。
+
+> [!WARNING]
+> Trace には user prompt、model input/output、tool argument/result、latency、token 使用量、error が
+> 含まれる可能性があります。収集について利用者へ通知し、個人データや機密データを最小化し、privacy
+> および compliance 要件に従って access を制限してください。
+
 ### 認証と RBAC
 
 Foundry account とすべての Standard Agent データ サービスで local authentication を無効にします。
@@ -459,6 +527,16 @@ Foundry role は role definition ID で割り当てます。
 Terraform は control-plane role assignment の後に 60 秒待機します。その後、作成 timeout を 60 分に設定した
 account capability host と project capability host を作成します。Project host が `enterprise_memory`
 database を作成するため、Cosmos DB data-plane role assignment は最後に適用します。
+
+`enable_tracing` が有効な場合、Terraform は次の role assignment も作成します。
+
+| Scope | Role | Assignee | 用途 |
+| --- | --- | --- | --- |
+| Application Insights | Monitoring Metrics Publisher | Foundry project identity | すべての server-side trace telemetry の取り込み |
+| Application Insights | Log Analytics Reader | Operator | Foundry と Azure Monitor で trace を表示 |
+
+このシナリオは `Privileged Monitoring Data Reader` を割り当てません。Log Analytics table が protected
+に設定され、選択した Operator に顧客コンテンツの読み取りを許可する場合だけ追加してください。
 
 Terraform の実行 identity には、対象 scope に対する
 `Microsoft.Authorization/roleAssignments/write` が必要です。Contributor だけでは role assignment を
@@ -566,6 +644,8 @@ terraform plan -var="operator_principal_id=${OPERATOR_PRINCIPAL_ID}"
 
 Command-line の `-var` は、`terraform.tfvars` に含まれる object ID を意図的に上書きします。
 `deploy_standard_agent` が `true` の場合、plan に Operator の role assignment が含まれることを確認します。
+Local variable file で tracing を有効にしない場合は、`plan` と `apply` の両方へ
+`-var="enable_tracing=true"` を渡します。
 
 ### 3. Terraform 管理 infrastructure のデプロイ
 
@@ -612,6 +692,12 @@ RemoteTool connection と Prompt Agent を作成し、end-to-end の Q&A request
 
 Step `08` は runtime の検証 gate です。1 件以上の MCP event が記録され、飲食店データに grounded した
 回答が返ることを確認します。
+
+Tracing が有効な場合は、step `08` の完了後 2 から 5 分待ち、project の **Agents > Traces** を開きます。
+新しい trace に span 単位の時間と tool/model operation が表示されることを確認してください。同じ
+telemetry は、接続された Application Insights または Log Analytics resource からも query できます。
+Workspace の保持期間は 30 日です。Foundry portal の検索範囲が 90 日でも、workspace ですでに期限切れに
+なったデータは返りません。
 
 ### Script 一覧
 
@@ -663,12 +749,17 @@ create-or-update の `PUT` を使用するため、同じ名前で再実行で�
 
 Cleanup は Terraform から分離されており、正確な確認値が必要です。Agent、RemoteTool connection、
 knowledge base、knowledge source と自動生成された Search object、Blob、container を削除します。
-Terraform 管理の infrastructure は変更しません。
+Terraform 管理の infrastructure と tracing resource は変更しません。
 
 ```bash
 CONFIRM_CLEANUP=delete-foundry-iq-resources \
     "${SCENARIO_DIR}/scripts/09_cleanup.sh"
 ```
+
+`enable_tracing` を `true` から `false` に変更すると、App Insights connection、tracing role assignment、
+Application Insights、その Log Analytics workspace が削除されます。保持されている trace data も完全に
+削除されますが、Cosmos DB の conversation と response state には影響しません。必要な telemetry を
+確認して保全してから、この変更を apply してください。
 
 ### 破棄と purge
 
@@ -720,6 +811,11 @@ terraform destroy -parallelism=1 \
     source の修正後に step `01` から `03` を再実行します。
 * MCP の `400` または `404` では knowledge base 名を確認し、`2026-05-01-preview` を指定した
     slash 形式の MCP endpoint を維持します。
+* Trace が表示されない場合は 2 から 5 分待ち、project に `ProjectManagedIdentity` を使用する
+    `AppInsights` connection が 1 つあることと、project identity に Application Insights scope の
+    Monitoring Metrics Publisher があることを確認します。
+* Operator が trace を開けない場合は、Application Insights scope の Log Analytics Reader を確認します。
+    Protected table では Privileged Monitoring Data Reader も必要ですが、このシナリオは自動割り当てしません。
 * Semantic ranker と agentic retrieval は既定の月次無料枠から開始します。無料枠を超えると、対応する
     Standard pay-as-you-go plan を別途有効にしない限り billing error が返されます。
 
@@ -756,6 +852,9 @@ terraform destroy -parallelism=1 \
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service の制限、quota、リージョン](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
 * [Foundry model deployment type とデータ処理](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types)
+* [Microsoft Foundry で tracing を設定](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup)
+* [Tracing とデータ処理](https://learn.microsoft.com/azure/foundry/observability/concepts/trace-data)
+* [Trace ingestion の Microsoft Entra 認証](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-ingestion-entra-authentication)
 * [Foundry IQ とは](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq)
 * [Foundry IQ FAQ](https://learn.microsoft.com/azure/foundry/agents/concepts/foundry-iq-faq)
 * [Azure AI Search の vector search](https://learn.microsoft.com/azure/search/vector-search-overview)
@@ -766,6 +865,7 @@ terraform destroy -parallelism=1 \
 
 * [Microsoft Foundry API reference](https://ai.azure.com/api-reference)
 * [Microsoft Foundry Project REST API](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject)
+* [Foundry project connection ARM reference](https://learn.microsoft.com/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)
 * [Azure AI Search Data Plane REST API](https://learn.microsoft.com/rest/api/searchservice/)
 * [Azure CLI で現在サインイン中の user を表示](https://learn.microsoft.com/cli/azure/ad/signed-in-user#az-ad-signed-in-user-show)
 * [Microsoft Entra service principal を表示](https://learn.microsoft.com/cli/azure/ad/sp#az-ad-sp-show)
