@@ -169,213 +169,99 @@ Workflow を完了すると、次の事項を説明および実践できる状�
 
 ## アーキテクチャ
 
-次の図では、API plane と実行フローを分けて示します。最初の図は、**object が存在する場所と
-このシナリオで管理する client** を表します。後続のシーケンス図は、デプロイ時とユーザーからの
-request 実行時に各 surface が通信するタイミングを表します。
+### Azure リソースの依存関係
 
-> [!IMPORTANT]
-> この README における **ARM Control Plane** は、subscription 内のリソースを管理する Azure Resource
-> Manager の操作を意味します。Agent fleet 全体の governance、inventory、observability を提供する
-> 製品機能の **Microsoft Foundry Control Plane** とは異なり、後者はこのシナリオの対象外です。
+このシナリオの中心は **Foundry project** です。Project 内の Prompt Agent が model と
+knowledge base を組み合わせ、Standard setup の 3 つのデータ サービスへ Agent の file、検索データ、
+会話状態を分担して保存します。Project connection は接続先を登録し、capability host はその接続先を
+Agent Service の用途へ割り当てます。
 
-### ARM Control Plane と service Data Plane
-
-以下の図が示す内容は、**object が Azure resource なのか service 内の runtime object なのか、
-このシナリオではどの tool が管理するのか**です。すべての要素を一つの大きな枠に入れず、
-Azure resource ごとに分けて示します。各図の Control Plane は Azure Resource Manager（ARM）で
-resource の構成を管理する面、Data Plane は作成済み resource 内のデータや Agent の実行時に作成・利用する
-object を扱う面です。ここで object は、API から作成、取得、削除する構成またはデータの単位を指します。
-
-#### Microsoft Foundry account と project
+次の図は resource の作成順序ではなく、**構成上の依存関係と実行時の利用関係**を表します。点線は
+connection または capability host による構成、実線はデータの読み書きまたは service の呼び出しです。
 
 ```mermaid
-flowchart LR
-    subgraph Foundry["Microsoft Foundry account と project"]
+flowchart TB
+    Caller["ユーザーまたは呼び出し元 application"]
+
+    subgraph ResourceGroup["Azure resource group"]
         direction TB
-        FoundryArm["Control Plane<br/>account、project、model deployment<br/>connection、capability host"]
-        FoundryData["Data Plane<br/>Prompt Agent version<br/>conversation、response"]
-        FoundryArm -.->|"project の runtime 境界"| FoundryData
+
+        subgraph Foundry["Microsoft Foundry account"]
+            direction TB
+            subgraph Project["Foundry project"]
+                direction LR
+                Agent["Prompt Agent<br/>質問、tool 呼び出し、回答生成を調整"]
+                ProjectConfig["Project connections<br/>接続先と認証方式を登録<br/><br/>Capability hosts<br/>state service の用途を割り当て"]
+            end
+            GenerationModel["生成 model deployment<br/>gpt-5.4-mini"]
+            EmbeddingModel["Embedding model deployment<br/>text-embedding-3-large"]
+        end
+
+        subgraph DataServices["利用者管理のデータ サービス（Standard setup）"]
+            direction LR
+            Storage["Azure Storage<br/>source CSV、Agent file、upload data"]
+            Search["Azure AI Search<br/>knowledge source、index、knowledge base"]
+            Cosmos["Azure Cosmos DB<br/>conversation、response、Agent state"]
+        end
+
+        subgraph Tracing["任意の tracing"]
+            direction LR
+            AppInsights["Application Insights<br/>OpenTelemetry span の受け口"]
+            LogAnalytics["Log Analytics workspace<br/>trace の保存と query"]
+        end
     end
 
-    Terraform["Terraform"] -->|"ARM API"| FoundryArm
-    ArmScripts["script 06 と 09"] -->|"ARM REST"| FoundryArm
-    FoundryScripts["script 07 から 09"] -->|"Foundry project API"| FoundryData
+    Caller -->|"質問と回答"| Agent
+    ProjectConfig -.->|"file store を選択"| Storage
+    ProjectConfig -.->|"vector store を選択"| Search
+    ProjectConfig -.->|"thread store を選択"| Cosmos
+    Search -->|"Search identity で CSV を読み取る"| Storage
+    Search -->|"embedding を生成"| EmbeddingModel
+    Agent -->|"MCP で根拠を取得"| Search
+    Agent -->|"最終回答を生成"| GenerationModel
+    Agent -->|"会話状態を保存"| Cosmos
+    Agent -.->|"AppInsights connection<br/>server-side trace"| AppInsights
+    AppInsights -->|"workspace-backed"| LogAnalytics
 ```
 
-#### Azure Storage
+### 各リソースの目的
 
-```mermaid
-flowchart LR
-    subgraph Storage["Azure Storage"]
-        direction TB
-        StorageArm["Control Plane<br/>Storage account<br/>local authentication の無効化"]
-        StorageData["Data Plane<br/>private container<br/>restaurant review CSV"]
-        StorageArm -.->|"account 内のデータ"| StorageData
-    end
-
-    Terraform["Terraform"] -->|"ARM API"| StorageArm
-    BlobScripts["script 01 と 09"] -->|"Blob REST API"| StorageData
-    SearchIdentity["Search managed identity"] -->|"ingestion 時に CSV を読み取る"| StorageData
-```
-
-#### Azure AI Search
-
-```mermaid
-flowchart LR
-    subgraph Search["Azure AI Search"]
-        direction TB
-        SearchArm["Control Plane<br/>Search service<br/>managed identity と認証設定"]
-        SearchData["Data Plane<br/>knowledge source と自動生成 pipeline<br/>knowledge base、retrieve、MCP endpoint"]
-        SearchArm -.->|"service 内の object"| SearchData
-    end
-
-    Terraform["Terraform"] -->|"ARM API"| SearchArm
-    SearchScripts["script 02 から 05 と 09"] -->|"Search REST API"| SearchData
-    PromptAgent["Prompt Agent"] -->|"MCP で retrieve"| SearchData
-    SearchData -->|"ingestion 時に embedding を生成"| EmbeddingModel["Foundry model deployment"]
-```
-
-#### Azure Cosmos DB
-
-```mermaid
-flowchart LR
-    subgraph Cosmos["Azure Cosmos DB"]
-        direction TB
-        CosmosArm["Control Plane<br/>Cosmos DB account<br/>project connection"]
-        CosmosData["Data Plane<br/>enterprise_memory<br/>conversation と Agent metadata"]
-        CosmosArm -.->|"account 内の managed state"| CosmosData
-    end
-
-    Terraform["Terraform"] -->|"ARM API"| CosmosArm
-    AgentService["Foundry Agent Service"] -->|"実行時に読み書き"| CosmosData
-```
-
-#### Azure Monitor
-
-```mermaid
-flowchart LR
-    subgraph Monitor["Azure Monitor"]
-        direction TB
-        MonitorArm["Control Plane<br/>Log Analytics workspace<br/>Application Insights と project connection"]
-        MonitorData["Data Plane<br/>OpenTelemetry Agent trace<br/>span と実行 telemetry"]
-        MonitorArm -.->|"workspace-based telemetry"| MonitorData
-    end
-
-    Terraform["Terraform"] -->|"ARM API"| MonitorArm
-    AgentService["Foundry Agent Service"] -->|"project managed identity"| MonitorData
-    Operator["Operator"] -->|"保持された trace を query"| MonitorData
-```
-
-境界は `terraform apply` の前後ではなく、使用する API で決まります。たとえば script `06` は Search
-Data Plane の構築後に実行しますが、ARM で project connection を作成するため Control Plane 操作です。
-Knowledge source と knowledge base は Search Service Data Plane の top-level object であり、ARM child
-resource ではありません。Prompt Agent version、conversation、response は Foundry project Data Plane
-の object です。
-
-| API surface | Endpoint または token audience | このシナリオの object | 管理方法 |
+| 区分 | Resource または object | 存在する目的 | 主な依存関係 |
 | --- | --- | --- | --- |
-| ARM Control Plane | `management.azure.com` | Foundry account/project、model deployment、connection、capability host、data service account、RBAC | Terraform。RemoteTool connection は script `06` が作成し、script `09` が削除 |
-| Storage Data Plane | `https://storage.azure.com/.default` | Private container と review CSV | Script `01` と `09` |
-| Search Data Plane | `https://search.azure.com/.default` | Knowledge source、自動生成される data source/skillset/index/indexer、knowledge base、retrieval | Script `02` から `05` と `09` |
-| Foundry project Data Plane | `https://ai.azure.com/.default` | Prompt Agent version、conversation、Responses API call | Script `07` から `09` |
-| Model Data Plane | Foundry OpenAI endpoint | Embedding と最終回答の生成 | Runtime の Search managed identity と Agent Service |
-| Cosmos DB Data Plane | Project capability-host connection | `enterprise_memory` と Agent Service state | Agent Service。Script から Cosmos DB は直接呼び出さない |
-| Azure Monitor Data Plane | Application Insights ingestion と Log Analytics query endpoint | OpenTelemetry span と実行 telemetry | Agent Service が trace を取り込み、Operator が query |
+| 基盤 | Azure resource group | このシナリオの Azure resource をまとめる lifecycle と access scope | すべての Azure resource を包含する |
+| Foundry | Microsoft Foundry account | Project と model deployment の親 resource。Foundry の model endpoint と Agent Service の基盤を提供する | Resource group に属し、project と model deployment を包含する |
+| Foundry | Foundry project | Agent、connection、conversation の分離境界。Project managed identity が接続先へアクセスする | Foundry account に属し、Standard setup では 3 つのデータ サービスに依存する |
+| Foundry | Prompt Agent | Instructions、生成 model、MCP tool を組み合わせて質問への回答を調整する | Project 内に存在し、生成 model、RemoteTool connection、Cosmos DB を使用する |
+| Foundry | Model deployment | `text-embedding-3-large` は検索用 vector を作り、`gpt-5.4-mini` は最終回答を生成する | Foundry account 内に存在し、Search または Prompt Agent から呼び出される |
+| 接続構成 | Project connection | Storage、Search、Cosmos DB、MCP endpoint、任意の Application Insights の endpoint、resource ID、認証方式を project に登録する | Project と対象 resource の両方に依存する。Connection 自体はデータも権限も保持しない |
+| 接続構成 | Capability host | Account で Agent Service を有効にし、project で Storage、Search、Cosmos DB connection の用途を決める | Standard setup の 3 connection と RBAC が準備済みであることに依存する |
+| データ | Azure Storage account | Agent の file と upload data、および knowledge source の元になる review CSV を保持する | Project capability host から file store に指定され、Search identity から CSV を読み取られる |
+| データ | Azure AI Search | Knowledge source、自動生成 pipeline と index、knowledge base、MCP retrieval endpoint を保持する | Ingestion では Storage と embedding model、Q&A では Prompt Agent から利用される |
+| データ | Azure Cosmos DB | `enterprise_memory` に conversation、response、Agent metadata を保持する | Project capability host から thread store に指定され、Agent Service が読み書きする |
+| 監視 | Application Insights | Prompt Agent が出力する server-side OpenTelemetry span を受け取る | `enable_tracing` が有効な場合だけ作成され、project connection と project identity の RBAC を使用する |
+| 監視 | Log Analytics workspace | Application Insights の backing store として trace を 30 日間保持し、query を提供する | Application Insights から telemetry を受け取る |
 
-Terraform は ARM resource lifecycle と RBAC の管理に適しています。この実装では Search と Foundry の
-Data Plane object を Terraform state に保持せず、連番 script が service REST API で管理します。
-Script `09` は cleanup 章に記載した永続的な named object を削除しますが、script `08` が作成する
-conversation は追跡または削除しません。`terraform destroy` が ARM resource を削除します。
+### 全体としてのつながり
 
-### Terraform と script を分ける理由
+* **Standard setup の結合:** Account capability host が Agent Service を有効にし、project capability host が
+    Storage を file store、Search を vector store、Cosmos DB を thread store に割り当てます。Connection は
+    「どこへ接続するか」、capability host は「何に使うか」、managed identity と RBAC は「接続を実行できるか」
+    をそれぞれ担当します。
+* **Knowledge の依存関係:** Review CSV は Storage にあり、Search の managed identity がこれを読み取ります。
+    Search は Foundry account の embedding deployment を呼び出し、検索用 index と knowledge base を保持します。
+    Storage と embedding deployment は knowledge の作成に必要ですが、通常の Q&A ごとには呼び出されません。
+* **Q&A の依存関係:** Prompt Agent は RemoteTool connection の MCP endpoint から Search の knowledge base を
+    検索し、得られた根拠を生成 model に渡します。会話と Agent state は Cosmos DB に保存されるため、検索結果の
+    index と会話 state は別の resource に保持されます。
+* **Tracing の依存関係:** `enable_tracing` が有効な場合だけ、Prompt Agent の span が Application Insights を
+    経由して Log Analytics に保存されます。Trace は Cosmos DB の会話 state を置き換えるものではなく、
+    debugging と監視のための別系統のデータです。
 
-この分割は実装上の境界であり、Terraform が Data Plane を管理できないという意味ではありません。
-Provider が object の CRUD、import、state を実装していれば、Terraform でも Data Plane object を
-管理できます。このシナリオでは、次のように分けています。
-
-* Terraform と `azapi_resource` は ARM resource ID を持つ object を管理する
-* Search knowledge source と knowledge base は Search endpoint 内の名前で識別され、Search Service の
-    ARM resource ID 配下にある child resource ではない
-* 自動生成される data source、skillset、index、indexer は Blob knowledge source の固定 template が
-    所有するため、独立した Terraform resource として編集または管理しない
-* Prompt Agent version と conversation は Foundry project Data Plane に存在する。Script `07` は
-    `POST` を使用するため、再実行すると新しい Agent version を作成する
-
-現在の provider 構成では、これらの Search と Foundry object を state に保持しません。REST call を
-`local-exec` で Terraform 内から実行しても、宣言的な diff、import、lifecycle tracking は得られません。
-そこで、API が対応する object は create-or-update の `PUT` で作成し、明示的な cleanup step を提供します。
-Script `06` は意図的な例外です。RemoteTool connection は ARM object ですが、MCP endpoint の作成後に
-実行し、post-deployment workflow と同じ lifecycle で管理します。
-
-### デプロイ フロー
-
-この図が示す内容は、**環境を構築および検証する順序**です。
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Operator
-    participant CLI as Azure CLI
-    participant TF as Terraform
-    participant ARM as ARM Control Plane
-    participant Storage as Storage Data Plane
-    participant Search as Search Data Plane
-    participant Models as Model Data Plane
-    participant Foundry as Foundry project Data Plane
-
-    Operator->>CLI: Subscription と Operator の object ID を確認
-    Operator->>TF: init、plan、apply -parallelism=1
-    TF->>ARM: Foundry、model、Search、Storage、Cosmos DB を作成
-    TF->>ARM: RBAC を割り当てて伝播を待機
-    TF->>ARM: Project connection と capability host を作成
-    Operator->>CLI: Output と 4 つの token audience を検証（script 00）
-    Operator->>Storage: Review CSV を upload（script 01）
-    Operator->>Search: Blob knowledge source を作成（script 02）
-    Search->>Storage: Search managed identity で CSV を読み取り
-    Search->>Models: Managed identity で embedding model を呼び出し
-    Operator->>Search: Ingestion の完了を待機（script 03）
-    Operator->>Search: Knowledge base の作成と retrieval の検証（script 04-05）
-    Operator->>ARM: RemoteTool project connection を作成（script 06）
-    Operator->>Foundry: Prompt Agent version を作成（script 07）
-    Operator->>Foundry: Grounded Q&A を実行（script 08）
-```
-
-### Q&A 実行時フロー
-
-この図が示す内容は、**ユーザーが質問した後に通信するサービス**です。
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as ユーザー
-    participant Agent as Foundry Data Plane Prompt Agent
-    participant Cosmos as Cosmos DB Data Plane state
-    participant Tool as MCP RemoteTool connection
-    participant KB as Search Data Plane knowledge base
-    participant Index as 自動生成された Search index
-    participant Model as Model Data Plane gpt-5.4-mini
-    participant Monitor as Application Insights trace
-
-    User->>Agent: Responses API で質問
-    Agent->>Cosmos: Conversation と thread state を保存
-    Agent->>Tool: MCP で knowledge_base_retrieve を呼び出し
-    Tool->>KB: Retrieval request を送信
-    KB->>Index: Agentic retrieval を実行
-    Index-->>KB: 関連 chunk と reference を返却
-    KB-->>Tool: Grounding evidence を返却
-    Tool-->>Agent: MCP tool result を返却
-    Agent->>Model: Evidence から回答を生成
-    Model-->>Agent: Grounded answer を返却
-    Agent->>Cosmos: Conversation state を更新
-    opt enable_tracing
-        Agent->>Monitor: Server-side OpenTelemetry span を export
-    end
-    Agent-->>User: 回答と citation を返却
-```
-
-Blob Storage と embedding deployment が使用されるのは、デプロイ フローに示した
-ingestion 時です。Q&A リクエストごとには呼び出されません。Terraform も実行時の
-通信経路には含まれません。
+すべての service 間アクセスは Microsoft Entra ID の token と Azure RBAC を使用します。主に Foundry project
+identity が Storage、Search、Cosmos DB、生成 model、Application Insights へアクセスし、Search identity が
+Storage と embedding model へアクセスします。Connection や capability host を作成しただけでは権限は付与されず、
+対応する RBAC role assignment が必要です。また、この図は論理的な依存関係を示すものであり、public endpoint を
+使用する現在の構成に private network isolation があることを意味しません。
 
 ## 前提条件と制約
 
@@ -495,6 +381,34 @@ backend とその version history を保護してください。
 > 含まれる可能性があります。収集について利用者へ通知し、個人データや機密データを最小化し、privacy
 > および compliance 要件に従って access を制限してください。
 
+### Operator の Cosmos DB 閲覧権限
+
+Agent state への Operator の直接アクセスは既定で無効です。Standard setup を有効にしたうえで、明示的に
+opt-in します。
+
+```hcl
+deploy_standard_agent                  = true
+enable_operator_cosmosdb_read_access = true
+```
+
+有効にすると、Terraform は `operator_principal_id` で選択した principal に次の 2 つの読み取り専用
+assignment を作成します。
+
+* Cosmos DB account scope の Azure RBAC `Reader`: Azure portal で account を変更せずに表示するために使用
+* `enterprise_memory` database scope だけの `Cosmos DB Built-in Data Reader`: metadata、item、query、
+    change feed の読み取りに使用
+
+Data-plane assignment は書き込み、削除、throughput の変更、他の database へのアクセスを許可しません。
+Local authentication は無効のままであり、Data Explorer は account key ではなく Microsoft Entra RBAC を
+使用します。`Cosmos DB Account Reader Role` には読み取り専用 account key の取得も含まれるため、この
+シナリオではより狭い account-scope の `Reader` を使用します。
+
+> [!WARNING]
+> `enterprise_memory` database には conversation、response、run state、Agent metadata、user prompt、
+> model output が含まれる可能性があります。Privacy、compliance、retention、incident response の要件を
+> 確認し、信頼できる Operator にだけこの権限を付与してください。読み取り専用でも、database scope で
+> 利用可能な content 全体が公開されます。
+
 ### 認証と RBAC
 
 Foundry account とすべての Standard Agent データ サービスで local authentication を無効にします。
@@ -517,12 +431,18 @@ Foundry account とすべての Standard Agent データ サービスで local a
 | Azure AI Search        | Search Index Data Reader            | Operator                 | Direct retrieval test の実行             |
 | Foundry account        | Foundry Project Manager             | Operator                 | Connection と Agent の作成               |
 
+`enable_operator_cosmosdb_read_access` が有効な場合、Terraform は次の assignment も作成します。
+
+| Scope                  | Role                            | Assignee | 用途                                        |
+|------------------------|---------------------------------|----------|---------------------------------------------|
+| Cosmos DB account      | Reader                          | Operator | Account の control-plane metadata の表示    |
+| `enterprise_memory` DB | Cosmos DB Built-in Data Reader  | Operator | 調査のための Agent state の読み取りと query |
+
 `operator_principal_id` input が `null` の場合、Terraform を実行する identity の object ID を使用します。
-リポジトリに含まれる `terraform.tfvars` では object ID を明示的に指定しているため、この fallback より
-優先されます。後述のデプロイ手順では、現在の Azure CLI principal を解決し、`terraform.tfvars` より
-優先度が高い `-var` で渡します。Terraform と連番 script を異なる identity で実行する場合は、連番
-script を実行する principal の object ID を使用してください。Azure AI role の改名移行中にも失敗しないよう、
-Foundry role は role definition ID で割り当てます。
+リポジトリに含まれる `terraform.tfvars` ではこの input を設定していません。後述のデプロイ手順では、
+現在の Azure CLI principal を解決して `-var` で渡します。Terraform と連番 script を異なる identity で
+実行する場合は、連番 script を実行する principal の object ID を使用してください。Azure AI role の
+改名移行中にも失敗しないよう、Foundry role は role definition ID で割り当てます。
 
 Terraform は control-plane role assignment の後に 60 秒待機します。その後、作成 timeout を 60 分に設定した
 account capability host と project capability host を作成します。Project host が `enterprise_memory`
@@ -642,10 +562,14 @@ terraform validate
 terraform plan -var="operator_principal_id=${OPERATOR_PRINCIPAL_ID}"
 ```
 
-Command-line の `-var` は、`terraform.tfvars` に含まれる object ID を意図的に上書きします。
-`deploy_standard_agent` が `true` の場合、plan に Operator の role assignment が含まれることを確認します。
-Local variable file で tracing を有効にしない場合は、`plan` と `apply` の両方へ
-`-var="enable_tracing=true"` を渡します。
+リポジトリに含まれる `terraform.tfvars` では object ID を設定していないため、command-line の `-var` で
+Operator を明示的に選択します。`deploy_standard_agent` が `true` の場合、plan に Operator の role
+assignment が含まれることを確認します。Local variable file で tracing を有効にしない場合は、`plan` と
+`apply` の両方へ
+`-var="enable_tracing=true"` を渡します。Local variable file を変更せず、選択した Operator に Cosmos DB
+の調査権限を付与する場合は、両方の command に
+`-var="enable_operator_cosmosdb_read_access=true"` も渡します。この option による plan の追加が、
+account-scope の `Reader` と database-scope の data reader assignment だけであることを確認してください。
 
 ### 3. Terraform 管理 infrastructure のデプロイ
 
@@ -761,6 +685,10 @@ Application Insights、その Log Analytics workspace が削除されます。�
 削除されますが、Cosmos DB の conversation と response state には影響しません。必要な telemetry を
 確認して保全してから、この変更を apply してください。
 
+`enable_operator_cosmosdb_read_access` を `true` から `false` に変更すると、Operator の 2 つの読み取り
+assignment だけが削除されます。Cosmos DB account、`enterprise_memory` database、保存済みの Agent state は
+削除されません。Apply 後、権限の失効が伝播するまで待機してください。
+
 ### 破棄と purge
 
 Microsoft Foundry アカウントを通常どおり削除すると、soft-delete されます。purge しない場合、
@@ -816,6 +744,11 @@ terraform destroy -parallelism=1 \
     Monitoring Metrics Publisher があることを確認します。
 * Operator が trace を開けない場合は、Application Insights scope の Log Analytics Reader を確認します。
     Protected table では Privileged Monitoring Data Reader も必要ですが、このシナリオは自動割り当てしません。
+* Cosmos DB Data Explorer の `401` または `403` では、`enable_operator_cosmosdb_read_access` が有効で、
+    選択した Operator に Cosmos DB account の `Reader` と `enterprise_memory` database の
+    `Cosmos DB Built-in Data Reader` があることを確認します。Data Explorer の設定で
+    **Enable Entra ID (RBAC)** を **Automatic** または **True** にし、自動 sign-in が失敗する場合は
+    **Login for Entra ID RBAC** を使用して、両方の role assignment の伝播を待ちます。
 * Semantic ranker と agentic retrieval は既定の月次無料枠から開始します。無料枠を超えると、対応する
     Standard pay-as-you-go plan を別途有効にしない限り billing error が返されます。
 
@@ -848,6 +781,7 @@ terraform destroy -parallelism=1 \
 * [Azure Control Plane と Data Plane](https://learn.microsoft.com/azure/azure-resource-manager/management/control-plane-and-data-plane)
 * [Azure resource の managed identity](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview)
 * [Azure RBAC とは](https://learn.microsoft.com/azure/role-based-access-control/overview)
+* [Azure RBAC Reader role](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general#reader)
 * [Microsoft identity platform の access token](https://learn.microsoft.com/entra/identity-platform/access-tokens)
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service の制限、quota、リージョン](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
@@ -867,6 +801,8 @@ terraform destroy -parallelism=1 \
 * [Microsoft Foundry Project REST API](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject)
 * [Foundry project connection ARM reference](https://learn.microsoft.com/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)
 * [Azure AI Search Data Plane REST API](https://learn.microsoft.com/rest/api/searchservice/)
+* [Data Explorer で Microsoft Entra 認証を使用](https://learn.microsoft.com/azure/cosmos-db/data-explorer#use-with-microsoft-entra-authentication)
+* [Azure Cosmos DB for NoSQL の data-plane role](https://learn.microsoft.com/azure/cosmos-db/reference-data-plane-security#built-in-roles)
 * [Azure CLI で現在サインイン中の user を表示](https://learn.microsoft.com/cli/azure/ad/signed-in-user#az-ad-signed-in-user-show)
 * [Microsoft Entra service principal を表示](https://learn.microsoft.com/cli/azure/ad/sp#az-ad-sp-show)
 * [Foundry IQ knowledge base と Agent の接続](https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect?tabs=foundry%2Crest)

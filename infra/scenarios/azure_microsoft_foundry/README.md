@@ -182,223 +182,109 @@ After completing the workflow, you should be able to:
 
 ## Architecture
 
-The following views separate API planes from execution flows. The first diagram
-shows **where an object lives and which client manages it**. The sequence
-diagrams then show when those surfaces communicate during deployment and during
-a user request.
+### Azure resource dependency overview
 
-> [!IMPORTANT]
-> In this README, **ARM control plane** means Azure Resource Manager operations
-> for resources in a subscription. It is different from the product feature
-> named **Microsoft Foundry Control Plane**, which provides fleet-wide
-> governance, inventory, and observability and is outside this scenario.
+The **Foundry project** is the center of this scenario. Its prompt agent combines
+a model with a knowledge base, while the three Standard setup data services
+divide responsibility for agent files, searchable knowledge, and conversation
+state. Project connections register destinations; capability hosts assign those
+destinations to Agent Service purposes.
 
-### ARM control plane and service data planes
-
-The following views answer: **is an object an Azure resource or a runtime object
-inside a service, and which tool manages it in this scenario?** Instead of
-placing every object in one large boundary, each Azure resource has its own view.
-In each view, the control plane configures the resource through Azure Resource
-Manager (ARM), while the data plane handles data or objects created and used as
-the agent runs. Here, an object is one unit of configuration or data that an API
-can create, retrieve, or delete.
-
-#### Microsoft Foundry account and project
+The following diagram shows **configuration dependencies and runtime usage**, not
+resource creation order. Dotted arrows represent configuration through a
+connection or capability host. Solid arrows represent data access or a service
+call.
 
 ```mermaid
-flowchart LR
-    subgraph Foundry["Microsoft Foundry account and project"]
+flowchart TB
+    Caller["User or calling application"]
+
+    subgraph ResourceGroup["Azure resource group"]
         direction TB
-        FoundryArm["Control plane<br/>account, project, model deployments<br/>connections, capability hosts"]
-        FoundryData["Data plane<br/>prompt agent versions<br/>conversations, responses"]
-        FoundryArm -.->|"project runtime boundary"| FoundryData
+
+        subgraph Foundry["Microsoft Foundry account"]
+            direction TB
+            subgraph Project["Foundry project"]
+                direction LR
+                Agent["Prompt agent<br/>coordinates questions, tools, and answers"]
+                ProjectConfig["Project connections<br/>register destinations and authentication<br/><br/>Capability hosts<br/>assign state-service purposes"]
+            end
+            GenerationModel["Generation model deployment<br/>gpt-5.4-mini"]
+            EmbeddingModel["Embedding model deployment<br/>text-embedding-3-large"]
+        end
+
+        subgraph DataServices["Customer-managed data services (Standard setup)"]
+            direction LR
+            Storage["Azure Storage<br/>source CSV, agent files, and uploads"]
+            Search["Azure AI Search<br/>knowledge source, index, and knowledge base"]
+            Cosmos["Azure Cosmos DB<br/>conversations, responses, and agent state"]
+        end
+
+        subgraph Tracing["Optional tracing"]
+            direction LR
+            AppInsights["Application Insights<br/>receives OpenTelemetry spans"]
+            LogAnalytics["Log Analytics workspace<br/>stores and queries traces"]
+        end
     end
 
-    Terraform["Terraform"] -->|"ARM API"| FoundryArm
-    ArmScripts["scripts 06 and 09"] -->|"ARM REST"| FoundryArm
-    FoundryScripts["scripts 07 through 09"] -->|"Foundry project API"| FoundryData
+    Caller -->|"questions and answers"| Agent
+    ProjectConfig -.->|"select file store"| Storage
+    ProjectConfig -.->|"select vector store"| Search
+    ProjectConfig -.->|"select thread store"| Cosmos
+    Search -->|"read CSV with Search identity"| Storage
+    Search -->|"generate embeddings"| EmbeddingModel
+    Agent -->|"retrieve evidence over MCP"| Search
+    Agent -->|"generate final answer"| GenerationModel
+    Agent -->|"persist conversation state"| Cosmos
+    Agent -.->|"AppInsights connection<br/>server-side traces"| AppInsights
+    AppInsights -->|"workspace backed"| LogAnalytics
 ```
 
-#### Azure Storage
+### Resource purposes
 
-```mermaid
-flowchart LR
-    subgraph Storage["Azure Storage"]
-        direction TB
-        StorageArm["Control plane<br/>Storage account<br/>local authentication disabled"]
-        StorageData["Data plane<br/>private container<br/>restaurant review CSV"]
-        StorageArm -.->|"data in the account"| StorageData
-    end
+| Area | Resource or object | Why it exists | Main dependency |
+| --- | --- | --- | --- |
+| Foundation | Azure resource group | Provides the lifecycle and access scope that groups this scenario's Azure resources | Contains every Azure resource in the scenario |
+| Foundry | Microsoft Foundry account | Parents the project and model deployments and provides the Foundry model endpoint and Agent Service foundation | Belongs to the resource group and contains the project and model deployments |
+| Foundry | Foundry project | Isolates agents, connections, and conversations. Its managed identity accesses connected resources | Belongs to the Foundry account and, with Standard setup, depends on all three data services |
+| Foundry | Prompt agent | Combines instructions, a generation model, and an MCP tool to coordinate answers | Exists in the project and uses the generation model, RemoteTool connection, and Cosmos DB |
+| Foundry | Model deployments | `text-embedding-3-large` creates search vectors; `gpt-5.4-mini` generates final answers | Exist in the Foundry account and are called by Search or the prompt agent |
+| Connection configuration | Project connections | Register endpoints, resource IDs, and authentication for Storage, Search, Cosmos DB, the MCP endpoint, and optional Application Insights | Depend on both the project and target resource. Connections hold neither data nor permissions |
+| Connection configuration | Capability hosts | Enable Agent Service at account scope and select the Storage, Search, and Cosmos DB connections at project scope | Depend on the three Standard setup connections and their RBAC assignments |
+| Data | Azure Storage account | Stores agent files and uploads plus the review CSV used as the knowledge source | Is selected as the file store and is read by the Search identity during ingestion |
+| Data | Azure AI Search | Holds the knowledge source, generated pipeline and index, knowledge base, and MCP retrieval endpoint | Uses Storage and the embedding model during ingestion and serves the prompt agent during Q&A |
+| Data | Azure Cosmos DB | Stores conversations, responses, and agent metadata in `enterprise_memory` | Is selected as the thread store and is read and written by Agent Service |
+| Observability | Application Insights | Receives server-side OpenTelemetry spans emitted by the prompt agent | Exists only when `enable_tracing` is enabled and uses a project connection and project-identity RBAC |
+| Observability | Log Analytics workspace | Backs Application Insights, retains traces for 30 days, and provides querying | Receives telemetry through Application Insights |
 
-    Terraform["Terraform"] -->|"ARM API"| StorageArm
-    BlobScripts["scripts 01 and 09"] -->|"Blob REST API"| StorageData
-    SearchIdentity["Search managed identity"] -->|"read CSV during ingestion"| StorageData
-```
+### How the components fit together
 
-#### Azure AI Search
+* **Standard setup binding:** The account capability host enables Agent Service.
+    The project capability host assigns Storage as the file store, Search as the
+    vector store, and Cosmos DB as the thread store. A connection answers "where
+    to connect," a capability host answers "what to use it for," and managed
+    identity with RBAC answers "whether access is allowed."
+* **Knowledge dependency:** The review CSV resides in Storage. The Search managed
+    identity reads it and invokes the embedding deployment in the Foundry account.
+    Search retains the resulting index and knowledge base. Storage and the
+    embedding deployment are needed to build knowledge, but aren't called for a
+    normal Q&A request.
+* **Q&A dependency:** The prompt agent retrieves evidence from the Search knowledge
+    base through the RemoteTool connection's MCP endpoint, then passes that evidence
+    to the generation model. Cosmos DB stores conversation and agent state, keeping
+    runtime state separate from the searchable index.
+* **Tracing dependency:** Only when `enable_tracing` is enabled, prompt-agent spans
+    flow through Application Insights into Log Analytics. Traces are a separate
+    debugging and monitoring record; they don't replace conversation state in
+    Cosmos DB.
 
-```mermaid
-flowchart LR
-    subgraph Search["Azure AI Search"]
-        direction TB
-        SearchArm["Control plane<br/>Search service<br/>managed identity and authentication settings"]
-        SearchData["Data plane<br/>knowledge source and generated pipeline<br/>knowledge base, retrieve, MCP endpoint"]
-        SearchArm -.->|"objects in the service"| SearchData
-    end
-
-    Terraform["Terraform"] -->|"ARM API"| SearchArm
-    SearchScripts["scripts 02 through 05 and 09"] -->|"Search REST API"| SearchData
-    PromptAgent["Prompt agent"] -->|"retrieve over MCP"| SearchData
-    SearchData -->|"generate embeddings during ingestion"| EmbeddingModel["Foundry model deployment"]
-```
-
-#### Azure Cosmos DB
-
-```mermaid
-flowchart LR
-    subgraph Cosmos["Azure Cosmos DB"]
-        direction TB
-        CosmosArm["Control plane<br/>Cosmos DB account<br/>project connection"]
-        CosmosData["Data plane<br/>enterprise_memory<br/>conversations and agent metadata"]
-        CosmosArm -.->|"managed state in the account"| CosmosData
-    end
-
-    Terraform["Terraform"] -->|"ARM API"| CosmosArm
-    AgentService["Foundry Agent Service"] -->|"read and write at runtime"| CosmosData
-```
-
-#### Azure Monitor
-
-```mermaid
-flowchart LR
-    subgraph Monitor["Azure Monitor"]
-        direction TB
-        MonitorArm["Control plane<br/>Log Analytics workspace<br/>Application Insights and project connection"]
-        MonitorData["Data plane<br/>OpenTelemetry agent traces<br/>spans and execution telemetry"]
-        MonitorArm -.->|"workspace-backed telemetry"| MonitorData
-    end
-
-    Terraform["Terraform"] -->|"ARM API"| MonitorArm
-    AgentService["Foundry Agent Service"] -->|"project managed identity"| MonitorData
-    Operator["Operator"] -->|"query retained traces"| MonitorData
-```
-
-The boundary is determined by the API, not by whether an operation happens
-before or after `terraform apply`. Script `06`, for example, runs after Search
-data-plane setup but creates a project connection through ARM, so it is a
-control-plane operation. Knowledge sources and knowledge bases are top-level
-objects in the Search service data plane, not ARM child resources. Prompt agent
-versions, conversations, and responses are Foundry project data-plane objects.
-
-| API surface | Endpoint or token audience | Objects used here | Management in this scenario |
-| ------------- | ---------------------------- | ------------------- | ----------------------------- |
-| ARM control plane | `management.azure.com` | Foundry account/project, model deployments, connections, capability hosts, data-service accounts, RBAC | Terraform; script `06` creates and script `09` deletes the RemoteTool connection |
-| Storage data plane | `https://storage.azure.com/.default` | Private container and review CSV | Scripts `01` and `09` |
-| Search data plane | `https://search.azure.com/.default` | Knowledge source, generated data source/skillset/index/indexer, knowledge base, retrieval | Scripts `02` through `05` and `09` |
-| Foundry project data plane | `https://ai.azure.com/.default` | Prompt agent versions, conversations, Responses API calls | Scripts `07` through `09` |
-| Model data plane | Foundry OpenAI endpoint | Embeddings and final response generation | Search managed identity and Agent Service at runtime |
-| Cosmos DB data plane | Project capability-host connection | `enterprise_memory` and Agent Service state | Agent Service; the scripts do not call Cosmos DB directly |
-| Azure Monitor data plane | Application Insights ingestion and Log Analytics query endpoints | OpenTelemetry spans and execution telemetry | Agent Service ingests traces; the operator queries them |
-
-Terraform is a natural fit for ARM resource lifecycle and RBAC. In this
-implementation, the Search and Foundry data-plane objects aren't stored in
-Terraform state, so the numbered scripts manage them with service REST APIs.
-Script `09` cleans up the persistent named objects listed in the cleanup section;
-it doesn't track or delete conversations created by script `08`. `terraform
-destroy` handles the ARM resources.
-
-### Why Terraform and scripts are separate
-
-The split is an implementation boundary, not a claim that Terraform can never
-manage a data plane. Terraform can manage a data-plane object when a provider
-implements CRUD operations, import, and state for that object. In this scenario:
-
-* Terraform and `azapi_resource` manage objects with ARM resource IDs.
-* A Search knowledge source or knowledge base is addressed by name at the Search
-    endpoint. It isn't a child resource under the Search service ARM ID.
-* The generated data source, skillset, index, and indexer are owned by the Blob
-    knowledge source's fixed template. They shouldn't be edited or managed as
-    independent Terraform resources.
-* Prompt agent versions and conversations live under the Foundry project data
-    plane. Script `07` uses `POST`, so rerunning it creates another agent version.
-
-The current provider set doesn't put these Search and Foundry objects in state.
-Wrapping their REST calls in `local-exec` would run them during Terraform, but it
-wouldn't provide declarative diff, import, or lifecycle tracking. The scripts
-therefore use create-or-update `PUT` operations where the API supports them and
-provide an explicit cleanup step. Script `06` is the deliberate exception: its
-RemoteTool connection is an ARM object, but this implementation creates it after
-the MCP endpoint exists and keeps its lifecycle with the post-deployment workflow.
-
-### Deployment flow
-
-This view answers: **in what order is the environment built and verified?**
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Operator
-    participant CLI as Azure CLI
-    participant TF as Terraform
-    participant ARM as ARM control plane
-    participant Storage as Storage data plane
-    participant Search as Search data plane
-    participant Models as Model data plane
-    participant Foundry as Foundry project data plane
-
-    Operator->>CLI: Confirm subscription and operator object ID
-    Operator->>TF: init, plan, apply -parallelism=1
-    TF->>ARM: Create Foundry, models, Search, Storage, and Cosmos DB
-    TF->>ARM: Assign RBAC and wait for propagation
-    TF->>ARM: Create project connections and capability hosts
-    Operator->>CLI: Validate outputs and four token audiences (script 00)
-    Operator->>Storage: Upload review CSV (script 01)
-    Operator->>Search: Create Blob knowledge source (script 02)
-    Search->>Storage: Read CSV with the Search managed identity
-    Search->>Models: Invoke the embedding model with managed identity
-    Operator->>Search: Wait for ingestion (script 03)
-    Operator->>Search: Create knowledge base and test retrieval (scripts 04-05)
-    Operator->>ARM: Create RemoteTool project connection (script 06)
-    Operator->>Foundry: Create prompt agent version (script 07)
-    Operator->>Foundry: Run grounded Q&A (script 08)
-```
-
-### Q&A runtime flow
-
-This view answers: **which services communicate after a user asks a question?**
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant Agent as Foundry data plane prompt agent
-    participant Cosmos as Cosmos DB data plane state
-    participant Tool as MCP RemoteTool connection
-    participant KB as Search data plane knowledge base
-    participant Index as Generated Search index
-    participant Model as Model data plane gpt-5.4-mini
-    participant Monitor as Application Insights traces
-
-    User->>Agent: Ask a question through the Responses API
-    Agent->>Cosmos: Persist conversation and thread state
-    Agent->>Tool: Call knowledge_base_retrieve over MCP
-    Tool->>KB: Submit the retrieval request
-    KB->>Index: Run agentic retrieval
-    Index-->>KB: Return relevant chunks and references
-    KB-->>Tool: Return grounded evidence
-    Tool-->>Agent: Return MCP tool result
-    Agent->>Model: Generate an answer from the evidence
-    Model-->>Agent: Return the grounded answer
-    Agent->>Cosmos: Update conversation state
-    opt enable_tracing
-        Agent->>Monitor: Export server-side OpenTelemetry spans
-    end
-    Agent-->>User: Return answer and citations
-```
-
-Blob Storage and the embedding deployment participate in ingestion, as shown in
-the deployment flow. They are not called for each Q&A request. Terraform is also
-absent from the runtime path.
+All service-to-service access uses Microsoft Entra ID tokens and Azure RBAC. The
+Foundry project identity primarily accesses Storage, Search, Cosmos DB, the
+generation model, and Application Insights. The Search identity accesses Storage
+and the embedding model. Creating a connection or capability host does not grant
+access by itself; the matching RBAC role assignments are still required. The
+diagram shows logical dependencies and does not imply private-network isolation;
+this scenario uses public endpoints.
 
 ## Prerequisites and constraints
 
@@ -527,6 +413,37 @@ so protect the backend and its version history.
 > minimize personal or sensitive data, and restrict access according to your
 > privacy and compliance requirements.
 
+### Operator Cosmos DB read access
+
+Direct operator access to agent state is disabled by default. It requires
+Standard setup and must be explicitly enabled:
+
+```hcl
+deploy_standard_agent                  = true
+enable_operator_cosmosdb_read_access = true
+```
+
+Terraform then grants the principal selected by `operator_principal_id` two
+read-only assignments:
+
+* Azure RBAC `Reader` at the Cosmos DB account scope, so the operator can view
+    the account in Azure portal without changing it
+* `Cosmos DB Built-in Data Reader` at only the `enterprise_memory` database
+    scope, allowing metadata reads, item reads, queries, and change-feed reads
+
+The data-plane assignment does not allow writes, deletes, throughput changes,
+or access to other databases. Local authentication remains disabled, so Data
+Explorer uses Microsoft Entra RBAC instead of account keys. The scenario uses
+the account-scoped `Reader` role rather than `Cosmos DB Account Reader Role`
+because the latter also permits retrieving read-only account keys.
+
+> [!WARNING]
+> The `enterprise_memory` database can contain conversations, responses, run
+> state, agent metadata, user prompts, and model outputs. Enable this access
+> only for a trusted operator after reviewing privacy, compliance, retention,
+> and incident-response requirements. Read-only access still exposes the full
+> content available in the database scope.
+
 ### Authentication and RBAC
 
 Local authentication is disabled for the Foundry account and all standard agent
@@ -550,14 +467,21 @@ data services. Terraform creates the following assignments when
 | Azure AI Search        | Search Index Data Reader            | Operator                 | Run direct retrieval tests           |
 | Foundry account        | Foundry Project Manager             | Operator                 | Create the connection and agent      |
 
+When `enable_operator_cosmosdb_read_access` is enabled, Terraform creates these
+additional assignments:
+
+| Scope                  | Role                            | Assignee | Purpose                                      |
+|------------------------|---------------------------------|----------|----------------------------------------------|
+| Cosmos DB account      | Reader                          | Operator | View account control-plane metadata          |
+| `enterprise_memory` DB | Cosmos DB Built-in Data Reader  | Operator | Read and query agent state for investigation |
+
 `operator_principal_id` defaults to the object ID of the identity running
-Terraform when the input is `null`. The checked-in `terraform.tfvars` explicitly
-sets an object ID, so it takes precedence over that fallback. The deployment
-steps below resolve the current Azure CLI principal and pass it with `-var`,
-which has higher precedence than the checked-in value. Use the object ID of the
-principal that runs the numbered scripts if Terraform and the scripts run as
-different identities. Foundry roles are assigned by role definition ID to avoid
-failures while Azure AI role names are being renamed.
+Terraform when the input is `null`. The checked-in `terraform.tfvars` does not
+set this input. The deployment steps below resolve the current Azure CLI
+principal and pass it with `-var`. Use the object ID of the principal that runs
+the numbered scripts if Terraform and the scripts run as different identities.
+Foundry roles are assigned by role definition ID to avoid failures while Azure
+AI role names are being renamed.
 
 Terraform waits 60 seconds after the control-plane role assignments. It then
 creates the account capability host and project capability host with 60-minute
@@ -690,10 +614,15 @@ terraform validate
 terraform plan -var="operator_principal_id=${OPERATOR_PRINCIPAL_ID}"
 ```
 
-The command-line `-var` deliberately overrides the object ID checked into
-`terraform.tfvars`. The plan should include the operator role assignments when
-`deploy_standard_agent` is `true`. If tracing isn't enabled in a local variable
-file, pass `-var="enable_tracing=true"` to both `plan` and `apply`.
+The command-line `-var` explicitly selects the operator because the checked-in
+`terraform.tfvars` does not set an object ID. The plan should include the
+operator role assignments when `deploy_standard_agent` is `true`. If tracing
+isn't enabled in a local variable file, pass `-var="enable_tracing=true"` to both
+`plan` and `apply`. To grant the selected operator Cosmos DB inspection access
+without changing the local variable file, also pass
+`-var="enable_operator_cosmosdb_read_access=true"` to both commands. Confirm
+that the plan adds only the account-scoped `Reader` and database-scoped data
+reader assignments for this option.
 
 ### 3. Deploy the Terraform-managed infrastructure
 
@@ -816,6 +745,11 @@ workspace. This permanently removes their retained trace data; conversation and
 response state in Cosmos DB is unaffected. Review and preserve required telemetry
 before applying that change.
 
+Changing `enable_operator_cosmosdb_read_access` from `true` to `false` removes
+only the two operator read assignments. It does not delete the Cosmos DB account,
+the `enterprise_memory` database, or stored agent state. Allow time for role
+revocation to propagate after applying the change.
+
 ### Destroy and purge
 
 Deleting a Microsoft Foundry account normally soft-deletes it. Without a purge,
@@ -878,6 +812,13 @@ terraform destroy -parallelism=1 \
 * If the operator can't open traces, verify Log Analytics Reader on Application
     Insights. Protected tables also require Privileged Monitoring Data Reader,
     which this scenario doesn't assign automatically.
+* For a Cosmos DB Data Explorer `401` or `403`, verify that
+    `enable_operator_cosmosdb_read_access` is enabled and the selected operator
+    has `Reader` on the Cosmos DB account plus `Cosmos DB Built-in Data Reader`
+    on the `enterprise_memory` database. In Data Explorer settings, keep
+    **Enable Entra ID (RBAC)** set to **Automatic** or **True**, use **Login for
+    Entra ID RBAC** if automatic sign-in fails, and allow time for both role
+    assignments to propagate.
 * Semantic ranker and agentic retrieval begin on their default monthly free
     allowances. Requests return billing errors after an allowance is exhausted
     unless the corresponding Standard pay-as-you-go plan is enabled separately.
@@ -912,6 +853,7 @@ configuration. The Search `free` and `basic` SKUs are no longer accepted.
 * [Azure control plane and data plane](https://learn.microsoft.com/azure/azure-resource-manager/management/control-plane-and-data-plane)
 * [Managed identities for Azure resources](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview)
 * [What is Azure RBAC?](https://learn.microsoft.com/azure/role-based-access-control/overview)
+* [Azure RBAC Reader role](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general#reader)
 * [Access tokens in the Microsoft identity platform](https://learn.microsoft.com/entra/identity-platform/access-tokens)
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service limits, quotas, and regional support](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
@@ -931,6 +873,8 @@ configuration. The Search `free` and `basic` SKUs are no longer accepted.
 * [Microsoft Foundry Project REST API](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject)
 * [Foundry project connection ARM reference](https://learn.microsoft.com/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)
 * [Azure AI Search Data Plane REST API](https://learn.microsoft.com/rest/api/searchservice/)
+* [Use Data Explorer with Microsoft Entra authentication](https://learn.microsoft.com/azure/cosmos-db/data-explorer#use-with-microsoft-entra-authentication)
+* [Azure Cosmos DB for NoSQL data-plane roles](https://learn.microsoft.com/azure/cosmos-db/reference-data-plane-security#built-in-roles)
 * [Show the current Azure CLI signed-in user](https://learn.microsoft.com/cli/azure/ad/signed-in-user#az-ad-signed-in-user-show)
 * [Show a Microsoft Entra service principal](https://learn.microsoft.com/cli/azure/ad/sp#az-ad-sp-show)
 * [Connect agents to Foundry IQ knowledge bases](https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect?tabs=foundry%2Crest)
