@@ -50,6 +50,17 @@ variable "operator_principal_id" {
   default     = null
 }
 
+variable "enable_operator_cosmosdb_read_access" {
+  description = "Grant the operator principal read-only access to inspect the Standard Agent Cosmos DB account and enterprise_memory data"
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_operator_cosmosdb_read_access || var.deploy_standard_agent
+    error_message = "enable_operator_cosmosdb_read_access = true requires deploy_standard_agent = true."
+  }
+}
+
 variable "model_deployments" {
   description = "Specifies the model deployments for Azure AI Foundry"
   type = list(object({

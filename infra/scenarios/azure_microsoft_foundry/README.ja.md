@@ -381,6 +381,34 @@ backend とその version history を保護してください。
 > 含まれる可能性があります。収集について利用者へ通知し、個人データや機密データを最小化し、privacy
 > および compliance 要件に従って access を制限してください。
 
+### Operator の Cosmos DB 閲覧権限
+
+Agent state への Operator の直接アクセスは既定で無効です。Standard setup を有効にしたうえで、明示的に
+opt-in します。
+
+```hcl
+deploy_standard_agent                  = true
+enable_operator_cosmosdb_read_access = true
+```
+
+有効にすると、Terraform は `operator_principal_id` で選択した principal に次の 2 つの読み取り専用
+assignment を作成します。
+
+* Cosmos DB account scope の Azure RBAC `Reader`: Azure portal で account を変更せずに表示するために使用
+* `enterprise_memory` database scope だけの `Cosmos DB Built-in Data Reader`: metadata、item、query、
+    change feed の読み取りに使用
+
+Data-plane assignment は書き込み、削除、throughput の変更、他の database へのアクセスを許可しません。
+Local authentication は無効のままであり、Data Explorer は account key ではなく Microsoft Entra RBAC を
+使用します。`Cosmos DB Account Reader Role` には読み取り専用 account key の取得も含まれるため、この
+シナリオではより狭い account-scope の `Reader` を使用します。
+
+> [!WARNING]
+> `enterprise_memory` database には conversation、response、run state、Agent metadata、user prompt、
+> model output が含まれる可能性があります。Privacy、compliance、retention、incident response の要件を
+> 確認し、信頼できる Operator にだけこの権限を付与してください。読み取り専用でも、database scope で
+> 利用可能な content 全体が公開されます。
+
 ### 認証と RBAC
 
 Foundry account とすべての Standard Agent データ サービスで local authentication を無効にします。
@@ -403,12 +431,18 @@ Foundry account とすべての Standard Agent データ サービスで local a
 | Azure AI Search        | Search Index Data Reader            | Operator                 | Direct retrieval test の実行             |
 | Foundry account        | Foundry Project Manager             | Operator                 | Connection と Agent の作成               |
 
+`enable_operator_cosmosdb_read_access` が有効な場合、Terraform は次の assignment も作成します。
+
+| Scope                  | Role                            | Assignee | 用途                                        |
+|------------------------|---------------------------------|----------|---------------------------------------------|
+| Cosmos DB account      | Reader                          | Operator | Account の control-plane metadata の表示    |
+| `enterprise_memory` DB | Cosmos DB Built-in Data Reader  | Operator | 調査のための Agent state の読み取りと query |
+
 `operator_principal_id` input が `null` の場合、Terraform を実行する identity の object ID を使用します。
-リポジトリに含まれる `terraform.tfvars` では object ID を明示的に指定しているため、この fallback より
-優先されます。後述のデプロイ手順では、現在の Azure CLI principal を解決し、`terraform.tfvars` より
-優先度が高い `-var` で渡します。Terraform と連番 script を異なる identity で実行する場合は、連番
-script を実行する principal の object ID を使用してください。Azure AI role の改名移行中にも失敗しないよう、
-Foundry role は role definition ID で割り当てます。
+リポジトリに含まれる `terraform.tfvars` ではこの input を設定していません。後述のデプロイ手順では、
+現在の Azure CLI principal を解決して `-var` で渡します。Terraform と連番 script を異なる identity で
+実行する場合は、連番 script を実行する principal の object ID を使用してください。Azure AI role の
+改名移行中にも失敗しないよう、Foundry role は role definition ID で割り当てます。
 
 Terraform は control-plane role assignment の後に 60 秒待機します。その後、作成 timeout を 60 分に設定した
 account capability host と project capability host を作成します。Project host が `enterprise_memory`
@@ -528,10 +562,14 @@ terraform validate
 terraform plan -var="operator_principal_id=${OPERATOR_PRINCIPAL_ID}"
 ```
 
-Command-line の `-var` は、`terraform.tfvars` に含まれる object ID を意図的に上書きします。
-`deploy_standard_agent` が `true` の場合、plan に Operator の role assignment が含まれることを確認します。
-Local variable file で tracing を有効にしない場合は、`plan` と `apply` の両方へ
-`-var="enable_tracing=true"` を渡します。
+リポジトリに含まれる `terraform.tfvars` では object ID を設定していないため、command-line の `-var` で
+Operator を明示的に選択します。`deploy_standard_agent` が `true` の場合、plan に Operator の role
+assignment が含まれることを確認します。Local variable file で tracing を有効にしない場合は、`plan` と
+`apply` の両方へ
+`-var="enable_tracing=true"` を渡します。Local variable file を変更せず、選択した Operator に Cosmos DB
+の調査権限を付与する場合は、両方の command に
+`-var="enable_operator_cosmosdb_read_access=true"` も渡します。この option による plan の追加が、
+account-scope の `Reader` と database-scope の data reader assignment だけであることを確認してください。
 
 ### 3. Terraform 管理 infrastructure のデプロイ
 
@@ -647,6 +685,10 @@ Application Insights、その Log Analytics workspace が削除されます。�
 削除されますが、Cosmos DB の conversation と response state には影響しません。必要な telemetry を
 確認して保全してから、この変更を apply してください。
 
+`enable_operator_cosmosdb_read_access` を `true` から `false` に変更すると、Operator の 2 つの読み取り
+assignment だけが削除されます。Cosmos DB account、`enterprise_memory` database、保存済みの Agent state は
+削除されません。Apply 後、権限の失効が伝播するまで待機してください。
+
 ### 破棄と purge
 
 Microsoft Foundry アカウントを通常どおり削除すると、soft-delete されます。purge しない場合、
@@ -702,6 +744,11 @@ terraform destroy -parallelism=1 \
     Monitoring Metrics Publisher があることを確認します。
 * Operator が trace を開けない場合は、Application Insights scope の Log Analytics Reader を確認します。
     Protected table では Privileged Monitoring Data Reader も必要ですが、このシナリオは自動割り当てしません。
+* Cosmos DB Data Explorer の `401` または `403` では、`enable_operator_cosmosdb_read_access` が有効で、
+    選択した Operator に Cosmos DB account の `Reader` と `enterprise_memory` database の
+    `Cosmos DB Built-in Data Reader` があることを確認します。Data Explorer の設定で
+    **Enable Entra ID (RBAC)** を **Automatic** または **True** にし、自動 sign-in が失敗する場合は
+    **Login for Entra ID RBAC** を使用して、両方の role assignment の伝播を待ちます。
 * Semantic ranker と agentic retrieval は既定の月次無料枠から開始します。無料枠を超えると、対応する
     Standard pay-as-you-go plan を別途有効にしない限り billing error が返されます。
 
@@ -734,6 +781,7 @@ terraform destroy -parallelism=1 \
 * [Azure Control Plane と Data Plane](https://learn.microsoft.com/azure/azure-resource-manager/management/control-plane-and-data-plane)
 * [Azure resource の managed identity](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview)
 * [Azure RBAC とは](https://learn.microsoft.com/azure/role-based-access-control/overview)
+* [Azure RBAC Reader role](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general#reader)
 * [Microsoft identity platform の access token](https://learn.microsoft.com/entra/identity-platform/access-tokens)
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service の制限、quota、リージョン](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
@@ -753,6 +801,8 @@ terraform destroy -parallelism=1 \
 * [Microsoft Foundry Project REST API](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject)
 * [Foundry project connection ARM reference](https://learn.microsoft.com/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)
 * [Azure AI Search Data Plane REST API](https://learn.microsoft.com/rest/api/searchservice/)
+* [Data Explorer で Microsoft Entra 認証を使用](https://learn.microsoft.com/azure/cosmos-db/data-explorer#use-with-microsoft-entra-authentication)
+* [Azure Cosmos DB for NoSQL の data-plane role](https://learn.microsoft.com/azure/cosmos-db/reference-data-plane-security#built-in-roles)
 * [Azure CLI で現在サインイン中の user を表示](https://learn.microsoft.com/cli/azure/ad/signed-in-user#az-ad-signed-in-user-show)
 * [Microsoft Entra service principal を表示](https://learn.microsoft.com/cli/azure/ad/sp#az-ad-sp-show)
 * [Foundry IQ knowledge base と Agent の接続](https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect?tabs=foundry%2Crest)

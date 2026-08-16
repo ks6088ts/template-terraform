@@ -413,6 +413,37 @@ so protect the backend and its version history.
 > minimize personal or sensitive data, and restrict access according to your
 > privacy and compliance requirements.
 
+### Operator Cosmos DB read access
+
+Direct operator access to agent state is disabled by default. It requires
+Standard setup and must be explicitly enabled:
+
+```hcl
+deploy_standard_agent                  = true
+enable_operator_cosmosdb_read_access = true
+```
+
+Terraform then grants the principal selected by `operator_principal_id` two
+read-only assignments:
+
+* Azure RBAC `Reader` at the Cosmos DB account scope, so the operator can view
+    the account in Azure portal without changing it
+* `Cosmos DB Built-in Data Reader` at only the `enterprise_memory` database
+    scope, allowing metadata reads, item reads, queries, and change-feed reads
+
+The data-plane assignment does not allow writes, deletes, throughput changes,
+or access to other databases. Local authentication remains disabled, so Data
+Explorer uses Microsoft Entra RBAC instead of account keys. The scenario uses
+the account-scoped `Reader` role rather than `Cosmos DB Account Reader Role`
+because the latter also permits retrieving read-only account keys.
+
+> [!WARNING]
+> The `enterprise_memory` database can contain conversations, responses, run
+> state, agent metadata, user prompts, and model outputs. Enable this access
+> only for a trusted operator after reviewing privacy, compliance, retention,
+> and incident-response requirements. Read-only access still exposes the full
+> content available in the database scope.
+
 ### Authentication and RBAC
 
 Local authentication is disabled for the Foundry account and all standard agent
@@ -436,14 +467,21 @@ data services. Terraform creates the following assignments when
 | Azure AI Search        | Search Index Data Reader            | Operator                 | Run direct retrieval tests           |
 | Foundry account        | Foundry Project Manager             | Operator                 | Create the connection and agent      |
 
+When `enable_operator_cosmosdb_read_access` is enabled, Terraform creates these
+additional assignments:
+
+| Scope                  | Role                            | Assignee | Purpose                                      |
+|------------------------|---------------------------------|----------|----------------------------------------------|
+| Cosmos DB account      | Reader                          | Operator | View account control-plane metadata          |
+| `enterprise_memory` DB | Cosmos DB Built-in Data Reader  | Operator | Read and query agent state for investigation |
+
 `operator_principal_id` defaults to the object ID of the identity running
-Terraform when the input is `null`. The checked-in `terraform.tfvars` explicitly
-sets an object ID, so it takes precedence over that fallback. The deployment
-steps below resolve the current Azure CLI principal and pass it with `-var`,
-which has higher precedence than the checked-in value. Use the object ID of the
-principal that runs the numbered scripts if Terraform and the scripts run as
-different identities. Foundry roles are assigned by role definition ID to avoid
-failures while Azure AI role names are being renamed.
+Terraform when the input is `null`. The checked-in `terraform.tfvars` does not
+set this input. The deployment steps below resolve the current Azure CLI
+principal and pass it with `-var`. Use the object ID of the principal that runs
+the numbered scripts if Terraform and the scripts run as different identities.
+Foundry roles are assigned by role definition ID to avoid failures while Azure
+AI role names are being renamed.
 
 Terraform waits 60 seconds after the control-plane role assignments. It then
 creates the account capability host and project capability host with 60-minute
@@ -576,10 +614,15 @@ terraform validate
 terraform plan -var="operator_principal_id=${OPERATOR_PRINCIPAL_ID}"
 ```
 
-The command-line `-var` deliberately overrides the object ID checked into
-`terraform.tfvars`. The plan should include the operator role assignments when
-`deploy_standard_agent` is `true`. If tracing isn't enabled in a local variable
-file, pass `-var="enable_tracing=true"` to both `plan` and `apply`.
+The command-line `-var` explicitly selects the operator because the checked-in
+`terraform.tfvars` does not set an object ID. The plan should include the
+operator role assignments when `deploy_standard_agent` is `true`. If tracing
+isn't enabled in a local variable file, pass `-var="enable_tracing=true"` to both
+`plan` and `apply`. To grant the selected operator Cosmos DB inspection access
+without changing the local variable file, also pass
+`-var="enable_operator_cosmosdb_read_access=true"` to both commands. Confirm
+that the plan adds only the account-scoped `Reader` and database-scoped data
+reader assignments for this option.
 
 ### 3. Deploy the Terraform-managed infrastructure
 
@@ -702,6 +745,11 @@ workspace. This permanently removes their retained trace data; conversation and
 response state in Cosmos DB is unaffected. Review and preserve required telemetry
 before applying that change.
 
+Changing `enable_operator_cosmosdb_read_access` from `true` to `false` removes
+only the two operator read assignments. It does not delete the Cosmos DB account,
+the `enterprise_memory` database, or stored agent state. Allow time for role
+revocation to propagate after applying the change.
+
 ### Destroy and purge
 
 Deleting a Microsoft Foundry account normally soft-deletes it. Without a purge,
@@ -764,6 +812,13 @@ terraform destroy -parallelism=1 \
 * If the operator can't open traces, verify Log Analytics Reader on Application
     Insights. Protected tables also require Privileged Monitoring Data Reader,
     which this scenario doesn't assign automatically.
+* For a Cosmos DB Data Explorer `401` or `403`, verify that
+    `enable_operator_cosmosdb_read_access` is enabled and the selected operator
+    has `Reader` on the Cosmos DB account plus `Cosmos DB Built-in Data Reader`
+    on the `enterprise_memory` database. In Data Explorer settings, keep
+    **Enable Entra ID (RBAC)** set to **Automatic** or **True**, use **Login for
+    Entra ID RBAC** if automatic sign-in fails, and allow time for both role
+    assignments to propagate.
 * Semantic ranker and agentic retrieval begin on their default monthly free
     allowances. Requests return billing errors after an allowance is exhausted
     unless the corresponding Standard pay-as-you-go plan is enabled separately.
@@ -798,6 +853,7 @@ configuration. The Search `free` and `basic` SKUs are no longer accepted.
 * [Azure control plane and data plane](https://learn.microsoft.com/azure/azure-resource-manager/management/control-plane-and-data-plane)
 * [Managed identities for Azure resources](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview)
 * [What is Azure RBAC?](https://learn.microsoft.com/azure/role-based-access-control/overview)
+* [Azure RBAC Reader role](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general#reader)
 * [Access tokens in the Microsoft identity platform](https://learn.microsoft.com/entra/identity-platform/access-tokens)
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service limits, quotas, and regional support](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
@@ -817,6 +873,8 @@ configuration. The Search `free` and `basic` SKUs are no longer accepted.
 * [Microsoft Foundry Project REST API](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject)
 * [Foundry project connection ARM reference](https://learn.microsoft.com/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)
 * [Azure AI Search Data Plane REST API](https://learn.microsoft.com/rest/api/searchservice/)
+* [Use Data Explorer with Microsoft Entra authentication](https://learn.microsoft.com/azure/cosmos-db/data-explorer#use-with-microsoft-entra-authentication)
+* [Azure Cosmos DB for NoSQL data-plane roles](https://learn.microsoft.com/azure/cosmos-db/reference-data-plane-security#built-in-roles)
 * [Show the current Azure CLI signed-in user](https://learn.microsoft.com/cli/azure/ad/signed-in-user#az-ad-signed-in-user-show)
 * [Show a Microsoft Entra service principal](https://learn.microsoft.com/cli/azure/ad/sp#az-ad-sp-show)
 * [Connect agents to Foundry IQ knowledge bases](https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect?tabs=foundry%2Crest)

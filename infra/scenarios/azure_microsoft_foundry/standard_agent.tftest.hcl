@@ -90,6 +90,7 @@ run "standard_agent_disabled_by_default" {
 
   variables {
     deploy_standard_agent = false
+    enable_tracing        = false
     model_deployments     = []
   }
 
@@ -138,9 +139,11 @@ run "standard_agent_disabled_by_default" {
       length(azurerm_role_assignment.operator_search_index_data_reader) == 0,
       length(azurerm_role_assignment.operator_search_service_contributor) == 0,
       length(azurerm_role_assignment.operator_foundry_project_manager) == 0,
+      length(azurerm_role_assignment.operator_cosmos_db_reader) == 0,
       length(azurerm_role_assignment.cosmos_db_operator) == 0,
       length(time_sleep.wait_for_rbac) == 0,
       length(azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor) == 0,
+      length(azurerm_cosmosdb_sql_role_assignment.operator_cosmos_data_reader) == 0,
     ])
     error_message = "Standard Agent role assignments and propagation wait must not be deployed by default."
   }
@@ -383,6 +386,14 @@ run "standard_agent_enabled" {
 
   assert {
     condition = alltrue([
+      length(azurerm_role_assignment.operator_cosmos_db_reader) == 0,
+      length(azurerm_cosmosdb_sql_role_assignment.operator_cosmos_data_reader) == 0,
+    ])
+    error_message = "Operator Cosmos DB read access must remain disabled unless explicitly enabled."
+  }
+
+  assert {
+    condition = alltrue([
       azurerm_role_assignment.storage_blob_data_contributor[0].role_definition_name == "Storage Blob Data Contributor",
       azurerm_role_assignment.search_index_data_contributor[0].role_definition_name == "Search Index Data Contributor",
       azurerm_role_assignment.search_service_contributor[0].role_definition_name == "Search Service Contributor",
@@ -484,6 +495,51 @@ run "standard_agent_enabled" {
     ])
     error_message = "Foundry IQ setup outputs must expose the project, model, and operator values used by scripts."
   }
+}
+
+run "operator_cosmosdb_read_access_enabled" {
+  command = plan
+
+  variables {
+    deploy_standard_agent                = true
+    enable_operator_cosmosdb_read_access = true
+    model_deployments                    = []
+    operator_principal_id                = "00000000-0000-0000-0000-000000000004"
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_role_assignment.operator_cosmos_db_reader) == 1,
+      azurerm_role_assignment.operator_cosmos_db_reader[0].role_definition_name == "Reader",
+      azurerm_role_assignment.operator_cosmos_db_reader[0].scope == module.cosmosdb[0].account_id,
+      azurerm_role_assignment.operator_cosmos_db_reader[0].principal_id == "00000000-0000-0000-0000-000000000004",
+    ])
+    error_message = "Operator must receive control-plane Reader access at the Cosmos DB account scope when enabled."
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_cosmosdb_sql_role_assignment.operator_cosmos_data_reader) == 1,
+      azurerm_cosmosdb_sql_role_assignment.operator_cosmos_data_reader[0].role_definition_id == "${module.cosmosdb[0].account_id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001",
+      azurerm_cosmosdb_sql_role_assignment.operator_cosmos_data_reader[0].scope == "${module.cosmosdb[0].account_id}/dbs/enterprise_memory",
+      azurerm_cosmosdb_sql_role_assignment.operator_cosmos_data_reader[0].principal_id == "00000000-0000-0000-0000-000000000004",
+    ])
+    error_message = "Operator must receive read-only Cosmos DB data access scoped to enterprise_memory when enabled."
+  }
+}
+
+run "operator_cosmosdb_read_access_requires_standard_agent" {
+  command = plan
+
+  variables {
+    deploy_standard_agent                = false
+    enable_operator_cosmosdb_read_access = true
+    model_deployments                    = []
+  }
+
+  expect_failures = [
+    var.enable_operator_cosmosdb_read_access,
+  ]
 }
 
 run "standard_agent_rejects_free_search_sku" {

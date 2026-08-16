@@ -94,6 +94,14 @@ resource "azurerm_role_assignment" "operator_foundry_project_manager" {
   principal_id       = local.operator_principal_id
 }
 
+resource "azurerm_role_assignment" "operator_cosmos_db_reader" {
+  count = var.deploy_standard_agent && var.enable_operator_cosmosdb_read_access ? 1 : 0
+
+  scope                = module.cosmosdb[0].account_id
+  role_definition_name = "Reader"
+  principal_id         = local.operator_principal_id
+}
+
 resource "azurerm_role_assignment" "cosmos_db_operator" {
   count = var.deploy_standard_agent ? 1 : 0
 
@@ -137,6 +145,7 @@ resource "time_sleep" "wait_for_rbac" {
     azurerm_role_assignment.operator_search_index_data_reader,
     azurerm_role_assignment.operator_search_service_contributor,
     azurerm_role_assignment.operator_foundry_project_manager,
+    azurerm_role_assignment.operator_cosmos_db_reader,
     azurerm_role_assignment.cosmos_db_operator,
   ]
 }
@@ -148,6 +157,20 @@ resource "azurerm_cosmosdb_sql_role_assignment" "cosmos_data_contributor" {
   account_name        = module.cosmosdb[0].account_name
   role_definition_id  = "${module.cosmosdb[0].account_id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
   principal_id        = module.microsoft_foundry.project_principal_id
+  scope               = "${module.cosmosdb[0].account_id}/dbs/enterprise_memory"
+
+  depends_on = [
+    azapi_resource.project_capability_host,
+  ]
+}
+
+resource "azurerm_cosmosdb_sql_role_assignment" "operator_cosmos_data_reader" {
+  count = var.deploy_standard_agent && var.enable_operator_cosmosdb_read_access ? 1 : 0
+
+  resource_group_name = module.resource_group.name
+  account_name        = module.cosmosdb[0].account_name
+  role_definition_id  = "${module.cosmosdb[0].account_id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001"
+  principal_id        = local.operator_principal_id
   scope               = "${module.cosmosdb[0].account_id}/dbs/enterprise_memory"
 
   depends_on = [
