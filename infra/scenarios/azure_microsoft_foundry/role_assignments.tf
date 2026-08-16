@@ -102,6 +102,23 @@ resource "azurerm_role_assignment" "cosmos_db_operator" {
   principal_id         = module.microsoft_foundry.project_principal_id
 }
 
+resource "azurerm_role_assignment" "monitoring_metrics_publisher" {
+  count = var.enable_tracing ? 1 : 0
+
+  scope                            = module.application_insights[0].id
+  role_definition_name             = "Monitoring Metrics Publisher"
+  principal_id                     = module.microsoft_foundry.project_principal_id
+  skip_service_principal_aad_check = true
+}
+
+resource "azurerm_role_assignment" "operator_log_analytics_reader" {
+  count = var.enable_tracing ? 1 : 0
+
+  scope                = module.application_insights[0].id
+  role_definition_name = "Log Analytics Reader"
+  principal_id         = local.operator_principal_id
+}
+
 resource "time_sleep" "wait_for_rbac" {
   count = var.deploy_standard_agent ? 1 : 0
 

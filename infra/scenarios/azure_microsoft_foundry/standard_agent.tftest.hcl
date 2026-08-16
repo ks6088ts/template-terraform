@@ -37,6 +37,23 @@ mock_provider "azurerm" {
       endpoint = "https://cosmosmsfoundrytest1234.documents.azure.com:443/"
     }
   }
+
+  mock_resource "azurerm_log_analytics_workspace" {
+    defaults = {
+      id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.OperationalInsights/workspaces/law-tracing-test1234"
+      workspace_id = "00000000-0000-0000-0000-000000000006"
+    }
+  }
+
+  mock_resource "azurerm_application_insights" {
+    defaults = {
+      id                           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test/providers/Microsoft.Insights/components/appi-tracing-test1234"
+      app_id                       = "00000000-0000-0000-0000-000000000007"
+      connection_string            = "InstrumentationKey=00000000-0000-0000-0000-000000000008"
+      instrumentation_key          = "00000000-0000-0000-0000-000000000008"
+      local_authentication_enabled = false
+    }
+  }
 }
 
 mock_provider "azapi" {
@@ -87,6 +104,17 @@ run "standard_agent_disabled_by_default" {
 
   assert {
     condition = alltrue([
+      length(module.log_analytics) == 0,
+      length(module.application_insights) == 0,
+      length(azapi_resource.application_insights_connection) == 0,
+      length(azurerm_role_assignment.monitoring_metrics_publisher) == 0,
+      length(azurerm_role_assignment.operator_log_analytics_reader) == 0,
+    ])
+    error_message = "Foundry tracing resources must not be deployed by default."
+  }
+
+  assert {
+    condition = alltrue([
       length(azapi_resource.azure_ai_search_connection) == 0,
       length(azapi_resource.blob_storage_connection) == 0,
       length(azapi_resource.cosmosdb_connection) == 0,
@@ -130,6 +158,15 @@ run "standard_agent_disabled_by_default" {
   }
 
   assert {
+    condition = alltrue([
+      output.log_analytics_workspace_id == null,
+      output.application_insights_id == null,
+      output.application_insights_connection_id == null,
+    ])
+    error_message = "Foundry tracing outputs must be null when tracing is disabled."
+  }
+
+  assert {
     condition     = output.operator_principal_id == "00000000-0000-0000-0000-000000000005"
     error_message = "The operator principal must default to the Terraform client principal."
   }
@@ -152,6 +189,99 @@ run "standard_agent_disabled_by_default" {
   assert {
     condition     = terraform_data.purge_microsoft_foundry_account.input.subscription_id == "00000000-0000-0000-0000-000000000000"
     error_message = "The Foundry purge hook must target the resource group subscription."
+  }
+}
+
+run "tracing_enabled_independently" {
+  command = plan
+
+  variables {
+    deploy_standard_agent = false
+    enable_tracing        = true
+    model_deployments     = []
+    operator_principal_id = "00000000-0000-0000-0000-000000000004"
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.log_analytics) == 1,
+      length(module.application_insights) == 1,
+      length(module.azure_ai_search) == 0,
+      length(module.blob_storage) == 0,
+      length(module.cosmosdb) == 0,
+    ])
+    error_message = "Tracing must deploy independently from Standard Agent data services."
+  }
+
+  assert {
+    condition = alltrue([
+      module.log_analytics[0].name == "law-tracing-test1234",
+      module.application_insights[0].name == "appi-tracing-test1234",
+    ])
+    error_message = "Tracing resources must use deterministic names."
+  }
+
+  assert {
+    condition = alltrue([
+      length(azapi_resource.application_insights_connection) == 1,
+      azapi_resource.application_insights_connection[0].type == "Microsoft.CognitiveServices/accounts/projects/connections@2025-09-01",
+      azapi_resource.application_insights_connection[0].name == module.application_insights[0].name,
+      azapi_resource.application_insights_connection[0].parent_id == module.microsoft_foundry.project_id,
+    ])
+    error_message = "Tracing must create one Application Insights connection on the Foundry project."
+  }
+
+  assert {
+    condition = alltrue([
+      nonsensitive(azapi_resource.application_insights_connection[0].body.properties.category) == "AppInsights",
+      nonsensitive(azapi_resource.application_insights_connection[0].body.properties.target) == module.application_insights[0].id,
+      nonsensitive(azapi_resource.application_insights_connection[0].body.properties.authType) == "ProjectManagedIdentity",
+      !nonsensitive(azapi_resource.application_insights_connection[0].body.properties.isSharedToAll),
+      !contains(nonsensitive(keys(azapi_resource.application_insights_connection[0].body.properties)), "credentials"),
+    ])
+    error_message = "The Application Insights connection must use project managed identity without credentials."
+  }
+
+  assert {
+    condition = alltrue([
+      nonsensitive(azapi_resource.application_insights_connection[0].body.properties.metadata.ApiType) == "Azure",
+      nonsensitive(azapi_resource.application_insights_connection[0].body.properties.metadata.ResourceId) == module.application_insights[0].id,
+      nonsensitive(azapi_resource.application_insights_connection[0].body.properties.metadata.ApplicationInsightsConnectionString) == nonsensitive(module.application_insights[0].connection_string),
+    ])
+    error_message = "The Application Insights connection metadata must identify and route to the tracing resource."
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_role_assignment.monitoring_metrics_publisher) == 1,
+      azurerm_role_assignment.monitoring_metrics_publisher[0].scope == module.application_insights[0].id,
+      azurerm_role_assignment.monitoring_metrics_publisher[0].role_definition_name == "Monitoring Metrics Publisher",
+      azurerm_role_assignment.monitoring_metrics_publisher[0].principal_id == module.microsoft_foundry.project_principal_id,
+      azurerm_role_assignment.monitoring_metrics_publisher[0].skip_service_principal_aad_check,
+    ])
+    error_message = "The Foundry project identity must be authorized to ingest tracing telemetry."
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_role_assignment.operator_log_analytics_reader) == 1,
+      azurerm_role_assignment.operator_log_analytics_reader[0].scope == module.application_insights[0].id,
+      azurerm_role_assignment.operator_log_analytics_reader[0].role_definition_name == "Log Analytics Reader",
+      azurerm_role_assignment.operator_log_analytics_reader[0].principal_id == "00000000-0000-0000-0000-000000000004",
+    ])
+    error_message = "The scenario operator must be authorized to query tracing telemetry."
+  }
+
+  assert {
+    condition = alltrue([
+      output.log_analytics_workspace_id == module.log_analytics[0].id,
+      output.log_analytics_workspace_name == module.log_analytics[0].name,
+      output.application_insights_id == module.application_insights[0].id,
+      output.application_insights_name == module.application_insights[0].name,
+      output.application_insights_app_id == module.application_insights[0].app_id,
+      output.application_insights_connection_id == azapi_resource.application_insights_connection[0].id,
+    ])
+    error_message = "Foundry tracing outputs must match the deployed resources."
   }
 }
 

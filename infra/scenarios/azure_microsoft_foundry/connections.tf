@@ -76,3 +76,30 @@ resource "azapi_resource" "cosmosdb_connection" {
     azurerm_role_assignment.cosmos_db_operator,
   ]
 }
+
+resource "azapi_resource" "application_insights_connection" {
+  count = var.enable_tracing ? 1 : 0
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-09-01"
+  name                      = module.application_insights[0].name
+  parent_id                 = module.microsoft_foundry.project_id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      category      = "AppInsights"
+      target        = module.application_insights[0].id
+      authType      = "ProjectManagedIdentity"
+      isSharedToAll = false
+      metadata = {
+        ApiType                             = "Azure"
+        ResourceId                          = module.application_insights[0].id
+        ApplicationInsightsConnectionString = module.application_insights[0].connection_string
+      }
+    }
+  }
+
+  depends_on = [
+    azurerm_role_assignment.monitoring_metrics_publisher,
+  ]
+}

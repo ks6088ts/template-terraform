@@ -45,3 +45,9 @@ variable "sampling_percentage" {
     error_message = "sampling_percentage must be between 0 and 100."
   }
 }
+
+variable "local_authentication_enabled" {
+  description = "Whether connection-string authentication is enabled for telemetry ingestion"
+  type        = bool
+  default     = true
+}

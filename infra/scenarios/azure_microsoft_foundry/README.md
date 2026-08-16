@@ -7,10 +7,11 @@ description: Deploy a Microsoft Foundry environment on Azure with Terraform
 This scenario deploys a Microsoft Foundry environment on Azure using Terraform.
 It can also deploy the bring-your-own data services and capability hosts required
 for Foundry Agent Service Standard setup. Microsoft Entra ID and the Foundry
-project managed identity are used instead of resource keys. Numbered POSIX shell
-scripts can then upload a fictional restaurant review dataset, create a Foundry
-IQ knowledge source and knowledge base, connect them to a prompt agent over MCP,
-and run grounded Q&A.
+project managed identity are used instead of resource keys. Optional server-side
+agent tracing sends OpenTelemetry spans to workspace-based Application Insights.
+Numbered POSIX shell scripts can then upload a fictional restaurant review
+dataset, create a Foundry IQ knowledge source and knowledge base, connect them to
+a prompt agent over MCP, and run grounded Q&A.
 
 ## Concepts used in this README
 
@@ -56,6 +57,22 @@ Standard setup with public endpoints.
 | [Project connection](https://learn.microsoft.com/azure/foundry/how-to/connections-add) | A configuration object that tells a Foundry project how to refer to an external resource. It records details such as the target API URL (endpoint), resource ID, and authentication method; it doesn't copy the Storage or Search data. |
 | [Capability host](https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts) | An ARM configuration object under a Foundry account or project that tells Agent Service which connections to use. It isn't an application host or server. The account capability host enables Agent Service for the account; the project capability host selects the Storage, Search, and Cosmos DB connections for that project. |
 | [Access-token audience](https://learn.microsoft.com/entra/identity-platform/access-tokens) | The identifier of the API that should accept a token. ARM, Storage, Search, and Foundry are separate APIs, so the same identity obtains a token for each audience. A scope such as `https://search.azure.com/.default` asks Microsoft Entra ID for a token intended for that API. |
+
+### Agent state and tracing
+
+Agent state and observability traces can show similar run details, but they have
+different purposes and stores:
+
+| Data | Purpose | Store in this scenario |
+| --- | --- | --- |
+| Conversation, response, run state, and agent definition | Stateful agent execution and multi-turn context | Cosmos DB `enterprise_memory` |
+| OpenTelemetry spans for model calls, tool calls, latency, token use, and errors | Debugging, monitoring, and trace-based analysis | Application Insights backed by Log Analytics |
+
+Conversation results are available from Foundry Agent Service even when tracing
+is disabled. The Foundry **Traces** page can display those results alongside
+ingested spans, which can make the two data sources look like one feature.
+Application Insights spans are collected only after `enable_tracing` creates an
+`AppInsights` project connection.
 
 #### Why capability hosts exist
 
@@ -250,6 +267,22 @@ flowchart LR
     AgentService["Foundry Agent Service"] -->|"read and write at runtime"| CosmosData
 ```
 
+#### Azure Monitor
+
+```mermaid
+flowchart LR
+    subgraph Monitor["Azure Monitor"]
+        direction TB
+        MonitorArm["Control plane<br/>Log Analytics workspace<br/>Application Insights and project connection"]
+        MonitorData["Data plane<br/>OpenTelemetry agent traces<br/>spans and execution telemetry"]
+        MonitorArm -.->|"workspace-backed telemetry"| MonitorData
+    end
+
+    Terraform["Terraform"] -->|"ARM API"| MonitorArm
+    AgentService["Foundry Agent Service"] -->|"project managed identity"| MonitorData
+    Operator["Operator"] -->|"query retained traces"| MonitorData
+```
+
 The boundary is determined by the API, not by whether an operation happens
 before or after `terraform apply`. Script `06`, for example, runs after Search
 data-plane setup but creates a project connection through ARM, so it is a
@@ -265,6 +298,7 @@ versions, conversations, and responses are Foundry project data-plane objects.
 | Foundry project data plane | `https://ai.azure.com/.default` | Prompt agent versions, conversations, Responses API calls | Scripts `07` through `09` |
 | Model data plane | Foundry OpenAI endpoint | Embeddings and final response generation | Search managed identity and Agent Service at runtime |
 | Cosmos DB data plane | Project capability-host connection | `enterprise_memory` and Agent Service state | Agent Service; the scripts do not call Cosmos DB directly |
+| Azure Monitor data plane | Application Insights ingestion and Log Analytics query endpoints | OpenTelemetry spans and execution telemetry | Agent Service ingests traces; the operator queries them |
 
 Terraform is a natural fit for ARM resource lifecycle and RBAC. In this
 implementation, the Search and Foundry data-plane objects aren't stored in
@@ -343,6 +377,7 @@ sequenceDiagram
     participant KB as Search data plane knowledge base
     participant Index as Generated Search index
     participant Model as Model data plane gpt-5.4-mini
+    participant Monitor as Application Insights traces
 
     User->>Agent: Ask a question through the Responses API
     Agent->>Cosmos: Persist conversation and thread state
@@ -355,6 +390,9 @@ sequenceDiagram
     Agent->>Model: Generate an answer from the evidence
     Model-->>Agent: Return the grounded answer
     Agent->>Cosmos: Update conversation state
+    opt enable_tracing
+        Agent->>Monitor: Export server-side OpenTelemetry spans
+    end
     Agent-->>User: Return answer and citations
 ```
 
@@ -390,10 +428,10 @@ Set `SCENARIO=azure_microsoft_foundry` when using the repository Makefile.
 | Capability hosts | Foundry doesn't support updating a capability host after it is set. Changing its connected state services can require replacement or project recreation. |
 | Network security | Microsoft Entra authentication removes keys but doesn't isolate traffic. No private endpoints, private DNS, firewall policy, or egress controls are created. |
 | Data authorization | The sample doesn't configure document-level ACL synchronization or end-user token passthrough. Any authorized caller of this agent uses the same fictional corpus. |
-| API stability | Search calls use `2026-05-01-preview`, and the RemoteTool connection uses `2025-10-01-preview`. Preview behavior can change and has no SLA. |
+| API stability | Search calls use `2026-05-01-preview`, the RemoteTool connection uses `2025-10-01-preview`, and `ProjectManagedIdentity` trace ingestion is in preview. Preview behavior can change and has no SLA. |
 | Data processing | Default model deployments use `GlobalStandard`, which can process requests across Azure-managed regions. Don't infer single-region model processing from `location = "japaneast"`. |
-| Production readiness | No customer-managed Key Vault/CMK, private networking, application UI, observability stack, evaluation suite, or application-specific responsible AI testing is included. |
-| Cost | Search, Cosmos DB, Storage, model tokens, and agentic retrieval can incur charges. Review quota, throughput, free allowances, and current pricing before deployment. |
+| Production readiness | Optional agent tracing is included, but no customer-managed Key Vault/CMK, private networking, application UI, alerts, dashboards, evaluation suite, or application-specific responsible AI testing is included. |
+| Cost | Search, Cosmos DB, Storage, model tokens, agentic retrieval, and optional Application Insights ingestion and retention can incur charges. Review quota, throughput, free allowances, retention, and current pricing before deployment. |
 
 ## Configuration
 
@@ -454,6 +492,41 @@ data-plane objects, or agent versions. The numbered scripts create the Blob
 container, Search-managed ingestion resources, Foundry IQ objects, RemoteTool
 connection, and prompt agent after Terraform has finished.
 
+### Agent tracing
+
+Tracing is off by default because it collects customer data and can incur Azure
+Monitor charges. Enable it independently from Standard setup:
+
+```hcl
+enable_tracing = true
+```
+
+Terraform then creates:
+
+* A Log Analytics workspace with 30-day retention
+* Workspace-based Application Insights with 100% sampling
+* One project-scoped `AppInsights` connection
+* Identity-based ingestion and operator-read role assignments
+
+The Application Insights resource accepts telemetry only through Microsoft
+Entra authentication. The connection uses the Foundry project managed identity,
+doesn't contain a `credentials` block, remains project-scoped, and isn't shared
+to all project users. Foundry automatically emits server-side traces for the
+prompt agent; the numbered scripts don't need client-side OpenTelemetry
+instrumentation. This identity-based trace ingestion mode is currently in preview.
+
+The connection metadata contains the provider-computed Application Insights
+connection string so Foundry can resolve the telemetry endpoints. Local
+authentication is disabled, the value isn't exposed as a root output, and it
+isn't used as an API-key credential. It is still represented in Terraform state,
+so protect the backend and its version history.
+
+> [!WARNING]
+> Traces can contain user prompts, model inputs and outputs, tool arguments and
+> results, latency, token usage, and errors. Inform users about collection,
+> minimize personal or sensitive data, and restrict access according to your
+> privacy and compliance requirements.
+
 ### Authentication and RBAC
 
 Local authentication is disabled for the Foundry account and all standard agent
@@ -490,6 +563,17 @@ Terraform waits 60 seconds after the control-plane role assignments. It then
 creates the account capability host and project capability host with 60-minute
 create timeouts. The project host creates the `enterprise_memory` database, so
 its Cosmos DB data-plane role assignment is applied last.
+
+When `enable_tracing` is enabled, Terraform creates these additional assignments:
+
+| Scope | Role | Assignee | Purpose |
+| --- | --- | --- | --- |
+| Application Insights | Monitoring Metrics Publisher | Foundry project identity | Ingest all server-side trace telemetry |
+| Application Insights | Log Analytics Reader | Operator | View traces in Foundry and Azure Monitor |
+
+This scenario doesn't assign `Privileged Monitoring Data Reader`. Add it only
+when the underlying Log Analytics tables are protected and the selected operator
+is approved to read their customer content.
 
 The Terraform identity needs `Microsoft.Authorization/roleAssignments/write` at
 the target scopes. Contributor alone cannot create role assignments. Use Owner,
@@ -608,7 +692,8 @@ terraform plan -var="operator_principal_id=${OPERATOR_PRINCIPAL_ID}"
 
 The command-line `-var` deliberately overrides the object ID checked into
 `terraform.tfvars`. The plan should include the operator role assignments when
-`deploy_standard_agent` is `true`.
+`deploy_standard_agent` is `true`. If tracing isn't enabled in a local variable
+file, pass `-var="enable_tracing=true"` to both `plan` and `apply`.
 
 ### 3. Deploy the Terraform-managed infrastructure
 
@@ -657,6 +742,13 @@ request:
 
 Step `08` is the runtime verification gate. It should report at least one MCP
 event and return an answer grounded in the restaurant dataset.
+
+When tracing is enabled, wait two to five minutes after step `08`, then open the
+project's **Agents > Traces** page. Confirm that a new trace has span-level
+timings and tool/model operations. The same telemetry can be queried from the
+connected Application Insights or Log Analytics resource. The workspace retains
+data for 30 days; the Foundry portal's 90-day search window can't return data
+that the workspace has already expired.
 
 ### Script reference
 
@@ -711,12 +803,18 @@ version of the named agent. Every agent query creates a new conversation.
 Cleanup is intentionally separate from Terraform and requires an exact
 confirmation value. It deletes the agent, RemoteTool connection, knowledge base,
 knowledge source and its generated Search objects, Blob, and container. It does
-not change Terraform-managed infrastructure:
+not change Terraform-managed infrastructure or tracing resources:
 
 ```bash
 CONFIRM_CLEANUP=delete-foundry-iq-resources \
     "${SCENARIO_DIR}/scripts/09_cleanup.sh"
 ```
+
+Changing `enable_tracing` from `true` to `false` removes the App Insights
+connection, tracing role assignments, Application Insights, and its Log Analytics
+workspace. This permanently removes their retained trace data; conversation and
+response state in Cosmos DB is unaffected. Review and preserve required telemetry
+before applying that change.
 
 ### Destroy and purge
 
@@ -774,6 +872,12 @@ terraform destroy -parallelism=1 \
     is UTF-8 CSV and rerun steps `01` through `03` after correcting the source.
 * For an MCP `400` or `404`, confirm the knowledge base name and preserve the
     slash-style MCP endpoint with `2026-05-01-preview`.
+* If traces don't appear, wait two to five minutes, confirm the project has one
+    `AppInsights` connection using `ProjectManagedIdentity`, and verify the
+    project identity has Monitoring Metrics Publisher on Application Insights.
+* If the operator can't open traces, verify Log Analytics Reader on Application
+    Insights. Protected tables also require Privileged Monitoring Data Reader,
+    which this scenario doesn't assign automatically.
 * Semantic ranker and agentic retrieval begin on their default monthly free
     allowances. Requests return billing errors after an allowance is exhausted
     unless the corresponding Standard pay-as-you-go plan is enabled separately.
@@ -812,6 +916,9 @@ configuration. The Search `free` and `basic` SKUs are no longer accepted.
 * [Microsoft Foundry Control Plane](https://learn.microsoft.com/azure/foundry/control-plane/overview)
 * [Foundry Agent Service limits, quotas, and regional support](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions)
 * [Foundry model deployment types and data processing](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types)
+* [Set up tracing in Microsoft Foundry](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup)
+* [Tracing and data handling](https://learn.microsoft.com/azure/foundry/observability/concepts/trace-data)
+* [Configure Microsoft Entra authentication for trace ingestion](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-ingestion-entra-authentication)
 * [What is Foundry IQ?](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq)
 * [Foundry IQ frequently asked questions](https://learn.microsoft.com/azure/foundry/agents/concepts/foundry-iq-faq)
 * [Vector search in Azure AI Search](https://learn.microsoft.com/azure/search/vector-search-overview)
@@ -822,6 +929,7 @@ configuration. The Search `free` and `basic` SKUs are no longer accepted.
 
 * [Microsoft Foundry API reference](https://ai.azure.com/api-reference)
 * [Microsoft Foundry Project REST API](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject)
+* [Foundry project connection ARM reference](https://learn.microsoft.com/azure/templates/microsoft.cognitiveservices/accounts/projects/connections)
 * [Azure AI Search Data Plane REST API](https://learn.microsoft.com/rest/api/searchservice/)
 * [Show the current Azure CLI signed-in user](https://learn.microsoft.com/cli/azure/ad/signed-in-user#az-ad-signed-in-user-show)
 * [Show a Microsoft Entra service principal](https://learn.microsoft.com/cli/azure/ad/sp#az-ad-sp-show)
