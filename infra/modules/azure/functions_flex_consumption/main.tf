@@ -65,6 +65,29 @@ resource "azurerm_function_app_flex_consumption" "this" {
     type = "SystemAssigned"
   }
 
+  dynamic "auth_settings_v2" {
+    for_each = var.authentication == null ? [] : [var.authentication]
+
+    content {
+      auth_enabled           = true
+      require_authentication = true
+      require_https          = true
+      unauthenticated_action = "Return401"
+      excluded_paths         = auth_settings_v2.value.excluded_paths
+
+      active_directory_v2 {
+        client_id            = auth_settings_v2.value.client_id
+        tenant_auth_endpoint = auth_settings_v2.value.tenant_auth_endpoint
+        allowed_audiences    = auth_settings_v2.value.allowed_audiences
+        allowed_applications = auth_settings_v2.value.allowed_applications
+      }
+
+      login {
+        token_store_enabled = false
+      }
+    }
+  }
+
   site_config {
     # Application Insights is optional - skip if not provided
   }

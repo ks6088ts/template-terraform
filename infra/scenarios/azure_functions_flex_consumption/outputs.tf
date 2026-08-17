@@ -28,6 +28,21 @@ output "function_app_principal_id" {
   value       = module.functions_flex_consumption.function_app_principal_id
 }
 
+output "function_app_authentication_client_id" {
+  description = "Client ID of the Microsoft Entra application used for Function App authentication"
+  value       = azuread_application.function_app.client_id
+}
+
+output "function_app_authentication_identifier_uri" {
+  description = "Application ID URI used to request an access token for the Function App"
+  value       = azuread_application_identifier_uri.function_app.identifier_uri
+}
+
+output "function_app_authentication_tenant_id" {
+  description = "Microsoft Entra tenant ID used for Function App authentication"
+  value       = data.azuread_client_config.current.tenant_id
+}
+
 output "service_plan_id" {
   description = "ID of the Service Plan"
   value       = module.functions_flex_consumption.service_plan_id
