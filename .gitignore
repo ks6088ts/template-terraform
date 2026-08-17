@@ -39,3 +39,4 @@ terraform.rc
 # Project
 backend.tf
 *.pem
+*.pyc

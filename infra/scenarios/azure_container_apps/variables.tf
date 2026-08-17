@@ -22,13 +22,30 @@ variable "tags" {
 }
 
 variable "container_image" {
-  description = "Docker Hub image to deploy (e.g., nginx:latest)"
+  description = "OCI container image to deploy (e.g., nginx:latest or a public ACR image)"
   type        = string
   default     = "nginx:latest"
 
   validation {
     condition     = length(var.container_image) > 0
     error_message = "Container image must not be empty."
+  }
+}
+
+variable "enable_public_acr" {
+  description = "Whether to deploy an Azure Container Registry with anonymous pull access"
+  type        = bool
+  default     = false
+}
+
+variable "acr_sku" {
+  description = "SKU for the public Azure Container Registry (Standard or Premium)"
+  type        = string
+  default     = "Standard"
+
+  validation {
+    condition     = contains(["Standard", "Premium"], var.acr_sku)
+    error_message = "ACR SKU must be one of: Standard, Premium."
   }
 }
 

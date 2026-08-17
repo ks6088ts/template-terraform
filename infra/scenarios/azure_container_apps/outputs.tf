@@ -3,6 +3,21 @@ output "resource_group_name" {
   value       = module.resource_group.name
 }
 
+output "acr_id" {
+  description = "ID of the Azure Container Registry (null when disabled)"
+  value       = var.enable_public_acr ? module.container_registry[0].id : null
+}
+
+output "acr_name" {
+  description = "Name of the Azure Container Registry (null when disabled)"
+  value       = var.enable_public_acr ? module.container_registry[0].name : null
+}
+
+output "acr_login_server" {
+  description = "Login server URL of the Azure Container Registry (null when disabled)"
+  value       = var.enable_public_acr ? module.container_registry[0].login_server : null
+}
+
 output "container_app_environment_id" {
   description = "ID of the Container Apps Environment"
   value       = module.container_apps.environment_id
