@@ -66,3 +66,61 @@ resource "azurerm_container_app" "this" {
     }
   }
 }
+
+# Microsoft Entra ID built-in authentication (Easy Auth)
+locals {
+  authentication_validation = var.authentication == null ? null : merge(
+    {
+      allowedAudiences = var.authentication.allowed_audiences
+    },
+    length(var.authentication.allowed_applications) > 0 ? {
+      defaultAuthorizationPolicy = {
+        allowedApplications = var.authentication.allowed_applications
+      }
+    } : {}
+  )
+}
+
+resource "azapi_resource" "auth_config" {
+  count = var.authentication == null ? 0 : 1
+
+  type      = "Microsoft.App/containerApps/authConfigs@2025-01-01"
+  name      = "current"
+  parent_id = azurerm_container_app.this.id
+
+  body = {
+    properties = {
+      platform = {
+        enabled = true
+      }
+      globalValidation = {
+        unauthenticatedClientAction = "Return401"
+      }
+      httpSettings = {
+        requireHttps = true
+      }
+      identityProviders = {
+        azureActiveDirectory = {
+          enabled = true
+          registration = {
+            clientId     = var.authentication.client_id
+            openIdIssuer = var.authentication.tenant_auth_endpoint
+          }
+          validation = local.authentication_validation
+        }
+      }
+      login = {
+        tokenStore = {
+          enabled = false
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.enable_ingress
+      error_message = "enable_ingress must be true when authentication is configured."
+    }
+  }
+}

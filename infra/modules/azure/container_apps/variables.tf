@@ -126,3 +126,19 @@ variable "secrets" {
   default   = []
   sensitive = true
 }
+
+variable "authentication" {
+  description = "Microsoft Entra ID built-in authentication (Easy Auth) settings for incoming requests. Set to null to keep the Container App unauthenticated."
+  type = object({
+    client_id            = string
+    tenant_auth_endpoint = string
+    allowed_audiences    = list(string)
+    allowed_applications = optional(list(string), [])
+  })
+  default = null
+
+  validation {
+    condition     = var.authentication == null || try(length(var.authentication.allowed_audiences) > 0, false)
+    error_message = "authentication.allowed_audiences must contain at least one audience."
+  }
+}

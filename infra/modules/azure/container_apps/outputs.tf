@@ -37,3 +37,8 @@ output "identity_tenant_id" {
   description = "Tenant ID of the system assigned managed identity, if enabled"
   value       = var.identity_type != null ? azurerm_container_app.this.identity[0].tenant_id : null
 }
+
+output "auth_config_id" {
+  description = "ID of the Container App authentication configuration, if enabled"
+  value       = var.authentication == null ? null : azapi_resource.auth_config[0].id
+}
