@@ -10,6 +10,14 @@ application under `src/` is an MCP task server that can also be developed locall
 packaged as a container image, published to an optional public Azure Container
 Registry (ACR), and deployed to the same Container App.
 
+> [!NOTE]
+> The MCP server implementation, containerization, local verification, and
+> Container Apps deployment workflow are based on the
+> [Microsoft Learn Python MCP server tutorial](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-mcp-server-python).
+> This scenario adapts that workflow to Terraform, the MCP Python SDK v2,
+> ACR Tasks, anonymous image pull, and the explicit Host and Origin allowlists
+> required by the SDK's DNS rebinding protection on Container Apps.
+
 This scenario creates the following resources:
 
 - A resource group for all scenario resources
@@ -296,11 +304,6 @@ placeholder with the value from `container_app_url`:
 }
 ```
 
-The [Microsoft Learn Python MCP server tutorial](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-mcp-server-python)
-describes the same local-to-Container-Apps workflow. The tutorial may show the
-MCP Python SDK v1 `FastMCP` API, while this sample uses the migrated SDK v2
-`MCPServer` API.
-
 ## Variables
 
 | Name                                         | Description                                                    | Type               | Default                    |
@@ -363,5 +366,7 @@ terraform destroy -var="enable_public_acr=true"
 ## References
 
 - [Deploy a Python MCP server to Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-mcp-server-python)
+- [Secure MCP servers on Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/mcp-authentication)
+- [Build a container image with Azure ACR Tasks](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-tutorial-quick-task)
 - [Enable anonymous pull access in Azure Container Registry](https://learn.microsoft.com/en-us/azure/container-registry/anonymous-pull-access)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)

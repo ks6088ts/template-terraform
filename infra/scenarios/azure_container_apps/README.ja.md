@@ -10,6 +10,13 @@ Python アプリケーションは MCP タスクサーバーです。ローカ�
 イメージとしてパッケージ化し、オプションの公開 Azure Container Registry (ACR)
 へ発行して、同じ Container App にデプロイできます。
 
+> [!NOTE]
+> MCP サーバーの実装、コンテナー化、ローカルでの動作確認、Container Apps への
+> デプロイ手順は、[Microsoft Learn の Python MCP サーバーチュートリアル（英語）](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-mcp-server-python)を
+> 参考にしています。このシナリオでは、チュートリアルの流れを Terraform、MCP Python
+> SDK v2、ACR Tasks、イメージの匿名 pull、および Container Apps 上で SDK の DNS
+> rebinding 保護に必要となる明示的な Host と Origin の許可リストへ適合させています。
+
 このシナリオでは、次のリソースを作成します。
 
 - すべてのシナリオリソースを格納するリソースグループ
@@ -295,11 +302,6 @@ curl --fail --show-error --no-buffer \
 }
 ```
 
-[Microsoft Learn の Python MCP サーバーチュートリアル](https://learn.microsoft.com/ja-jp/azure/container-apps/tutorial-mcp-server-python)
-では、同じローカル開発から Container Apps までの流れを確認できます。チュートリアルでは
-MCP Python SDK v1 の `FastMCP` API が使われている場合がありますが、このサンプルは
-移行済みの SDK v2 `MCPServer` API を使用します。
-
 ## 変数
 
 | 名前                                           | 説明                                                             | 型                  | 既定値                         |
@@ -362,5 +364,7 @@ terraform destroy -var="enable_public_acr=true"
 ## 参考資料
 
 - [Python MCP サーバーを Azure Container Apps にデプロイする](https://learn.microsoft.com/ja-jp/azure/container-apps/tutorial-mcp-server-python)
+- [Azure Container Apps 上の MCP サーバーをセキュリティで保護する](https://learn.microsoft.com/ja-jp/azure/container-apps/mcp-authentication)
+- [Azure ACR Tasks を使用してコンテナーイメージをビルドする](https://learn.microsoft.com/ja-jp/azure/container-registry/container-registry-tutorial-quick-task)
 - [Azure Container Registry で匿名 pull アクセスを有効にする](https://learn.microsoft.com/ja-jp/azure/container-registry/anonymous-pull-access)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
