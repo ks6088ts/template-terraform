@@ -354,7 +354,8 @@ curl --fail --show-error --no-buffer \
 1 つ目の要求は `401 Unauthorized` を返し、2 つ目の要求はツール一覧を返します。
 
 VS Code からトークンを送信するには次のように設定し、プロンプトには
-`az account get-access-token` の値を貼り付けます。
+`az account get-access-token --resource "$AUDIENCE" --query accessToken --output tsv` が
+出力するトークン文字列を貼り付けます。
 
 ```json
 {

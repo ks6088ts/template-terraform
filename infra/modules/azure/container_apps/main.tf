@@ -69,7 +69,7 @@ resource "azurerm_container_app" "this" {
 
 # Microsoft Entra ID built-in authentication (Easy Auth)
 locals {
-  authentication_validation = var.authentication == null ? null : merge(
+  aad_validation_policy = var.authentication == null ? null : merge(
     {
       allowedAudiences = var.authentication.allowed_audiences
     },
@@ -106,7 +106,7 @@ resource "azapi_resource" "auth_config" {
             clientId     = var.authentication.client_id
             openIdIssuer = var.authentication.tenant_auth_endpoint
           }
-          validation = local.authentication_validation
+          validation = local.aad_validation_policy
         }
       }
       login = {

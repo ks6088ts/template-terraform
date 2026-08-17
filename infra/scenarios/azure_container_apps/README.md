@@ -355,8 +355,8 @@ curl --fail --show-error --no-buffer \
 
 The first request returns `401 Unauthorized`. The second returns the tool list.
 
-Configure VS Code to send the token, and paste the value from
-`az account get-access-token` when prompted:
+Configure VS Code to send the token. When prompted, paste the token string
+produced by `az account get-access-token --resource "$AUDIENCE" --query accessToken --output tsv`:
 
 ```json
 {
