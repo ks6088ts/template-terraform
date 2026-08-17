@@ -25,6 +25,7 @@ Python アプリケーションは MCP タスクサーバーです。ローカ�
 - 既定で有効になるワークスペースベースの Application Insights
 - Container Apps Environment
 - 外部イングレスとシステム割り当てマネージド ID を持つ Container App
+- オプションの Microsoft Entra アプリケーションと Container App の認証構成
 
 Application Insights の接続文字列は Container App のシークレットに保存され、
 `APPLICATIONINSIGHTS_CONNECTION_STRING` 環境変数から参照されます。Application
@@ -302,6 +303,84 @@ curl --fail --show-error --no-buffer \
 }
 ```
 
+## Microsoft Entra ID による MCP サーバーの保護
+
+認証はオプトインで、既定では無効です。`enable_authentication = true` を設定すると、
+コンテナーの前段に Container Apps の[組み込み認証](https://learn.microsoft.com/ja-jp/azure/container-apps/authentication)が
+構成されます。認証されていない要求にはログインへのリダイレクトではなく HTTP 401 が
+返されるため、MCP クライアントが期待する動作になります。
+
+このオプションを有効にすると、次のリソースが追加で作成されます。
+
+- `user_impersonation` スコープと `api://<client-id>` のアプリケーション ID URI を公開する Microsoft Entra アプリケーション
+- 上記アプリケーションのサービスプリンシパル
+- `az account get-access-token` でトークンを取得できるようにする Azure CLI パブリッククライアントの事前承認
+- Microsoft Entra のベアラートークンを必須とし、匿名の呼び出しに 401 を返す Container App の `authConfig`
+
+Terraform を実行する ID には、Microsoft Entra のアプリケーションとサービス
+プリンシパルを作成する権限が必要です。
+
+```bash
+terraform apply \
+  -var="enable_authentication=true" \
+  -var="enable_public_acr=true" \
+  -var="container_image=$MCP_IMAGE" \
+  -var="container_port=8080" \
+  -var="min_replicas=1" \
+  -var="max_replicas=1"
+```
+
+> [!NOTE]
+> 組み込み認証は `/health` を含むすべてのパスに適用されるため、有効な間は匿名の
+> ヘルスチェックも 401 になります。
+
+匿名の要求が拒否され、認証済みの要求が成功することを確認します。
+
+```bash
+APP_URL=$(terraform output -raw container_app_url)
+AUDIENCE=$(terraform output -raw container_app_authentication_identifier_uri)
+ACCESS_TOKEN=$(az account get-access-token --resource "$AUDIENCE" --query accessToken --output tsv)
+
+curl --include "$APP_URL/mcp"
+
+curl --fail --show-error --no-buffer \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  "$APP_URL/mcp"
+```
+
+1 つ目の要求は `401 Unauthorized` を返し、2 つ目の要求はツール一覧を返します。
+
+VS Code からトークンを送信するには次のように設定し、プロンプトには
+`az account get-access-token` の値を貼り付けます。
+
+```json
+{
+  "servers": {
+    "tasks-mcp": {
+      "url": "https://<container-app-fqdn>/mcp",
+      "type": "http",
+      "headers": {
+        "Authorization": "Bearer ${input:mcpBearerToken}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "mcpBearerToken",
+      "type": "promptString",
+      "description": "MCP サーバー用のベアラートークンを入力してください",
+      "password": true
+    }
+  ]
+}
+```
+
+アクセストークンには有効期限があるため、期限切れの後は新しいトークンを再度入力
+してください。
+
 ## 変数
 
 | 名前                                           | 説明                                                             | 型                  | 既定値                         |
@@ -320,6 +399,8 @@ curl --fail --show-error --no-buffer \
 | `max_replicas`                               | レプリカの最大数                                                       | `number`           | `3`                         |
 | `env_vars`                                   | プレーン値またはシークレット参照を持つ環境変数                                        | `list(object)`     | `[]`                        |
 | `secrets`                                    | `env_vars` から参照する Container App シークレット                         | `list(object)`     | `[]`                        |
+| `enable_authentication`                      | Container App で Microsoft Entra ID 認証を必須にするか                    | `bool`             | `false`                     |
+| `azure_cli_client_id`                        | トークン取得のために事前承認する Azure CLI パブリッククライアント ID                     | `string`           | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` |
 | `enable_application_insights`                | Application Insights を作成し、接続文字列を挿入するか                          | `bool`             | `true`                      |
 | `application_insights_type`                  | Application Insights のアプリケーション種別                               | `string`           | `"web"`                     |
 | `application_insights_sampling_percentage`   | 0 から 100 までのテレメトリサンプリング率                                       | `number`           | `100`                       |
@@ -339,6 +420,9 @@ curl --fail --show-error --no-buffer \
 | `container_app_fqdn`                            | Container App の FQDN                                           |
 | `container_app_url`                             | Container App の HTTPS URL                                      |
 | `container_app_identity_principal_id`           | Container App マネージド ID のプリンシパル ID                              |
+| `container_app_authentication_client_id`        | Microsoft Entra アプリケーションのクライアント ID。無効な場合は `null`               |
+| `container_app_authentication_identifier_uri`   | トークンの対象ユーザーとなるアプリケーション ID URI。無効な場合は `null`                    |
+| `container_app_authentication_tenant_id`        | Microsoft Entra テナント ID。無効な場合は `null`                          |
 | `application_insights_id`                       | Application Insights の ID。無効な場合は `null`                        |
 | `application_insights_name`                     | Application Insights の名前。無効な場合は `null`                         |
 | `application_insights_connection_string`        | 機密の接続文字列。無効な場合は `null`                                         |
@@ -349,17 +433,18 @@ curl --fail --show-error --no-buffer \
 シナリオを削除するときも同じ変数または保存済みの `terraform.tfvars` を使用します。
 
 ```bash
-terraform destroy -var="enable_public_acr=true"
+terraform destroy -var="enable_public_acr=true" -var="enable_authentication=true"
 ```
 
 ## セキュリティと運用上の注意事項
 
 - Container Apps は HTTPS エンドポイントを自動的に提供します
-- 認証のない MCP エンドポイントはデモ用であり、運用環境で信頼できない利用者へ公開しないでください
+- MCP エンドポイントは既定では認証されません。信頼できない利用者へ公開する前に `enable_authentication = true` を設定してください
+- 組み込み認証はプラットフォーム側で Microsoft Entra のトークンを検証するため、許可された要求はアプリケーション側の認可処理なしにそのまま届きます
 - タスクストアはインメモリでスレッドセーフではなく、プロセスの再起動時にすべての変更が失われます
 - `min_replicas = 0` ではゼロへスケールできますが、対話型 MCP クライアントでコールドスタートが発生します
 - ACR の匿名 pull はレジストリ全体に適用され、認証されていない大量の要求はスロットルされる場合があります
-- プライベート ACR 認証、マネージド ID によるイメージ pull、Entra 認証、タスクの永続化は対象外です
+- プライベート ACR 認証、マネージド ID によるイメージ pull、タスクの永続化は対象外です
 
 ## 参考資料
 
