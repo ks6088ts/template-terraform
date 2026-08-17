@@ -113,6 +113,32 @@ curl --fail http://localhost:8080/health
 {"status":"healthy"}
 ```
 
+### MCP 疎通の確認
+
+サーバーはステートレスな Streamable HTTP を使用するため、`tools/list` と
+`tools/call` を直接送信できます。サーバーを起動したまま、別のターミナルで次の
+コマンドを実行します。
+
+```bash
+export MCP_URL="${MCP_URL:-http://localhost:8080/mcp}"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  "$MCP_URL"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_tasks","arguments":{}}}' \
+  "$MCP_URL"
+```
+
+最初の応答には 5 個のタスクツール名が含まれます。2 番目の応答には、
+`list_tasks` が返すタスクレコードが含まれます。応答は `text/event-stream` 形式のため、
+各 JSON-RPC 結果は `data:` 行に表示されます。
+
 ### VS Code からローカルサーバーへの接続
 
 ワークスペースの `.vscode/mcp.json` にある `servers` の下へ `tasks-mcp` を
@@ -133,7 +159,7 @@ Copilot Chat をエージェントモードで開き、`tasks-mcp` を有効に�
 依頼します。タスクを変更または削除するツール呼び出しは、ほかの外部ツール操作と同様に
 内容を確認してから許可してください。
 
-## コンテナーのローカルビルドとテスト
+## 同梱 MCP イメージのローカルビルドと実行
 
 この手順の Docker はオプションです。MCP ソースディレクトリからイメージをビルドして
 実行します。
@@ -150,6 +176,9 @@ docker run --rm --name tasks-mcp-server --publish 8080:8080 tasks-mcp-server:loc
 ```bash
 curl --fail http://localhost:8080/health
 ```
+
+**MCP 疎通の確認**にあるコマンドをもう一度実行します。ローカルコンテナーでは、
+既定の `MCP_URL` である `http://localhost:8080/mcp` をそのまま使用できます。
 
 ## 公開 ACR を使用した MCP サーバーのデプロイ
 
@@ -237,7 +266,19 @@ max_replicas      = 1
 ```bash
 APP_URL=$(terraform output -raw container_app_url)
 curl --fail "$APP_URL/health"
-printf 'MCP endpoint: %s/mcp\n' "$APP_URL"
+export MCP_URL="$APP_URL/mcp"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  "$MCP_URL"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_tasks","arguments":{}}}' \
+  "$MCP_URL"
 ```
 
 `.vscode/mcp.json` のプレースホルダーを `container_app_url` の値に置き換えて、
@@ -300,87 +341,6 @@ MCP Python SDK v1 の `FastMCP` API が使われている場合があります�
 | `application_insights_name`                     | Application Insights の名前。無効な場合は `null`                         |
 | `application_insights_connection_string`        | 機密の接続文字列。無効な場合は `null`                                         |
 | `application_insights_instrumentation_key`      | 機密のインストルメンテーションキー。無効な場合は `null`                                |
-
-## その他の例
-
-### カスタムアプリケーションのデプロイ
-
-```hcl
-# terraform.tfvars
-name            = "myapp"
-container_image = "myusername/myapp:v1.0.0"
-container_port  = 8080
-cpu             = 0.5
-memory          = "1Gi"
-min_replicas    = 1
-max_replicas    = 5
-```
-
-### タグを指定したデプロイ
-
-```hcl
-# terraform.tfvars
-name            = "api"
-container_image = "hashicorp/http-echo:latest"
-container_port  = 5678
-
-tags = {
-  environment = "production"
-  team        = "platform"
-  cost-center = "12345"
-}
-```
-
-### カスタム起動コマンドを使用した ks6088ts/concierge のデプロイ
-
-```shell
-export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
-
-terraform apply -auto-approve \
-  -var="container_image=ks6088ts/concierge:latest" \
-  -var='container_command=["python","scripts/playgrounds/tts.py","--host","0.0.0.0","--port","80"]'
-```
-
-または、`terraform.tfvars` ファイルを使用します。
-
-```hcl
-# terraform.tfvars
-container_image   = "ks6088ts/concierge:latest"
-
-container_command = ["python", "scripts/playgrounds/tts.py", "--host", "0.0.0.0", "--port", "80"]
-# container_command = ["uvicorn", "concierge.chat.infrastructure.web.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "80"]
-```
-
-```shell
-terraform apply -auto-approve
-
-# アプリケーションの URL を取得
-terraform output container_app_url
-```
-
-### 環境変数の挿入
-
-```hcl
-# terraform.tfvars
-container_image = "myusername/myapp:v1.0.0"
-container_port  = 8080
-
-# プレーンな環境変数と、シークレットを参照する環境変数。
-env_vars = [
-  { name = "LOG_LEVEL", value = "INFO" },
-  { name = "APP_ENV", value = "production" },
-  { name = "API_KEY", secret_name = "api-key" },
-]
-
-# env_vars が `secret_name` を介して参照するシークレット値。
-secrets = [
-  { name = "api-key", value = "super-secret-value" },
-]
-```
-
-各 `env_vars` エントリには、`value` (プレーンテキスト) または `secret_name`
-(`secrets` 内のエントリへの参照) のどちらか一方だけを設定する必要があります。機密値には
-`secrets` を使用し、プレーンな環境変数ではなく Container App のシークレットとして保存してください。
 
 ## クリーンアップ
 

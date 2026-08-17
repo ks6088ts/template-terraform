@@ -113,6 +113,32 @@ The expected response is:
 {"status":"healthy"}
 ```
 
+### Verify MCP connectivity
+
+The server uses stateless Streamable HTTP, so you can send `tools/list` and
+`tools/call` requests directly. Keep the server running and execute the
+following commands in another terminal:
+
+```bash
+export MCP_URL="${MCP_URL:-http://localhost:8080/mcp}"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  "$MCP_URL"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_tasks","arguments":{}}}' \
+  "$MCP_URL"
+```
+
+The first response contains the five task tool names. The second response
+contains the task records returned by `list_tasks`. Responses use the
+`text/event-stream` format, so each JSON-RPC result appears on a `data:` line.
+
 ### Connect VS Code to the local server
 
 Add the `tasks-mcp` entry under `servers` in the workspace `.vscode/mcp.json`.
@@ -133,7 +159,7 @@ Open Copilot Chat in agent mode, enable `tasks-mcp`, and ask it to list the
 tasks. Tool calls that modify or delete tasks require the same review as any
 other external tool action.
 
-## Build and test the container locally
+## Build and run the bundled MCP image locally
 
 Docker is optional for this workflow. From the MCP source directory, build and
 run the image:
@@ -150,6 +176,9 @@ Use another terminal to check the container and connect through the same local
 ```bash
 curl --fail http://localhost:8080/health
 ```
+
+Run the commands under **Verify MCP connectivity** again. The default
+`MCP_URL` remains `http://localhost:8080/mcp` for the local container.
 
 ## Deploy the MCP server through public ACR
 
@@ -238,7 +267,19 @@ Verify the deployed server:
 ```bash
 APP_URL=$(terraform output -raw container_app_url)
 curl --fail "$APP_URL/health"
-printf 'MCP endpoint: %s/mcp\n' "$APP_URL"
+export MCP_URL="$APP_URL/mcp"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  "$MCP_URL"
+
+curl --fail --show-error --no-buffer \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_tasks","arguments":{}}}' \
+  "$MCP_URL"
 ```
 
 Configure the deployed endpoint in `.vscode/mcp.json` by replacing the
@@ -301,87 +342,6 @@ MCP Python SDK v1 `FastMCP` API, while this sample uses the migrated SDK v2
 | `application_insights_name`                 | Name of Application Insights, or `null` when disabled                |
 | `application_insights_connection_string`    | Sensitive connection string, or `null` when disabled                 |
 | `application_insights_instrumentation_key`  | Sensitive instrumentation key, or `null` when disabled               |
-
-## Additional examples
-
-### Deploy custom application
-
-```hcl
-# terraform.tfvars
-name            = "myapp"
-container_image = "myusername/myapp:v1.0.0"
-container_port  = 8080
-cpu             = 0.5
-memory          = "1Gi"
-min_replicas    = 1
-max_replicas    = 5
-```
-
-### Deploy with tags
-
-```hcl
-# terraform.tfvars
-name            = "api"
-container_image = "hashicorp/http-echo:latest"
-container_port  = 5678
-
-tags = {
-  environment = "production"
-  team        = "platform"
-  cost-center = "12345"
-}
-```
-
-### Deploy ks6088ts/concierge with custom startup command
-
-```shell
-export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
-
-terraform apply -auto-approve \
-  -var="container_image=ks6088ts/concierge:latest" \
-  -var='container_command=["python","scripts/playgrounds/tts.py","--host","0.0.0.0","--port","80"]'
-```
-
-Or using a `terraform.tfvars` file:
-
-```hcl
-# terraform.tfvars
-container_image   = "ks6088ts/concierge:latest"
-
-container_command = ["python", "scripts/playgrounds/tts.py", "--host", "0.0.0.0", "--port", "80"]
-# container_command = ["uvicorn", "concierge.chat.infrastructure.web.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "80"]
-```
-
-```shell
-terraform apply -auto-approve
-
-# Get the application URL
-terraform output container_app_url
-```
-
-### Inject environment variables
-
-```hcl
-# terraform.tfvars
-container_image = "myusername/myapp:v1.0.0"
-container_port  = 8080
-
-# Plain environment variables, and secret-backed ones.
-env_vars = [
-  { name = "LOG_LEVEL", value = "INFO" },
-  { name = "APP_ENV", value = "production" },
-  { name = "API_KEY", secret_name = "api-key" },
-]
-
-# Secret values referenced by env_vars via `secret_name`.
-secrets = [
-  { name = "api-key", value = "super-secret-value" },
-]
-```
-
-Each `env_vars` entry must set exactly one of `value` (plain text) or `secret_name`
-(a reference to an entry in `secrets`). Prefer `secrets` for sensitive values so
-they are stored as Container App secrets rather than plain environment values.
 
 ## Clean up
 
