@@ -74,3 +74,18 @@ output "application_insights_instrumentation_key" {
   value       = var.enable_application_insights ? module.application_insights[0].instrumentation_key : null
   sensitive   = true
 }
+
+output "container_app_authentication_client_id" {
+  description = "Client ID of the Microsoft Entra application used for Container App authentication (null when disabled)"
+  value       = var.enable_authentication ? azuread_application.container_app[0].client_id : null
+}
+
+output "container_app_authentication_identifier_uri" {
+  description = "Application ID URI used as the token audience for the Container App (null when disabled)"
+  value       = var.enable_authentication ? azuread_application_identifier_uri.container_app[0].identifier_uri : null
+}
+
+output "container_app_authentication_tenant_id" {
+  description = "Microsoft Entra tenant ID used for Container App authentication (null when disabled)"
+  value       = var.enable_authentication ? data.azuread_client_config.current[0].tenant_id : null
+}
