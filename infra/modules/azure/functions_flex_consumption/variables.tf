@@ -80,3 +80,15 @@ variable "app_settings" {
   type        = map(string)
   default     = {}
 }
+
+variable "authentication" {
+  description = "Microsoft Entra ID authentication settings for incoming requests"
+  type = object({
+    client_id            = string
+    tenant_auth_endpoint = string
+    allowed_audiences    = list(string)
+    allowed_applications = optional(list(string), [])
+    excluded_paths       = optional(list(string), [])
+  })
+  default = null
+}

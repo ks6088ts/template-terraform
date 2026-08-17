@@ -10,6 +10,17 @@ variable "location" {
   default     = "japaneast"
 }
 
+variable "azure_cli_client_id" {
+  description = "Client ID of the Microsoft Azure CLI public client application used for interactive user authentication"
+  type        = string
+  default     = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.azure_cli_client_id))
+    error_message = "azure_cli_client_id must be a valid UUID."
+  }
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
