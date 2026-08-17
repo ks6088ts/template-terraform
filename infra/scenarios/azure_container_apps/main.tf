@@ -27,6 +27,24 @@ module "resource_group" {
 }
 
 # =============================================================================
+# Container Registry
+# =============================================================================
+
+module "container_registry" {
+  count  = var.enable_public_acr ? 1 : 0
+  source = "../../modules/azure/container_registry"
+
+  name                          = local.resource_name
+  resource_group_name           = module.resource_group.name
+  location                      = module.resource_group.location
+  sku                           = var.acr_sku
+  admin_enabled                 = false
+  anonymous_pull_enabled        = true
+  public_network_access_enabled = true
+  tags                          = var.tags
+}
+
+# =============================================================================
 # Log Analytics Workspace
 # =============================================================================
 

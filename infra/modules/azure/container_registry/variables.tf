@@ -30,6 +30,18 @@ variable "admin_enabled" {
   default     = false
 }
 
+variable "anonymous_pull_enabled" {
+  description = "Enable anonymous pull access for all repositories in the container registry"
+  type        = bool
+  default     = false
+}
+
+variable "public_network_access_enabled" {
+  description = "Enable public network access for the container registry"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Tags to apply to the container registry"
   type        = map(string)
