@@ -72,11 +72,9 @@ opt-in layer では次の機能を追加します。
 | 選択: AI gateway | `profiles/new_foundry.tfvars` または local copy | AI、token limit、Content Safety、LLM logs、token metrics | 60～90 分 + 作成時間 |
 
 > [!IMPORTANT]
-> `location` を変更した場合、または APIM SKU が Consumption tier の境界をまたぐ場合、Terraform は
-> 生成 suffix を更新して playground 全体を置換します。apply 前に破壊的な plan を確認してください。
-> resource 名、URL、managed identity、生成 key が変わります。既存 deployment をこの version の
-> コードへ初めて移行する plan でも、新しい replacement keeper による 1 回限りの全置換が表示される
-> 場合があります。
+> 既存 deployment の `location` 変更、および APIM SKU が Consumption tier の境界をまたぐ変更は
+> サポートしません。値を変更する前に現在の構成で playground を destroy し、変更後の構成で再作成
+> してください。再作成すると resource 名、URL、managed identity、生成 key が変わります。
 
 ## クイックスタート
 
@@ -100,15 +98,16 @@ opt-in layer を使用するときは profile を指定します。`plan`、`app
 同じ `-var-file` を指定してください。
 
 Azure は Consumption tier からの upgrade または Consumption tier への downgrade をサポート
-しません。このシナリオは生成する resource suffix を `location` と APIM SKU family
-（`consumption` または `dedicated`）に関連付けます。region の変更または Consumption 境界を
-またぐ変更では、APIM SKU update ではなく playground 全体の置換が plan されます。random suffix
-と APIM が作成または置換される場合だけ続行し、APIM が `~ update in-place` と表示される plan は
-apply しないでください。dedicated tier 間の変更では suffix を維持します。
+しません。このシナリオでは、その移行を自動化しません。`location` を変更する場合、または
+Consumption 境界をまたぐ場合は、構成を変更する前に現在 deployment している変数で playground を
+destroy し、変更後の構成を apply してください。Consumption 境界をまたぐ APIM が
+`~ update in-place` と表示される plan は apply しないでください。dedicated tier 間の変更は通常どおり
+plan できます。
 
-`ChangingSkuTypeNotSupported` または `ServiceModelDeprecating` で apply が失敗した後は、使用する
-profile で plan をやり直します。残っている state に応じて suffix と APIM は新規作成または置換に
-なります。再 apply 前に plan の `eastus2` と選択した model を確認してください。
+`ChangingSkuTypeNotSupported` または `ServiceModelDeprecating` で apply が失敗した後は、再試行前に
+残っている state を確認してください。Consumption 境界をまたいだ場合、または `location` を変更した
+場合は、現在 deployment している変数へ戻して playground を destroy してから、目的の profile を
+apply します。再 apply 前に plan の対象 region と選択した model を確認してください。
 
 | Profile | 用途 | 重要な注意点 |
 | --- | --- | --- |
@@ -541,8 +540,8 @@ core rate limit を除く feature object の既定値はすべて `null` です�
 
 | Input | 動作 |
 | --- | --- |
-| `location` | 既定は `eastus2`。変更すると suffix を更新して playground 全体を置換 |
-| `sku_name` | 既定は `Consumption_0`。Consumption 境界をまたぐ変更では playground 全体を置換 |
+| `location` | 既定は `eastus2`。既存 deployment の変更は非対応で、再作成が必要 |
+| `sku_name` | 既定は `Consumption_0`。Consumption 境界をまたぐ変更は非対応で、再作成が必要 |
 | `core_rate_limit` | Core API の calls と renewal period を設定 |
 | `backend_pool` | Container Apps と weighted routing を有効化。nested `circuit_breaker` は任意 |
 | `ai_backend` | `provision` または `existing` のどちらか一方が必須。新規 deployment の既定 SKU は `DataZoneStandard` |

@@ -1,10 +1,6 @@
 module "random_string" {
   source = "../../modules/common/random_string"
 
-  keepers = {
-    apim_sku_family = local.apim_sku_family
-    location        = var.location
-  }
   length      = 8
   min_numeric = 0
   numeric     = true
@@ -14,7 +10,6 @@ module "random_string" {
 }
 
 locals {
-  apim_sku_family     = startswith(var.sku_name, "Consumption_") ? "consumption" : "dedicated"
   resource_suffix     = module.random_string.result
   resource_name       = "${trim(substr(var.name, 0, 36), "-")}-${local.resource_suffix}"
   api_management_name = "apim-${local.resource_name}"

@@ -80,11 +80,10 @@ run "core_api_is_deployed_by_default" {
 
   assert {
     condition = alltrue([
-      local.apim_sku_family == "consumption",
       var.location == "eastus2",
       module.resource_group.location == "eastus2",
     ])
-    error_message = "The default deployment must use East US 2 and the Consumption replacement family."
+    error_message = "The default deployment must use East US 2."
   }
 
   assert {
@@ -221,11 +220,6 @@ run "circuit_breaker_enabled" {
         accept_retry_after = true
       }
     }
-  }
-
-  assert {
-    condition     = local.apim_sku_family == "dedicated"
-    error_message = "Developer and other non-Consumption SKUs must use the dedicated replacement family."
   }
 
   assert {

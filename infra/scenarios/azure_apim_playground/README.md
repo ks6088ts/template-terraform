@@ -72,11 +72,10 @@ optional labs.
 | Optional: AI gateway | `profiles/new_foundry.tfvars` or a local copy | AI, token limits, Content Safety, LLM logs, and token metrics | 60-90 minutes plus provisioning |
 
 > [!IMPORTANT]
-> Terraform rotates the generated suffix and replaces the entire playground when `location` changes
-> or the APIM SKU moves into or out of the Consumption tier. Review the destructive plan before apply:
-> resource names, URLs, managed identities, and generated keys change. The first plan after upgrading
-> an existing deployment to this version can also show a one-time full replacement because these
-> replacement keepers are new.
+> Changing `location` or moving the APIM SKU into or out of the Consumption tier is not supported for
+> an existing deployment. Destroy the playground with its current configuration before changing either
+> value, then create it again with the intended configuration. Resource names, URLs, managed identities,
+> and generated keys change when the playground is recreated.
 
 ## Quick Start
 
@@ -100,15 +99,15 @@ Use a profile for an opt-in layer. Use the same `-var-file` for `plan`, `apply`,
 `destroy`.
 
 Azure does not support an in-place upgrade from or downgrade to the Consumption tier. This scenario
-binds its generated resource suffix to `location` and the APIM SKU family (`consumption` or
-`dedicated`). Changing region or crossing the Consumption boundary therefore plans a full playground
-replacement instead of an APIM SKU update. Continue only when the plan creates or replaces the random
-suffix and APIM; do not apply a plan that shows APIM as `~ update in-place`. Dedicated-to-dedicated
-SKU changes retain the suffix.
+does not automate that migration. To change `location` or cross the Consumption boundary, destroy the
+existing playground with the currently deployed variables before changing the configuration, then apply
+the intended configuration. Do not apply a plan that shows APIM as `~ update in-place` across the
+Consumption boundary. Dedicated-to-dedicated SKU changes can be planned normally.
 
-After a failed apply with `ChangingSkuTypeNotSupported` or `ServiceModelDeprecating`, rerun the plan
-with the intended profile. Depending on the remaining state, the suffix and APIM are either created
-or replaced. Confirm `eastus2` and the selected model in the plan before applying again.
+After a failed apply with `ChangingSkuTypeNotSupported` or `ServiceModelDeprecating`, inspect the
+remaining state before retrying. If the attempted change crossed the Consumption boundary or changed
+`location`, restore the currently deployed variables and destroy the playground before applying the
+intended profile. Confirm the target region and selected model in the plan before applying again.
 
 | Profile | Purpose | Important notes |
 | --- | --- | --- |
@@ -543,8 +542,8 @@ All feature objects default to `null`, except the core rate limit. Important inp
 
 | Input | Behavior |
 | --- | --- |
-| `location` | Defaults to `eastus2`; changing it rotates the suffix and replaces the playground |
-| `sku_name` | Defaults to `Consumption_0`; crossing the Consumption boundary replaces the playground |
+| `location` | Defaults to `eastus2`; changing an existing deployment is unsupported and requires recreation |
+| `sku_name` | Defaults to `Consumption_0`; crossing the Consumption boundary is unsupported and requires recreation |
 | `core_rate_limit` | Configures core API calls and renewal period |
 | `backend_pool` | Enables Container Apps and weighted routing; nested `circuit_breaker` is optional |
 | `ai_backend` | Requires exactly one of `provision` or `existing`; provisioned deployments default to `DataZoneStandard` |
