@@ -32,3 +32,8 @@ output "public_ip_addresses" {
   description = "Public IP addresses of the API Management instance"
   value       = azurerm_api_management.this.public_ip_addresses
 }
+
+output "identity_principal_id" {
+  description = "Principal ID of the system-assigned managed identity, or null when disabled"
+  value       = var.enable_system_assigned_identity ? data.azurerm_api_management.this[0].identity[0].principal_id : null
+}

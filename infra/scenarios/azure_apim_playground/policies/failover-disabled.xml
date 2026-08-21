@@ -1,0 +1,21 @@
+<policies>
+    <inbound>
+        <base />
+        <return-response>
+            <set-status code="501" reason="Not Implemented" />
+            <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+            </set-header>
+            <set-body>{"error":"Circuit-breaker exercises are disabled for this deployment."}</set-body>
+        </return-response>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

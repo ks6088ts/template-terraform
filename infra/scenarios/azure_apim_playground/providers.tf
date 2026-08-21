@@ -9,6 +9,13 @@ provider "azurerm" {
   resource_provider_registrations = "none"
   resource_providers_to_register = [
     "Microsoft.ApiManagement",
+    "Microsoft.App",
+    "Microsoft.CognitiveServices",
+    "Microsoft.Insights",
+    "Microsoft.OperationalInsights",
     "Microsoft.Resources",
   ]
+}
+
+provider "azapi" {
 }
