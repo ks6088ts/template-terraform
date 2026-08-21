@@ -20,6 +20,7 @@ provider authentication, and remote state guidance.
 | --- | --- |
 | [azure_terraform_backend](./infra/scenarios/azure_terraform_backend/README.md) | Creates an Azure Storage account for a Terraform backend. |
 | [azure_github_oidc](./infra/scenarios/azure_github_oidc/README.md) | Creates a service principal and role assignments for connecting GitHub Actions to Azure through OIDC. |
+| [azure_ai_gateway](./infra/scenarios/azure_ai_gateway/README.md) | Deploys Azure API Management as an AI Gateway for Microsoft Foundry Azure OpenAI model deployments. |
 | [azure_apim_playground](./infra/scenarios/azure_apim_playground/README.md) | Deploys Azure API Management on the Consumption tier for testing a serverless API gateway. |
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Deploys an externally accessible Azure Container App from a Docker Hub image. |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.md) | Deploys Azure data stores, including Cosmos DB, Storage, Key Vault, PostgreSQL, and Monitor, with public access for testing. |

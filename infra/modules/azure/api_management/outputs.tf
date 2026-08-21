@@ -23,6 +23,11 @@ output "portal_url" {
   value       = azurerm_api_management.this.portal_url
 }
 
+output "principal_id" {
+  description = "Principal ID of the API Management system-assigned managed identity"
+  value       = try(azurerm_api_management.this.identity[0].principal_id, null)
+}
+
 output "public_ip_addresses" {
   description = "Public IP addresses of the API Management instance"
   value       = azurerm_api_management.this.public_ip_addresses

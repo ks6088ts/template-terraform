@@ -6,4 +6,12 @@ resource "azurerm_api_management" "this" {
   publisher_email     = var.publisher_email
   sku_name            = "Consumption_0"
   tags                = var.tags
+
+  dynamic "identity" {
+    for_each = var.enable_identity ? [1] : []
+
+    content {
+      type = "SystemAssigned"
+    }
+  }
 }

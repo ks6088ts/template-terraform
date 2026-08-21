@@ -25,6 +25,12 @@ variable "publisher_email" {
   default     = "admin@example.com"
 }
 
+variable "enable_identity" {
+  description = "Enable a system-assigned managed identity for the API Management instance"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags to apply to the API Management instance"
   type        = map(string)

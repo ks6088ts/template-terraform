@@ -20,6 +20,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | --- | --- |
 | [azure_terraform_backend](./infra/scenarios/azure_terraform_backend/README.ja.md) | Terraform バックエンド用の Azure Storage Account を作成します。 |
 | [azure_github_oidc](./infra/scenarios/azure_github_oidc/README.ja.md) | GitHub Actions から Azure に OIDC で接続するためのサービスプリンシパルを作成し、必要な権限を割り当てます。 |
+| [azure_ai_gateway](./infra/scenarios/azure_ai_gateway/README.ja.md) | Microsoft Foundry の Azure OpenAI モデルデプロイ向けに Azure API Management を AI Gateway としてデプロイします。 |
 | [azure_apim_playground](./infra/scenarios/azure_apim_playground/README.ja.md) | Azure API Management の Consumption SKU をデプロイし、サーバーレス API ゲートウェイの検証環境を構築します。 |
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.ja.md) | Docker Hub イメージを使用し、外部アクセス可能な Azure Container App をデプロイします。 |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.ja.md) | Cosmos DB、Storage、Key Vault、PostgreSQL、Monitor などの Azure データストアを、テスト用のパブリックアクセスを許可してデプロイします。 |
