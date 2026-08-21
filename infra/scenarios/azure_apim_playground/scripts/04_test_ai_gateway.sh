@@ -7,7 +7,7 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 . "${SCRIPT_DIR}/_common.sh"
 
 : "${AI_PROMPT:=Reply with exactly: APIM gateway verified}"
-: "${AI_MAX_TOKENS:=32}"
+: "${AI_MAX_TOKENS:=64}"
 
 require_common_commands
 load_terraform_outputs
@@ -20,7 +20,8 @@ validate_positive_integer AI_MAX_TOKENS "$AI_MAX_TOKENS"
 PAYLOAD=$(jq -n \
   --arg model "$AI_DEPLOYMENT_NAME" \
   --arg prompt "$AI_PROMPT" \
-  --argjson max_tokens "$AI_MAX_TOKENS" \
+  --arg reasoning_effort "$AI_REASONING_EFFORT" \
+  --argjson max_completion_tokens "$AI_MAX_TOKENS" \
   '{
     model: $model,
     messages: [
@@ -29,9 +30,9 @@ PAYLOAD=$(jq -n \
         content: $prompt
       }
     ],
-    max_tokens: $max_tokens,
+    max_completion_tokens: $max_completion_tokens,
     stream: false
-  }')
+  } + (if $reasoning_effort == "" then {} else {reasoning_effort: $reasoning_effort} end)')
 
 http_request \
   --request POST \
@@ -43,9 +44,9 @@ http_request \
 expect_http_status 200
 
 jq -e '
-  (.choices | type == "array" and length > 0)
-  or (.output | type == "array" and length > 0)
-' "$HTTP_BODY_FILE" >/dev/null || die "AI gateway response did not contain a completion."
+  .choices
+  | type == "array" and any(.[]; (.message.content // "") | length > 0)
+' "$HTTP_BODY_FILE" >/dev/null || die "AI gateway response did not contain completion text."
 
 log "AI gateway returned a completion through managed-identity backend authentication."
 log "Deployment: ${AI_DEPLOYMENT_NAME}"

@@ -80,6 +80,15 @@ run "core_api_is_deployed_by_default" {
 
   assert {
     condition = alltrue([
+      local.apim_sku_family == "consumption",
+      var.location == "eastus2",
+      module.resource_group.location == "eastus2",
+    ])
+    error_message = "The default deployment must use East US 2 and the Consumption replacement family."
+  }
+
+  assert {
+    condition = alltrue([
       azurerm_api_management_api_version_set.core.versioning_scheme == "Segment",
       azurerm_api_management_api.core.version == "v1",
       azurerm_api_management_api.core.subscription_required,
@@ -215,6 +224,11 @@ run "circuit_breaker_enabled" {
   }
 
   assert {
+    condition     = local.apim_sku_family == "dedicated"
+    error_message = "Developer and other non-Consumption SKUs must use the dedicated replacement family."
+  }
+
+  assert {
     condition = alltrue([
       length(azurerm_api_management_backend.failing_primary) == 1,
       length(azapi_resource.failover_pool) == 1,
@@ -269,6 +283,7 @@ run "existing_ai_backend_enabled" {
       !strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "llm-token-limit"),
       output.ai_backend_mode == "existing",
       output.ai_deployment_name == "gpt-test",
+      output.ai_reasoning_effort == null,
     ])
     error_message = "Existing AI mode must create a managed-identity gateway without provisioning a Foundry account."
   }
@@ -280,11 +295,11 @@ run "provisioned_ai_backend_enabled" {
 
   variables {
     ai_backend = {
+      reasoning_effort = "none"
       provision = {
-        deployment_name = "gpt-test"
-        model           = "gpt-test"
-        version         = "1"
-        sku_name        = "GlobalStandard"
+        deployment_name = "gpt-5.4-mini"
+        model           = "gpt-5.4-mini"
+        version         = "2026-03-17"
         capacity        = 10
       }
     }
@@ -294,13 +309,35 @@ run "provisioned_ai_backend_enabled" {
     condition = alltrue([
       length(module.ai_foundry) == 1,
       module.ai_foundry[0].openai_endpoint == "https://aifoundrytest1234.openai.azure.com/",
-      module.ai_foundry[0].deployment_ids["gpt-test"] != null,
+      module.ai_foundry[0].deployment_ids["gpt-5.4-mini"] != null,
       azurerm_api_management_backend.ai[0].url == "https://aifoundrytest1234.openai.azure.com/openai/v1",
+      local.ai_provision_config.model == "gpt-5.4-mini",
+      local.ai_provision_config.version == "2026-03-17",
+      local.ai_provision_config.sku_name == "DataZoneStandard",
+      output.ai_reasoning_effort == "none",
       output.ai_backend_mode == "provision",
-      output.ai_deployment_name == "gpt-test",
+      output.ai_deployment_name == "gpt-5.4-mini",
     ])
     error_message = "Provisioned AI mode must create one Foundry account and route APIM to its OpenAI v1 endpoint."
   }
+}
+
+
+run "ai_backend_rejects_invalid_reasoning_effort" {
+  command = plan
+
+  variables {
+    ai_backend = {
+      reasoning_effort = "unsupported"
+      existing = {
+        endpoint        = "https://existing.openai.azure.com/openai/v1"
+        resource_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ai/providers/Microsoft.CognitiveServices/accounts/existing-ai"
+        deployment_name = "gpt-test"
+      }
+    }
+  }
+
+  expect_failures = [var.ai_backend]
 }
 
 

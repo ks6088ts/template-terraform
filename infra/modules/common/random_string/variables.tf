@@ -4,6 +4,12 @@ variable "length" {
   default     = 5
 }
 
+variable "keepers" {
+  description = "Arbitrary values that trigger a new random string when changed"
+  type        = map(string)
+  default     = {}
+}
+
 variable "min_numeric" {
   description = "Minimum number of numeric characters in the result"
   type        = number

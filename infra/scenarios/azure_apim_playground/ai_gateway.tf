@@ -5,6 +5,7 @@ locals {
   ai_existing_config  = try(var.ai_backend.existing, null)
   ai_enabled          = var.ai_backend != null
   ai_provisioned      = local.ai_provision_config != null
+  ai_reasoning_effort = try(var.ai_backend.reasoning_effort, null)
 
   ai_resource_id = local.ai_provisioned ? module.ai_foundry[0].account_id : try(local.ai_existing_config.resource_id, null)
   ai_backend_url = local.ai_provisioned ? "${trimsuffix(module.ai_foundry[0].openai_endpoint, "/")}/openai/v1" : try(

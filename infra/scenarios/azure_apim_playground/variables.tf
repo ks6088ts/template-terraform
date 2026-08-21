@@ -7,7 +7,7 @@ variable "name" {
 variable "location" {
   description = "Azure region for resources"
   type        = string
-  default     = "japaneast"
+  default     = "eastus2"
 }
 
 variable "tags" {
@@ -98,12 +98,13 @@ variable "backend_pool" {
 variable "ai_backend" {
   description = "Optional OpenAI v1 backend, either provisioned by this scenario or referenced as an existing Azure AI resource"
   type = object({
+    reasoning_effort = optional(string)
     provision = optional(object({
       format          = optional(string, "OpenAI")
       deployment_name = string
       model           = string
       version         = string
-      sku_name        = optional(string, "GlobalStandard")
+      sku_name        = optional(string, "DataZoneStandard")
       capacity        = optional(number, 50)
     }))
     existing = optional(object({
@@ -125,6 +126,11 @@ variable "ai_backend" {
   validation {
     condition     = var.ai_backend == null || try(var.ai_backend.provision.capacity > 0, true)
     error_message = "ai_backend.provision.capacity must be greater than zero."
+  }
+
+  validation {
+    condition     = var.ai_backend == null || var.ai_backend.reasoning_effort == null || contains(["none", "minimal", "low", "medium", "high", "xhigh", "max"], var.ai_backend.reasoning_effort)
+    error_message = "ai_backend.reasoning_effort must be none, minimal, low, medium, high, xhigh, or max."
   }
 
   validation {

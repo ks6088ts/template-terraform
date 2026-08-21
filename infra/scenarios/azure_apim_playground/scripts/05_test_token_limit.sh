@@ -23,7 +23,8 @@ validate_positive_integer TOKEN_LIMIT_MAX_TOKENS "$TOKEN_LIMIT_MAX_TOKENS"
 PAYLOAD=$(jq -n \
   --arg model "$AI_DEPLOYMENT_NAME" \
   --arg prompt "$TOKEN_LIMIT_PROMPT" \
-  --argjson max_tokens "$TOKEN_LIMIT_MAX_TOKENS" \
+  --arg reasoning_effort "$AI_REASONING_EFFORT" \
+  --argjson max_completion_tokens "$TOKEN_LIMIT_MAX_TOKENS" \
   '{
     model: $model,
     messages: [
@@ -32,9 +33,9 @@ PAYLOAD=$(jq -n \
         content: $prompt
       }
     ],
-    max_tokens: $max_tokens,
+    max_completion_tokens: $max_completion_tokens,
     stream: false
-  }')
+  } + (if $reasoning_effort == "" then {} else {reasoning_effort: $reasoning_effort} end)')
 
 ATTEMPT=1
 RATE_LIMIT_OBSERVED=false

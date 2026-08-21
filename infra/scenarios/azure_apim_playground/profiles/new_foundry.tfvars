@@ -9,11 +9,12 @@ backend_pool = {
 }
 
 ai_backend = {
+  reasoning_effort = "none"
   provision = {
-    deployment_name = "gpt-4o-mini"
-    model           = "gpt-4o-mini"
-    version         = "2024-07-18"
-    sku_name        = "GlobalStandard"
+    deployment_name = "gpt-5.4-mini"
+    model           = "gpt-5.4-mini"
+    version         = "2026-03-17"
+    sku_name        = "DataZoneStandard"
     capacity        = 10
   }
 }

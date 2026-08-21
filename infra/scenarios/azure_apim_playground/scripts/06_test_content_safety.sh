@@ -59,6 +59,7 @@ sleep "$CONTENT_SAFETY_PROPAGATION_SECONDS"
 AI_PAYLOAD=$(jq -n \
   --arg model "$AI_DEPLOYMENT_NAME" \
   --arg blocked_text "$CONTENT_SAFETY_BLOCKED_TEXT" \
+  --arg reasoning_effort "$AI_REASONING_EFFORT" \
   '{
     model: $model,
     messages: [
@@ -67,9 +68,9 @@ AI_PAYLOAD=$(jq -n \
         content: ("Repeat this exact term: " + $blocked_text)
       }
     ],
-    max_tokens: 8,
+    max_completion_tokens: 8,
     stream: false
-  }')
+  } + (if $reasoning_effort == "" then {} else {reasoning_effort: $reasoning_effort} end)')
 http_request \
   --request POST \
   "${AI_GATEWAY_URL}/chat/completions" \

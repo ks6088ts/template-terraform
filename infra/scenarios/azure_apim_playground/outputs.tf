@@ -150,6 +150,11 @@ output "ai_deployment_name" {
   value       = local.ai_deployment_name
 }
 
+output "ai_reasoning_effort" {
+  description = "Optional reasoning effort sent by the validation scripts"
+  value       = local.ai_reasoning_effort
+}
+
 output "ai_gateway_url" {
   description = "OpenAI v1-compatible APIM gateway base URL"
   value       = local.ai_enabled ? "${trimsuffix(module.api_management.gateway_url, "/")}/ai/openai/v1" : null

@@ -67,6 +67,7 @@ load_terraform_outputs() {
   AI_BACKEND_ENABLED=$(terraform_output_value ai_backend_enabled)
   AI_GATEWAY_URL=$(terraform_output_value ai_gateway_url)
   AI_DEPLOYMENT_NAME=$(terraform_output_value ai_deployment_name)
+  AI_REASONING_EFFORT=$(terraform_output_value ai_reasoning_effort)
   LLM_TOKEN_LIMIT_ENABLED=$(terraform_output_value llm_token_limit_enabled)
 
   CONTENT_SAFETY_ENABLED=$(terraform_output_value content_safety_enabled)

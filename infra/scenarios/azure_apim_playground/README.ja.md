@@ -72,9 +72,11 @@ opt-in layer では次の機能を追加します。
 | 選択: AI gateway | `profiles/new_foundry.tfvars` または local copy | AI、token limit、Content Safety、LLM logs、token metrics | 60～90 分 + 作成時間 |
 
 > [!IMPORTANT]
-> 各発展ラボは clean deployment から始めます。別 profile へ移る前に、現在の構成を作成したのと
-> 同じ `-var-file` で destroy してください。Consumption tier からの upgrade と Consumption
-> tier への downgrade はサポートされていません。
+> `location` を変更した場合、または APIM SKU が Consumption tier の境界をまたぐ場合、Terraform は
+> 生成 suffix を更新して playground 全体を置換します。apply 前に破壊的な plan を確認してください。
+> resource 名、URL、managed identity、生成 key が変わります。既存 deployment をこの version の
+> コードへ初めて移行する plan でも、新しい replacement keeper による 1 回限りの全置換が表示される
+> 場合があります。
 
 ## クイックスタート
 
@@ -97,17 +99,22 @@ APIM の作成には数分かかることがあります。Consumption の初回
 opt-in layer を使用するときは profile を指定します。`plan`、`apply`、`destroy` には
 同じ `-var-file` を指定してください。
 
-最初の apply 前に APIM tier を選択してください。Azure は Consumption tier からの upgrade
-または Consumption tier への downgrade をサポートしません。既定の Consumption deployment
-がすでに存在する場合は、作成時と同じ構成で destroy してから、Developer profile を新規
-deployment として apply します。Terraform plan に in-place SKU update と表示されても、
-Azure API はその変更を受け付けません。
+Azure は Consumption tier からの upgrade または Consumption tier への downgrade をサポート
+しません。このシナリオは生成する resource suffix を `location` と APIM SKU family
+（`consumption` または `dedicated`）に関連付けます。region の変更または Consumption 境界を
+またぐ変更では、APIM SKU update ではなく playground 全体の置換が plan されます。random suffix
+と APIM が作成または置換される場合だけ続行し、APIM が `~ update in-place` と表示される plan は
+apply しないでください。dedicated tier 間の変更では suffix を維持します。
+
+`ChangingSkuTypeNotSupported` または `ServiceModelDeprecating` で apply が失敗した後は、使用する
+profile で plan をやり直します。残っている state に応じて suffix と APIM は新規作成または置換に
+なります。再 apply 前に plan の `eastus2` と選択した model を確認してください。
 
 | Profile | 用途 | 重要な注意点 |
 | --- | --- | --- |
 | `profiles/consumption_load_balancing.tfvars` | `Consumption_0` の core と 3:1 weighted pool | Circuit breaker は含まない |
 | `profiles/full_developer.tfvars` | Weighted pool、affinity、circuit breaker、standard observability | 課金対象の Developer APIM と monitoring resource を作成 |
-| `profiles/new_foundry.tfvars` | Foundry と Content Safety を新規作成する full resilience / AI path | apply 前に model version、region availability、quota を確認 |
+| `profiles/new_foundry.tfvars` | Foundry と Content Safety を新規作成する full resilience / AI path | apply 前に model lifecycle、quota、capacity を確認 |
 | `profiles/existing_ai.tfvars` | 既存 AI と Content Safety resource を使用する full AI path | すべての `replace-me` を先に置換 |
 
 実行例:
@@ -176,25 +183,37 @@ state が不要になったことを確認するまで削除しないでくだ�
 
 #### 0.3 AI 経路の model と quota を確認する
 
-`profiles/new_foundry.tfvars` は `japaneast` に `gpt-4o-mini` version `2024-07-18` を作成します。
-新規作成経路を選ぶ場合だけ、apply 前に availability と quota を確認します。
+`profiles/new_foundry.tfvars` は `eastus2` に `DataZoneStandard` の `gpt-5.4-mini` version
+`2026-03-17` を作成します。新規作成経路を選ぶ場合だけ、apply 前に現在の lifecycle、残り quota、
+deployable capacity を確認します。
 
 ```bash
-LOCATION="japaneast"
+LOCATION="eastus2"
+MODEL_NAME="gpt-5.4-mini"
+MODEL_VERSION="2026-03-17"
+DEPLOYMENT_SKU="DataZoneStandard"
 
 az cognitiveservices model list \
     --location "$LOCATION" \
-    --kind OpenAI \
-    --query "[?name=='gpt-4o-mini' && version=='2024-07-18'].{name:name,version:version,format:format}" \
+    --query "[?model.name=='${MODEL_NAME}' && model.version=='${MODEL_VERSION}'] | [0].{model:model.name,version:model.version,lifecycle:model.lifecycleStatus,inferenceRetirement:model.deprecation.inference,skus:join(',', model.skus[].name)}" \
     --output table
 
 az cognitiveservices usage list \
     --location "$LOCATION" \
+    --query "[?name.value=='OpenAI.${DEPLOYMENT_SKU}.${MODEL_NAME}'].{quota:name.value,used:currentValue,limit:limit}" \
+    --output table
+
+az rest --method get \
+    --url "https://management.azure.com/subscriptions/${ARM_SUBSCRIPTION_ID}/providers/Microsoft.CognitiveServices/modelCapacities?api-version=2024-10-01&modelFormat=OpenAI&modelName=${MODEL_NAME}&modelVersion=${MODEL_VERSION}" \
+    --query "value[?location=='${LOCATION}' && properties.skuName=='${DEPLOYMENT_SKU}'].{location:location,sku:properties.skuName,availableCapacity:properties.availableCapacity}" \
     --output table
 ```
 
-model が表示されない、または quota が不足している場合は apply しません。利用可能な設定の local
-tfvars を作るか、既存 AI 経路を選択します。最新価格は
+model の行が表示されない、`Lifecycle` が `GenerallyAvailable` ではない、`Skus` に
+`DataZoneStandard` が含まれない、未使用 quota が 10 未満、または `AvailableCapacity` が 10 未満の
+場合は apply しません。model lifecycle、subscription quota、service capacity はリポジトリの変更
+とは独立して変わります。現在デプロイ可能な設定の local tfvars を作るか、既存 AI 経路を選択します。
+最新価格は
 [Azure 料金計算ツール](https://azure.microsoft.com/pricing/calculator/)で確認してください。
 
 ### テストの読み方
@@ -381,6 +400,7 @@ terraform apply -parallelism=1 -var-file="$PROFILE"
 
 terraform output ai_backend_enabled
 terraform output ai_backend_mode
+terraform output ai_reasoning_effort
 terraform output llm_token_limit_enabled
 terraform output content_safety_enabled
 terraform output observability_enabled
@@ -390,6 +410,11 @@ terraform output llm_token_metrics_enabled
 
 APIM managed identity の role assignment が反映されるまで、apply 完了後にも短い待ち時間が発生する
 場合があります。sensitive な subscription key は出力しません。
+
+`new_foundry` profile は `ai_reasoning_effort` を `none` に設定し、低い token 上限の test でも
+reasoning ではなく表示本文へ completion budget を使用します。validation script は output が non-null
+の場合だけこの field を送ります。`AI_MAX_TOKENS` と `TOKEN_LIMIT_MAX_TOKENS` は request の
+`max_completion_tokens` を制御します。
 
 #### 4.3 すべての有効な test を実行する
 
@@ -412,7 +437,7 @@ APIM managed identity の role assignment が反映されるまで、apply 完�
 
 ```bash
 AI_PROMPT="Reply with exactly: APIM gateway verified" \
-AI_MAX_TOKENS=32 \
+AI_MAX_TOKENS=64 \
 ./scripts/04_test_ai_gateway.sh
 
 TOKEN_LIMIT_ATTEMPTS=40 \
@@ -473,9 +498,11 @@ Azure subscription、backend key、現在の profile を確認してください
 | Core が HTTP 401/403 | APIM subscription key がない、または不正 | Key を `terraform output -raw` から shell 変数へ再取得 |
 | Core がすぐ HTTP 429 | 同じ renewal window で request 済み | Window の更新後に再実行 |
 | Weighted test で片方だけ観測 | 少ない sample による確率的偏り | `BACKEND_REQUESTS` を増やす |
-| Circuit breaker が disabled | Consumption または誤った profile | Clean state へ Developer profile を apply |
+| Circuit breaker が disabled | Consumption または誤った profile | Developer profile を plan し、全置換を確認してから apply |
 | AI が HTTP 401/403 | APIM identity の RBAC 未反映、resource ID 不正 | Role assignment を確認し、伝播後に再実行 |
-| Model deployment が失敗 | Region availability、version、quota 不足 | Lab 0 の model/usage query を確認 |
+| `ChangingSkuTypeNotSupported` | 古い構成が APIM の Consumption SKU を in-place update しようとした | 現在のコードと active profile を使い、suffix と APIM が作成または置換され、`~ update in-place` でないことを確認 |
+| `ServiceModelDeprecating` | 設定した model が新規 deployment を受け付けない | Lab 0 を再実行し、quota と capacity がある `GenerallyAvailable` model/SKU を選択 |
+| Model deployment が失敗 | Region、lifecycle、deployment SKU、quota、capacity が利用不可 | Lab 0 の model/usage/capacity query を確認 |
 | Blocked term が HTTP 200 | Blocklist/item の伝播待ち | `CONTENT_SAFETY_PROPAGATION_SECONDS` を増やす |
 | LLM log/metric がない | AI request 未実行、ingestion delay、feature disabled | `run_all.sh` 後に polling 回数と間隔を増やす |
 | Token limit が HTTP 429 にならない | Counter window または model token usage の差 | `TOKEN_LIMIT_ATTEMPTS` を増やす |
@@ -514,10 +541,12 @@ core rate limit を除く feature object の既定値はすべて `null` です�
 
 | Input | 動作 |
 | --- | --- |
-| `sku_name` | 既定は `Consumption_0`。全機能の検証には `Developer_1` を使用 |
+| `location` | 既定は `eastus2`。変更すると suffix を更新して playground 全体を置換 |
+| `sku_name` | 既定は `Consumption_0`。Consumption 境界をまたぐ変更では playground 全体を置換 |
 | `core_rate_limit` | Core API の calls と renewal period を設定 |
 | `backend_pool` | Container Apps と weighted routing を有効化。nested `circuit_breaker` は任意 |
-| `ai_backend` | `provision` または `existing` のどちらか一方が必須 |
+| `ai_backend` | `provision` または `existing` のどちらか一方が必須。新規 deployment の既定 SKU は `DataZoneStandard` |
+| `ai_backend.reasoning_effort` | 任意の model 固有 request 値。`new_foundry` は `none` を使用し、null の場合は field を送信しない |
 | `llm_token_limit` | 任意の token rate/quota policy。AI と non-Consumption APIM が必要 |
 | `content_safety` | `provision` または `existing` のどちらか一方が必須。AI と non-Consumption APIM が必要 |
 | `observability` | Log Analytics、Application Insights、logger、diagnostics を有効化 |
@@ -545,8 +574,8 @@ APIM、Foundry、RBAC、monitoring のコントロールプレーンを script �
 - Circuit breaker、`llm-token-limit`、`llm-content-safety` を `Consumption_0` で指定すると、
     Terraform precondition が拒否します。`Developer_1` または対応する上位 tier を使用してください。
 - [APIM の upgrade と scale](https://learn.microsoft.com/azure/api-management/upgrade-and-scale)では、
-    Consumption への移行と Consumption からの移行をサポートしません。これら profile の切り替えは
-    in-place SKU update ではなく、destroy と再作成が必要です。
+    Consumption への移行と Consumption からの移行をサポートしません。この境界をまたぐ profile では
+    scenario が suffix を更新して全置換を plan するため、apply 前に破壊的な変更を確認してください。
 - Backend pool は stable API `2024-05-01` を使用します。Cookie affinity は
     `2024-10-01-preview`、AI diagnostics と Content Safety backend integration は
     `2024-06-01-preview` です。
@@ -555,6 +584,8 @@ APIM、Foundry、RBAC、monitoring のコントロールプレーンを script �
     と同じく、まだ公開 schema にない `CustomMetricsOptedInType = "WithDimensions"` を AzAPI で送信します。
 - 新規作成する Foundry、Content Safety、Application Insights は local key authentication を
     無効化します。APIM は system-assigned identity と対象 scope の role assignment を使用します。
+- tracked Foundry profile は `DataZoneStandard` を使用します。保存データは `eastus2` に残り、
+    model inference は US data zone 内の任意の region で実行される場合があります。
 - Prompt と completion の log には機密情報が含まれる場合があります。付属 profile では両方を
     無効化しており、有効化には明示的な指定が必要です。
 - この playground は public endpoint を使用します。本番用の network boundary や

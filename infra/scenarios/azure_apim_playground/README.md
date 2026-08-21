@@ -72,9 +72,11 @@ optional labs.
 | Optional: AI gateway | `profiles/new_foundry.tfvars` or a local copy | AI, token limits, Content Safety, LLM logs, and token metrics | 60-90 minutes plus provisioning |
 
 > [!IMPORTANT]
-> Start every optional lab from a clean deployment. Before changing profiles, destroy the current
-> deployment with the same `-var-file` that created it. Upgrades from the Consumption tier and
-> downgrades to the Consumption tier aren't supported.
+> Terraform rotates the generated suffix and replaces the entire playground when `location` changes
+> or the APIM SKU moves into or out of the Consumption tier. Review the destructive plan before apply:
+> resource names, URLs, managed identities, and generated keys change. The first plan after upgrading
+> an existing deployment to this version can also show a one-time full replacement because these
+> replacement keepers are new.
 
 ## Quick Start
 
@@ -97,17 +99,22 @@ have cold-start latency.
 Use a profile for an opt-in layer. Use the same `-var-file` for `plan`, `apply`, and
 `destroy`.
 
-Choose the APIM tier before the first apply. Azure does not support an in-place
-upgrade from or downgrade to the Consumption tier. If the default Consumption
-deployment already exists, destroy it with the same configuration that created it,
-then apply the Developer profile as a new deployment. A Terraform plan can otherwise
-show an in-place SKU update that the Azure API rejects.
+Azure does not support an in-place upgrade from or downgrade to the Consumption tier. This scenario
+binds its generated resource suffix to `location` and the APIM SKU family (`consumption` or
+`dedicated`). Changing region or crossing the Consumption boundary therefore plans a full playground
+replacement instead of an APIM SKU update. Continue only when the plan creates or replaces the random
+suffix and APIM; do not apply a plan that shows APIM as `~ update in-place`. Dedicated-to-dedicated
+SKU changes retain the suffix.
+
+After a failed apply with `ChangingSkuTypeNotSupported` or `ServiceModelDeprecating`, rerun the plan
+with the intended profile. Depending on the remaining state, the suffix and APIM are either created
+or replaced. Confirm `eastus2` and the selected model in the plan before applying again.
 
 | Profile | Purpose | Important notes |
 | --- | --- | --- |
 | `profiles/consumption_load_balancing.tfvars` | Core plus a 3:1 weighted pool on `Consumption_0` | No circuit breaker |
 | `profiles/full_developer.tfvars` | Weighted pool, affinity, circuit breaker, and standard observability | Creates billable Developer APIM and monitoring resources |
-| `profiles/new_foundry.tfvars` | Full resilience and AI path with provisioned Foundry and Content Safety | Verify model version, regional availability, and quota before apply |
+| `profiles/new_foundry.tfvars` | Full resilience and AI path with provisioned Foundry and Content Safety | Verify model lifecycle, quota, and capacity before apply |
 | `profiles/existing_ai.tfvars` | Full AI path using existing AI and Content Safety resources | Replace every `replace-me` value first |
 
 Example:
@@ -177,25 +184,37 @@ destroyed and you have confirmed that its state is no longer needed.
 
 #### 0.3 Check model availability and quota for the AI path
 
-`profiles/new_foundry.tfvars` creates `gpt-4o-mini` version `2024-07-18` in `japaneast`.
-Only when selecting the provisioning path, verify availability and quota before apply.
+`profiles/new_foundry.tfvars` creates `gpt-5.4-mini` version `2026-03-17` with `DataZoneStandard` in
+`eastus2`. Only when selecting the provisioning path, verify live lifecycle, remaining quota, and
+deployable capacity before apply.
 
 ```bash
-LOCATION="japaneast"
+LOCATION="eastus2"
+MODEL_NAME="gpt-5.4-mini"
+MODEL_VERSION="2026-03-17"
+DEPLOYMENT_SKU="DataZoneStandard"
 
 az cognitiveservices model list \
     --location "$LOCATION" \
-    --kind OpenAI \
-    --query "[?name=='gpt-4o-mini' && version=='2024-07-18'].{name:name,version:version,format:format}" \
+    --query "[?model.name=='${MODEL_NAME}' && model.version=='${MODEL_VERSION}'] | [0].{model:model.name,version:model.version,lifecycle:model.lifecycleStatus,inferenceRetirement:model.deprecation.inference,skus:join(',', model.skus[].name)}" \
     --output table
 
 az cognitiveservices usage list \
     --location "$LOCATION" \
+    --query "[?name.value=='OpenAI.${DEPLOYMENT_SKU}.${MODEL_NAME}'].{quota:name.value,used:currentValue,limit:limit}" \
+    --output table
+
+az rest --method get \
+    --url "https://management.azure.com/subscriptions/${ARM_SUBSCRIPTION_ID}/providers/Microsoft.CognitiveServices/modelCapacities?api-version=2024-10-01&modelFormat=OpenAI&modelName=${MODEL_NAME}&modelVersion=${MODEL_VERSION}" \
+    --query "value[?location=='${LOCATION}' && properties.skuName=='${DEPLOYMENT_SKU}'].{location:location,sku:properties.skuName,availableCapacity:properties.availableCapacity}" \
     --output table
 ```
 
-Don't apply if the model isn't listed or quota is unavailable. Create local tfvars for an available
-configuration or select the existing-AI path. Check current prices in the
+Don't apply unless the model row is present, `Lifecycle` is `GenerallyAvailable`, `Skus` contains
+`DataZoneStandard`, the quota has at least 10 unused units, and `AvailableCapacity` is at least 10.
+Model lifecycle, subscription quota, and service capacity can change without repository changes.
+Create local tfvars for a currently deployable configuration or select the existing-AI path. Check
+current prices in the
 [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/).
 
 ### Understand the tests
@@ -383,6 +402,7 @@ terraform apply -parallelism=1 -var-file="$PROFILE"
 
 terraform output ai_backend_enabled
 terraform output ai_backend_mode
+terraform output ai_reasoning_effort
 terraform output llm_token_limit_enabled
 terraform output content_safety_enabled
 terraform output observability_enabled
@@ -392,6 +412,11 @@ terraform output llm_token_metrics_enabled
 
 There can be a short delay after apply before the APIM managed-identity role assignments become
 effective. Don't print the sensitive subscription key.
+
+The `new_foundry` profile sets `ai_reasoning_effort` to `none` so its low-token checks return visible
+text without spending the completion budget on reasoning. Validation scripts send this field only
+when the output is non-null. `AI_MAX_TOKENS` and `TOKEN_LIMIT_MAX_TOKENS` control the
+`max_completion_tokens` request field.
 
 #### 4.3 Run all enabled tests
 
@@ -414,7 +439,7 @@ Examples for rerunning individual checks:
 
 ```bash
 AI_PROMPT="Reply with exactly: APIM gateway verified" \
-AI_MAX_TOKENS=32 \
+AI_MAX_TOKENS=64 \
 ./scripts/04_test_ai_gateway.sh
 
 TOKEN_LIMIT_ATTEMPTS=40 \
@@ -475,9 +500,11 @@ resources, don't approve it. Check the Azure subscription, backend key, and curr
 | Core returns HTTP 401/403 | APIM subscription key is missing or invalid | Reload the key into a shell variable with `terraform output -raw` |
 | Core immediately returns HTTP 429 | Requests already used the renewal window | Retry after the window renews |
 | Weighted test sees one backend | Probabilistic skew in a small sample | Increase `BACKEND_REQUESTS` |
-| Circuit breaker is disabled | Consumption or the wrong profile is active | Apply the Developer profile to clean state |
+| Circuit breaker is disabled | Consumption or the wrong profile is active | Plan the Developer profile and review the full replacement before apply |
 | AI returns HTTP 401/403 | APIM identity RBAC hasn't propagated or resource ID is wrong | Check role assignments and retry after propagation |
-| Model deployment fails | Region, version, or quota isn't available | Repeat the model and usage queries from Lab 0 |
+| `ChangingSkuTypeNotSupported` | An old configuration planned APIM as an in-place Consumption SKU update | Use the current code and active profile; confirm the suffix and APIM are created or replaced, never `~ update in-place` |
+| `ServiceModelDeprecating` | The configured model no longer accepts new deployments | Repeat Lab 0 and select a `GenerallyAvailable` model/SKU with quota and capacity |
+| Model deployment fails | Region, lifecycle, deployment SKU, quota, or capacity isn't available | Repeat the model, usage, and capacity queries from Lab 0 |
 | Blocked term returns HTTP 200 | Blocklist or item is propagating | Increase `CONTENT_SAFETY_PROPAGATION_SECONDS` |
 | LLM log or metric is missing | No AI request, ingestion delay, or disabled feature | Run `run_all.sh`, then increase polling attempts and interval |
 | Token limit doesn't return HTTP 429 | Counter window or model token usage differs | Increase `TOKEN_LIMIT_ATTEMPTS` |
@@ -516,10 +543,12 @@ All feature objects default to `null`, except the core rate limit. Important inp
 
 | Input | Behavior |
 | --- | --- |
-| `sku_name` | Defaults to `Consumption_0`; use `Developer_1` for the complete exercise |
+| `location` | Defaults to `eastus2`; changing it rotates the suffix and replaces the playground |
+| `sku_name` | Defaults to `Consumption_0`; crossing the Consumption boundary replaces the playground |
 | `core_rate_limit` | Configures core API calls and renewal period |
 | `backend_pool` | Enables Container Apps and weighted routing; nested `circuit_breaker` is optional |
-| `ai_backend` | Requires exactly one of `provision` or `existing` |
+| `ai_backend` | Requires exactly one of `provision` or `existing`; provisioned deployments default to `DataZoneStandard` |
+| `ai_backend.reasoning_effort` | Optional model-specific request value; `new_foundry` uses `none`, while null omits the field |
 | `llm_token_limit` | Optional token rate/quota policy; requires AI and non-Consumption APIM |
 | `content_safety` | Requires exactly one of `provision` or `existing`; requires AI and non-Consumption APIM |
 | `observability` | Enables Log Analytics, Application Insights, logger, and diagnostics |
@@ -547,8 +576,8 @@ No script mutates the APIM, Foundry, RBAC, or monitoring control plane.
 - Circuit breaker, `llm-token-limit`, and `llm-content-safety` profiles are rejected on
     `Consumption_0` by Terraform preconditions. Use `Developer_1` or a supported higher tier.
 - [Upgrading and scaling APIM](https://learn.microsoft.com/azure/api-management/upgrade-and-scale)
-    does not support moving to or from Consumption. Switching between these profiles
-    requires destroy and recreate, not an in-place SKU update.
+    does not support moving to or from Consumption. The scenario rotates its suffix and plans a full
+    replacement when a profile crosses that boundary; review that destructive plan before apply.
 - Backend pools use stable API `2024-05-01`. Cookie affinity uses
     `2024-10-01-preview`. AI diagnostics and Content Safety backend integration use
     `2024-06-01-preview`.
@@ -558,6 +587,8 @@ No script mutates the APIM, Foundry, RBAC, or monitoring control plane.
     property through AzAPI.
 - Provisioned Foundry, Content Safety, and Application Insights disable local key
     authentication. APIM uses its system-assigned identity and least-scope role assignments.
+- The tracked Foundry profile uses `DataZoneStandard`. Stored data remains in `eastus2`, while model
+    inference can run in any region within the US data zone.
 - Prompt and completion logging can contain sensitive data. Both are disabled in the
     supplied profiles; enabling them is an explicit choice.
 - This playground uses public endpoints. It does not claim a production network or
