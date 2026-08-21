@@ -58,13 +58,31 @@ Use the shared guidance for [provider authentication](../../../docs/tips/provide
 the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md), and optional
 [Azure Blob remote state](../../../docs/tips/azure-blob-backend.md).
 
+## Hands-on Tutorial
+
+This tutorial is for cloud engineers who know the basics of Azure CLI and Terraform. The core API
+is required; backend resilience, the AI gateway, Content Safety, and observability are independent
+optional labs.
+
+| Path | Profile | Scope | Estimated time |
+| --- | --- | --- | --- |
+| Required: Core | Defaults | Policy response, mock, header, and rate limit | 30-45 minutes plus APIM provisioning |
+| Optional: Load balancing | `profiles/consumption_load_balancing.tfvars` | 3:1 weighted backend pool | 30-45 minutes plus provisioning |
+| Optional: Resilience | `profiles/full_developer.tfvars` | Affinity, circuit breaker, priority failover, and standard monitoring | 45-60 minutes plus provisioning |
+| Optional: AI gateway | `profiles/new_foundry.tfvars` or a local copy | AI, token limits, Content Safety, LLM logs, and token metrics | 60-90 minutes plus provisioning |
+
+> [!IMPORTANT]
+> Start every optional lab from a clean deployment. Before changing profiles, destroy the current
+> deployment with the same `-var-file` that created it. Upgrades from the Consumption tier and
+> downgrades to the Consumption tier aren't supported.
+
 ## Quick Start
 
-The default path deploys only APIM and the self-contained core API:
+After completing the backend initialization in Lab 0, the default path deploys only APIM and the
+self-contained core API:
 
 ```shell
 cd infra/scenarios/azure_apim_playground
-terraform init
 terraform test
 terraform apply
 ./scripts/run_all.sh
@@ -106,6 +124,370 @@ terraform destroy -var-file=profiles/new_foundry.tfvars
 `09_cleanup.sh` deletes only the Content Safety blocklist created by the scripts.
 It never changes Terraform-managed resources. Set `CLEANUP_AFTER_RUN=true` to perform
 that cleanup at the end of `run_all.sh`.
+
+## Progressive Hands-on Labs
+
+### Lab 0: Prepare the environment
+
+#### 0.1 Check tools and the Azure session
+
+From the repository root, explicitly select the subscription you will use.
+
+```bash
+terraform version
+az version
+curl --version
+jq --version
+
+AZURE_SUBSCRIPTION="<subscription-name-or-id>"
+az login
+az account set --subscription "$AZURE_SUBSCRIPTION"
+az account show --query '{name:name,id:id,tenantId:tenantId,user:user.name}' --output table
+
+export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+```
+
+You need permission to create the selected Azure resources and role assignments. Don't expose
+credentials, access tokens, Terraform state, saved plans, or APIM subscription keys in commits or
+CI logs.
+
+#### 0.2 Initialize Terraform state
+
+This scenario's `backend.tf` contains Azure Blob backend values for the repository maintainer.
+First create your own [Azure Blob Storage backend](../../../docs/tips/azure-blob-backend.md) and
+grant `Storage Blob Data Contributor` at container scope, then override all four values.
+
+```bash
+cd infra/scenarios/azure_apim_playground
+
+BACKEND_RESOURCE_GROUP="<your-backend-resource-group>"
+BACKEND_STORAGE_ACCOUNT="<your-storage-account>"
+BACKEND_CONTAINER="<your-state-container>"
+BACKEND_KEY="azure_apim_playground.<your-name>.tfstate"
+
+terraform init -reconfigure \
+    -backend-config="resource_group_name=${BACKEND_RESOURCE_GROUP}" \
+    -backend-config="storage_account_name=${BACKEND_STORAGE_ACCOUNT}" \
+    -backend-config="container_name=${BACKEND_CONTAINER}" \
+    -backend-config="key=${BACKEND_KEY}"
+```
+
+Don't continue to apply if initialization fails. Keep the backend storage until this scenario is
+destroyed and you have confirmed that its state is no longer needed.
+
+#### 0.3 Check model availability and quota for the AI path
+
+`profiles/new_foundry.tfvars` creates `gpt-4o-mini` version `2024-07-18` in `japaneast`.
+Only when selecting the provisioning path, verify availability and quota before apply.
+
+```bash
+LOCATION="japaneast"
+
+az cognitiveservices model list \
+    --location "$LOCATION" \
+    --kind OpenAI \
+    --query "[?name=='gpt-4o-mini' && version=='2024-07-18'].{name:name,version:version,format:format}" \
+    --output table
+
+az cognitiveservices usage list \
+    --location "$LOCATION" \
+    --output table
+```
+
+Don't apply if the model isn't listed or quota is unavailable. Create local tfvars for an available
+configuration or select the existing-AI path. Check current prices in the
+[Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/).
+
+### Understand the tests
+
+| Test | Command | What it verifies | Azure resources |
+| --- | --- | --- | --- |
+| Control plane | `terraform test` | Mock-provider plan assertions for resources, policies, dependencies, and preconditions | Creates none |
+| Data plane | `./scripts/*.sh` | HTTP status, payloads, and telemetry from deployed endpoints | Requires apply |
+
+A successful `terraform test` doesn't prove that a live endpoint works. Conversely, the shell
+scripts aren't a complete validation of every Terraform resource declaration. Run the data-plane
+tests after the control-plane tests.
+
+### Lab 1: Build the core API
+
+#### 1.1 Run static checks, tests, and apply
+
+```bash
+terraform fmt -check
+terraform validate
+terraform test
+terraform plan
+terraform apply
+```
+
+Review the plan before approving apply. APIM provisioning can take time. `terraform test` verifies
+the versioned API, published product, active subscription, deterministic response, mock response,
+rate limit, and that optional layers are disabled by default.
+
+#### 1.2 Validate the core data plane
+
+```bash
+./scripts/00_validate_prerequisites.sh
+./scripts/01_test_core.sh
+```
+
+Expected result:
+
+```text
+Core hello policy returned the expected payload.
+Core mock-response policy returned the expected payload.
+Core subscription rate limit returned HTTP 429 as configured.
+```
+
+Inspect one request without printing the subscription key.
+
+```bash
+PLAYGROUND_KEY=$(terraform output -raw playground_subscription_primary_key)
+CORE_HELLO_URL=$(terraform output -raw core_hello_url)
+
+curl --silent --show-error \
+    --request GET \
+    --header "Ocp-Apim-Subscription-Key: ${PLAYGROUND_KEY}" \
+    --header "Accept: application/json" \
+    "$CORE_HELLO_URL" | jq .
+
+unset PLAYGROUND_KEY CORE_HELLO_URL
+```
+
+Expected payload:
+
+```json
+{
+    "message": "hello from Azure API Management",
+    "source": "policy"
+}
+```
+
+The default rate limit is five calls per 60 seconds. Manual requests and the script share the same
+counter, so HTTP 429 can occur earlier when you run them consecutively.
+
+Destroy the default configuration when you finish or before starting an optional lab.
+
+```bash
+terraform destroy
+```
+
+### Lab 2: Validate weighted routing
+
+This lab stays on `Consumption_0` and adds two Container Apps and a 3:1 weighted backend pool.
+Weights are probabilistic; 24 requests aren't guaranteed to produce exactly 18:6.
+
+```bash
+PROFILE="profiles/consumption_load_balancing.tfvars"
+
+terraform plan -var-file="$PROFILE"
+terraform apply -parallelism=1 -var-file="$PROFILE"
+
+./scripts/00_validate_prerequisites.sh
+./scripts/01_test_core.sh
+./scripts/02_test_weighted_routing.sh
+```
+
+Expected result:
+
+```text
+Weighted routing reached both backends across 24 requests.
+Primary responses: <one or more>
+Secondary responses: <one or more>
+```
+
+Increase the sample size if only one backend is observed.
+
+```bash
+BACKEND_REQUESTS=60 ./scripts/02_test_weighted_routing.sh
+```
+
+```bash
+terraform destroy -var-file="$PROFILE"
+unset PROFILE
+```
+
+### Lab 3: Validate circuit breaker priority failover
+
+This lab creates `Developer_1` and enables a weighted pool, cookie affinity, a deterministic 503
+backend, a circuit breaker, a priority secondary, and standard monitoring. Backend circuit breakers
+aren't supported in the Consumption tier.
+
+```bash
+PROFILE="profiles/full_developer.tfvars"
+
+terraform plan -var-file="$PROFILE"
+terraform apply -parallelism=1 -var-file="$PROFILE"
+
+./scripts/00_validate_prerequisites.sh
+./scripts/01_test_core.sh
+./scripts/02_test_weighted_routing.sh
+./scripts/03_test_failover.sh
+```
+
+Expected result:
+
+```text
+Circuit-breaker failover reached the priority secondary backend.
+Observed primary 503 responses before failover: <zero or more>
+```
+
+The profile uses a failure count of two and a one-minute trip duration. Circuit-breaker state isn't
+fully synchronized across gateway instances, so the test doesn't assert an exact number of primary
+failures. Increase attempts only if the secondary isn't observed.
+
+```bash
+FAILOVER_ATTEMPTS=20 ./scripts/03_test_failover.sh
+```
+
+The profile also sets `session_affinity_cookie_name`, but the included script doesn't verify cookie
+retention. A stateful client must retain `Set-Cookie` and send it with later requests.
+
+```bash
+terraform destroy -var-file="$PROFILE"
+unset PROFILE
+```
+
+### Lab 4: Validate the AI gateway and governance
+
+#### 4.1 Select an AI profile
+
+To provision new Foundry and Content Safety resources:
+
+```bash
+PROFILE="profiles/new_foundry.tfvars"
+```
+
+To use existing AI and Content Safety resources, don't edit the tracked profile. Copy it to a
+git-ignored local file, then replace each `replace-me` endpoint, resource ID, and deployment name.
+Don't store credentials or API keys in tfvars.
+
+```bash
+cp profiles/existing_ai.tfvars existing_ai.local.tfvars
+grep -n 'replace-me' existing_ai.local.tfvars
+
+# Replace every replace-me value in your editor.
+grep -n 'replace-me' existing_ai.local.tfvars
+
+PROFILE="existing_ai.local.tfvars"
+```
+
+The second `grep` must return nothing.
+
+#### 4.2 Deploy and check feature flags
+
+```bash
+terraform plan -var-file="$PROFILE"
+terraform apply -parallelism=1 -var-file="$PROFILE"
+
+terraform output ai_backend_enabled
+terraform output ai_backend_mode
+terraform output llm_token_limit_enabled
+terraform output content_safety_enabled
+terraform output observability_enabled
+terraform output llm_logging_enabled
+terraform output llm_token_metrics_enabled
+```
+
+There can be a short delay after apply before the APIM managed-identity role assignments become
+effective. Don't print the sensitive subscription key.
+
+#### 4.3 Run all enabled tests
+
+```bash
+./scripts/run_all.sh
+```
+
+The `new_foundry` profile runs scripts 00 through 08. An existing-AI profile doesn't configure a
+backend pool, so weighted routing and circuit breaker checks appear as `Skip`.
+
+| Check | Script | Success | Main consideration |
+| --- | --- | --- | --- |
+| AI gateway | `04_test_ai_gateway.sh` | HTTP 200 with a completion | Client uses an APIM key; backend uses managed identity |
+| Token limit | `05_test_token_limit.sh` | HTTP 429 for the rate limit | Quota violations return HTTP 403; counts depend on model and estimation mode |
+| Content Safety | `06_test_content_safety.sh` | Blocklist term rejected with HTTP 403 | Blocklist and item propagation takes time |
+| LLM logs | `07_test_llm_logs.sh` | At least one `ApiManagementGatewayLlmLog` record | Prompt/completion bodies are off by default; ingestion is delayed |
+| Token metrics | `08_test_custom_metrics.sh` | At least one `AppMetrics` record | Maximum five custom dimensions; avoid high cardinality |
+
+Examples for rerunning individual checks:
+
+```bash
+AI_PROMPT="Reply with exactly: APIM gateway verified" \
+AI_MAX_TOKENS=32 \
+./scripts/04_test_ai_gateway.sh
+
+TOKEN_LIMIT_ATTEMPTS=40 \
+TOKEN_LIMIT_MAX_TOKENS=1 \
+./scripts/05_test_token_limit.sh
+
+CONTENT_SAFETY_PROPAGATION_SECONDS=10 \
+./scripts/06_test_content_safety.sh
+
+LOG_QUERY_ATTEMPTS=20 \
+LOG_QUERY_INTERVAL_SECONDS=15 \
+./scripts/07_test_llm_logs.sh
+
+LOG_QUERY_ATTEMPTS=20 \
+LOG_QUERY_INTERVAL_SECONDS=15 \
+./scripts/08_test_custom_metrics.sh
+```
+
+### Cleanup
+
+For a profile with Content Safety, delete the script-created blocklist before Terraform destroy.
+
+```bash
+CONFIRM_CLEANUP=delete-apim-playground-data ./scripts/09_cleanup.sh
+```
+
+Expected result:
+
+```text
+Deleted Content Safety blocklist: apim-playground
+Terraform-managed infrastructure was not changed.
+```
+
+An already-absent blocklist is also successful. To validate and clean data in one run:
+
+```bash
+CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
+```
+
+Finally, delete Terraform resources with the same profile used by the current apply.
+
+```bash
+terraform plan -destroy -var-file="$PROFILE"
+terraform destroy -var-file="$PROFILE"
+unset PROFILE
+```
+
+Omit `-var-file` for the default core configuration. If the destroy plan contains unexpected
+resources, don't approve it. Check the Azure subscription, backend key, and current profile.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Check and resolution |
+| --- | --- | --- |
+| `terraform init` returns Blob 403 | Incorrect backend values or data-plane RBAC | Check all four backend values and `Storage Blob Data Contributor` at container scope |
+| Plan shows another environment's resources | Incorrect subscription or backend key | Check `az account show`, `ARM_SUBSCRIPTION_ID`, and `BACKEND_KEY`; don't apply |
+| `Terraform output is empty` | Required profile wasn't applied | Check feature flags and the active profile |
+| Core returns HTTP 401/403 | APIM subscription key is missing or invalid | Reload the key into a shell variable with `terraform output -raw` |
+| Core immediately returns HTTP 429 | Requests already used the renewal window | Retry after the window renews |
+| Weighted test sees one backend | Probabilistic skew in a small sample | Increase `BACKEND_REQUESTS` |
+| Circuit breaker is disabled | Consumption or the wrong profile is active | Apply the Developer profile to clean state |
+| AI returns HTTP 401/403 | APIM identity RBAC hasn't propagated or resource ID is wrong | Check role assignments and retry after propagation |
+| Model deployment fails | Region, version, or quota isn't available | Repeat the model and usage queries from Lab 0 |
+| Blocked term returns HTTP 200 | Blocklist or item is propagating | Increase `CONTENT_SAFETY_PROPAGATION_SECONDS` |
+| LLM log or metric is missing | No AI request, ingestion delay, or disabled feature | Run `run_all.sh`, then increase polling attempts and interval |
+| Token limit doesn't return HTTP 429 | Counter window or model token usage differs | Increase `TOKEN_LIMIT_ATTEMPTS` |
+
+### Decisions before production adoption
+
+This playground uses public endpoints, and Developer APIM has no SLA. Before production adoption,
+decide client authentication and authorization, APIM tier and regions, private networking, backend
+quota, token counter keys, Content Safety thresholds, log retention and access controls, metric
+dimension cardinality, and alert ownership.
 
 ## Validation Scripts
 
@@ -211,3 +593,5 @@ network design, or preview evaluation:
 - [Application Insights integration](https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights)
 - [LLM logs and `ApiManagementGatewayLlmLog`](https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs)
 - [`llm-emit-token-metric` policy](https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy)
+- [Azure OpenAI quota and capacity](https://learn.microsoft.com/azure/foundry/openai/how-to/quota)
+- [AzureRM backend](https://developer.hashicorp.com/terraform/language/backend/azurerm)
