@@ -48,26 +48,29 @@ terraform output api_management_gateway_url
 ## Variables
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|----------|
+| ------ | ------------- | ------ | --------- | ---------- |
 | `name` | Base name for resources | `string` | `"azureapimplayground"` | no |
 | `location` | Azure region for resources | `string` | `"japaneast"` | no |
 | `tags` | Tags to apply to resources | `map(string)` | See variables.tf | no |
 | `publisher_name` | Publisher name for APIM | `string` | `"Example Organization"` | no |
 | `publisher_email` | Publisher email for APIM | `string` | `"admin@example.com"` | no |
+| `sku_name` | SKU tier and capacity for APIM, in `<tier>_<capacity>` format | `string` | `"Consumption_0"` | no |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ------ | ------------- |
 | `resource_group_name` | Name of the resource group |
 | `api_management_id` | ID of the API Management instance |
 | `api_management_name` | Name of the API Management instance |
 | `api_management_gateway_url` | Gateway URL of the API Management instance |
 | `api_management_management_api_url` | Management API URL of the API Management instance |
-| `api_management_portal_url` | Developer Portal URL of the API Management instance |
+| `api_management_portal_url` | Publisher portal URL of the API Management instance |
+| `api_management_developer_portal_url` | Developer portal URL of the API Management instance |
 
 ## Notes
 
+- **SKU**: Defaults to `Consumption_0`; override `sku_name` to use a different tier (e.g. `Developer_1`)
 - **Consumption SKU**: Serverless pricing model with no minimum cost when idle
-- **Cold Start**: First request may have higher latency due to cold start
-- **Limitations**: Some features like VNet integration are not available in Consumption tier
+- **Cold Start**: First request may have higher latency due to cold start on the Consumption tier
+- **Limitations**: The Consumption tier doesn't support the developer portal, VNet integration, or several other features available on higher tiers

@@ -19,8 +19,13 @@ output "management_api_url" {
 }
 
 output "portal_url" {
-  description = "Developer Portal URL of the API Management instance"
+  description = "Publisher portal URL of the API Management instance"
   value       = azurerm_api_management.this.portal_url
+}
+
+output "developer_portal_url" {
+  description = "Developer portal URL of the API Management instance"
+  value       = azurerm_api_management.this.developer_portal_url
 }
 
 output "public_ip_addresses" {

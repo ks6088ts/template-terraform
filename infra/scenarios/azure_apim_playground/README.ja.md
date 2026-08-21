@@ -54,6 +54,7 @@ terraform output api_management_gateway_url
 | `tags`                              | リソースに適用するタグ       | `map(string)` | variables.tf を参照      | いいえ |
 | `publisher_name`                    | APIM の発行元名              | `string`      | `"Example Organization"` | いいえ |
 | `publisher_email`                   | APIM の発行元メールアドレス  | `string`      | `"admin@example.com"`   | いいえ |
+| `sku_name`                          | APIM の SKU (`<tier>_<capacity>` 形式) | `string` | `"Consumption_0"`       | いいえ |
 
 ## 出力
 
@@ -64,10 +65,12 @@ terraform output api_management_gateway_url
 | `api_management_name`               | API Management インスタンスの名前         |
 | `api_management_gateway_url`        | API Management インスタンスのゲートウェイ URL |
 | `api_management_management_api_url` | API Management インスタンスの管理 API URL |
-| `api_management_portal_url`         | API Management インスタンスの開発者ポータル URL |
+| `api_management_portal_url`         | API Management インスタンスの発行者ポータル URL |
+| `api_management_developer_portal_url` | API Management インスタンスの開発者ポータル URL |
 
 ## 注意事項
 
+- **SKU**: 既定値は `Consumption_0` です。別のレベルを使う場合は `sku_name` を上書きしてください (例: `Developer_1`)
 - **Consumption SKU**: アイドル時の最小コストが発生しないサーバーレス料金モデルです
-- **コールドスタート**: 最初のリクエストでは、コールドスタートにより待機時間が長くなる場合があります
-- **制限事項**: Consumption レベルでは、VNet 統合など一部の機能を利用できません
+- **コールドスタート**: Consumption レベルでは、最初のリクエストでコールドスタートにより待機時間が長くなる場合があります
+- **制限事項**: Consumption レベルでは、開発者ポータルや VNet 統合など一部の機能を利用できません

@@ -32,3 +32,9 @@ variable "publisher_email" {
   type        = string
   default     = "admin@example.com"
 }
+
+variable "sku_name" {
+  description = "SKU tier and capacity for API Management; Consumption_0 keeps this playground serverless and usage-based"
+  type        = string
+  default     = "Consumption_0"
+}

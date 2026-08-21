@@ -24,6 +24,11 @@ output "api_management_management_api_url" {
 }
 
 output "api_management_portal_url" {
-  description = "Developer Portal URL of the API Management instance"
+  description = "Publisher portal URL of the API Management instance"
   value       = module.api_management.portal_url
+}
+
+output "api_management_developer_portal_url" {
+  description = "Developer portal URL of the API Management instance"
+  value       = module.api_management.developer_portal_url
 }
