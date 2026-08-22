@@ -268,6 +268,19 @@ terraform plan
 terraform apply
 ```
 
+同じ subscription を複数人または複数環境で使用する場合は、リソース名とリージョンの衝突を避けるため、
+利用者または環境ごとに一意な `name` と、必要なリソースを利用できる `location` を指定します。
+
+```bash
+terraform apply \
+    -var="name=azureapimplayground-<unique-id>" \
+    -var="location=<azure-region>"
+```
+
+`<unique-id>` と `<azure-region>` を実際の値に置き換え、`plan` と `destroy` にも同じ `-var` を
+指定してください。AI gateway の profile では、選択した `location` で model availability、quota、
+capacity を確認してから apply します。
+
 plan の内容を確認してから apply を承認します。APIM の作成には時間がかかることがあります。
 `terraform test` は、versioned API、published product、active subscription、deterministic response、
 mock response、rate limit、および発展 layer が既定で無効であることを検証します。

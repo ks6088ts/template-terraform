@@ -269,6 +269,20 @@ terraform plan
 terraform apply
 ```
 
+When sharing a subscription across users or environments, specify a unique `name` for each user or
+environment and a `location` where the required resources are available to avoid resource-name and
+regional conflicts.
+
+```bash
+terraform apply \
+    -var="name=azureapimplayground-<unique-id>" \
+    -var="location=<azure-region>"
+```
+
+Replace `<unique-id>` and `<azure-region>` with actual values, and pass the same `-var` arguments to
+`plan` and `destroy`. For an AI gateway profile, verify model availability, quota, and capacity in the
+selected `location` before applying.
+
 Review the plan before approving apply. APIM provisioning can take time. `terraform test` verifies
 the versioned API, published product, active subscription, deterministic response, mock response,
 rate limit, and that optional layers are disabled by default.
