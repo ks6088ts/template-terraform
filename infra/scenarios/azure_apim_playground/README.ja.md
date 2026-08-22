@@ -661,24 +661,63 @@ cardinality と alert の所有者を決定してください。
 
 ## 検証スクリプト
 
-| Script | 検証内容 |
-| --- | --- |
-| `00_validate_prerequisites.sh` | tool、Terraform output、Azure session、必要な token acquisition |
-| `01_test_core.sh` | Hello payload、mock payload、marker header、HTTP 429 rate limit |
-| `02_test_weighted_routing.sh` | Weighted pool から primary / secondary の response |
-| `03_test_failover.sh` | Circuit breaker が開き priority secondary が traffic を処理 |
-| `04_test_ai_gateway.sh` | Managed-identity authentication による OpenAI-compatible completion |
-| `05_test_token_limit.sh` | LLM token policy の HTTP 429 |
-| `06_test_content_safety.sh` | Blocklist 作成と HTTP 403 enforcement |
-| `07_test_llm_logs.sh` | 直近の `ApiManagementGatewayLlmLog` record |
-| `08_test_custom_metrics.sh` | 直近の Application Insights `AppMetrics` record |
-| `09_cleanup.sh` | Script が作成した blocklist data の idempotent な削除 |
-| `run_all.sh` | 有効な test を実行し、無効な layer を skip として表示 |
+`scripts/` は Terraform output を machine-readable contract として使用し、デプロイ済み data plane の
+動作を確認します。各 executable script は `set -eu` で実行され、`_common.sh` を読み込んでから必要な
+feature と output を検証します。Terraform resource や APIM の control-plane 設定は変更しません。
 
-Telemetry ingestion は eventual consistency です。既定の 2 分間の polling で不足する場合は、
-`LOG_QUERY_ATTEMPTS` と `LOG_QUERY_INTERVAL_SECONDS` を変更してください。token-limit profile
-は短時間で 429 を確認するために低い limit を使用します。別の設定では
-`TOKEN_LIMIT_ATTEMPTS` を調整できます。
+### 実行モデルと共通処理
+
+`run_all.sh` は最初に Terraform output から feature flag を読み取り、次の順序で script を実行します。
+角括弧内の step は対応する feature が有効な場合だけ実行され、無効な step は `Skip` として表示されます。
+
+```text
+00 -> 01 -> [02] -> [03] -> [06] -> [04] -> [05] -> [07] -> [08] -> [09 cleanup]
+```
+
+`00` と `01` は常に実行されます。`09` は `CLEANUP_AFTER_RUN=true` の場合だけ実行されます。いずれかの
+step が失敗するとその時点で停止し、すべて成功した場合だけ最終 success message を表示します。特定の
+機能だけ再検証するときは、対応する script を個別に実行できます。
+
+`_common.sh` は直接実行する script ではなく、次の共通処理を提供します。
+
+- `terraform output -json` から resource ID、endpoint、feature flag、APIM subscription key を取得する
+- 必須 command、output、feature、および正の整数 parameter を検証する
+- `curl` response の body と header を一時 file に保存し、HTTP status、JSON、response header を検証する
+- Content Safety 用の Azure access token を対象 subscription と scope を明示して取得する
+- 正常終了、error、signal のいずれでも HTTP 一時 file を削除する
+
+### Script ごとの目的と成功条件
+
+| Script | 目的と実行内容 | 成功条件・副作用 |
+| --- | --- | --- |
+| `00_validate_prerequisites.sh` | `az`、`curl`、`jq`、`terraform`、Azure session、共通 Terraform output を確認する。有効な feature ごとに追加 output と Content Safety token acquisition も検証する | 必須値と権限をすべて確認できれば成功。Azure resource は変更しない |
+| `01_test_core.sh` | Subscription key 付きで Hello API と mock API を呼び、policy 生成 JSON、OpenAPI example、marker header を検証する。その後 Hello API を反復して subscription rate limit を発生させる | 2 つの API が HTTP 200 と期待 payload を返し、反復 request が HTTP 429 に到達すれば成功。rate-limit window を消費する |
+| `02_test_weighted_routing.sh` | Weighted endpoint を既定 24 回呼び、response の backend 名を primary / secondary ごとに集計する | 両 backend を 1 回以上観測すれば成功。sample が少ないと確率的に片方だけになる場合がある |
+| `03_test_failover.sh` | Failure endpoint を反復し、primary の HTTP 503 と circuit breaker 作動後の secondary response を観測する。attempt 間には 1 秒待機する | Attempt 上限までに secondary を示す HTTP 200 を取得すれば成功。意図的に primary failure を発生させる |
+| `04_test_ai_gateway.sh` | APIM subscription key を client credential として OpenAI-compatible chat completion を呼ぶ。APIM から backend へは managed identity を使用する | HTTP 200 と空でない completion text を取得すれば成功。Model quota と token cost を消費する |
+| `05_test_token_limit.sh` | Token を消費する prompt を AI gateway へ反復送信し、`x-llm-tokens-consumed` header を可能な場合は記録する | Attempt 上限までに token rate limit の HTTP 429 を取得すれば成功。rate-limit window が更新されるまで後続 AI request に影響する場合がある |
+| `06_test_content_safety.sh` | Azure access token で blocklist と item を作成または更新し、伝播を待ってから blocklist 語を要求する AI request を送信する | Content Safety policy が request を HTTP 403 で拒否すれば成功。作成した blocklist data は `09_cleanup.sh` で削除する |
+| `07_test_llm_logs.sh` | 過去 24 時間の `ApiManagementGatewayLlmLog` を Log Analytics へ KQL query し、見つからない場合は既定 10 秒間隔で最大 12 回 polling する | 1 件以上の record を取得すれば成功。Read-only だが、事前に AI gateway request と telemetry ingestion が必要 |
+| `08_test_custom_metrics.sh` | 過去 24 時間の `AppMetrics` を Log Analytics へ query し、token metric record と最大 20 個の metric name を取得する | 1 件以上の record を取得すれば成功。Read-only だが、事前に AI gateway request と telemetry ingestion が必要 |
+| `09_cleanup.sh` | `CONFIRM_CLEANUP=delete-apim-playground-data` の完全一致を確認してから、script が作成した Content Safety blocklist を削除する | HTTP 200/204、または既に存在しない HTTP 404 なら成功。Terraform 管理 resource は削除しない |
+| `run_all.sh` | Feature flag に応じて上記 test を順番に実行し、無効な layer を `Skip` として表示する | 有効な test がすべて成功すれば成功。`CLEANUP_AFTER_RUN=true` では最後に `09_cleanup.sh` も実行する |
+
+### 実行時の調整と安全性
+
+Routing の試行数は `BACKEND_REQUESTS` と `FAILOVER_ATTEMPTS`、AI request は `AI_PROMPT` と
+`AI_MAX_TOKENS`、token-limit test は `TOKEN_LIMIT_ATTEMPTS`、`TOKEN_LIMIT_MAX_TOKENS`、
+`TOKEN_LIMIT_PROMPT` で調整できます。Content Safety は `CONTENT_SAFETY_BLOCKED_TEXT` と
+`CONTENT_SAFETY_PROPAGATION_SECONDS`、telemetry polling は `LOG_QUERY_ATTEMPTS` と
+`LOG_QUERY_INTERVAL_SECONDS` を使用します。
+
+Telemetry ingestion は eventual consistency です。既定の約 2 分間の polling で不足する場合は query の
+attempt または interval を増やしてください。`07` と `08` は telemetry を生成しないため、先に `04`～`06`
+の該当する AI request を実行する必要があります。
+
+Script は APIM subscription key と一時的な Azure access token を memory 上で扱います。これらを command
+line へ展開して表示する `set -x` や `sh -x` は使用せず、CI log に key、token、request header、
+`terraform output -json` の内容を出力しないでください。HTTP response の一時 file は終了時に削除され、
+Content Safety token は使用後に shell variable から消去されます。
 
 ## 構成
 

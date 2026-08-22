@@ -664,24 +664,65 @@ dimension cardinality, and alert ownership.
 
 ## Validation Scripts
 
-| Script | Assertion |
-| --- | --- |
-| `00_validate_prerequisites.sh` | Tools, Terraform outputs, Azure session, and required token acquisition |
-| `01_test_core.sh` | Hello payload, mock payload, marker header, and HTTP 429 rate limit |
-| `02_test_weighted_routing.sh` | Primary and secondary responses from the weighted pool |
-| `03_test_failover.sh` | Circuit breaker opens and the priority secondary serves traffic |
-| `04_test_ai_gateway.sh` | OpenAI-compatible completion through managed-identity authentication |
-| `05_test_token_limit.sh` | LLM token policy returns HTTP 429 |
-| `06_test_content_safety.sh` | Blocklist creation and HTTP 403 enforcement |
-| `07_test_llm_logs.sh` | Recent `ApiManagementGatewayLlmLog` records |
-| `08_test_custom_metrics.sh` | Recent Application Insights `AppMetrics` records |
-| `09_cleanup.sh` | Idempotent deletion of script-created blocklist data |
-| `run_all.sh` | Runs applicable checks and reports disabled layers as skipped |
+The `scripts/` directory uses Terraform outputs as its machine-readable contract and validates the
+deployed data plane. Every executable script runs with `set -eu`, sources `_common.sh`, and checks its
+required features and outputs before testing. The scripts do not modify Terraform resources or the
+APIM control-plane configuration.
 
-Telemetry ingestion is eventually consistent. Override `LOG_QUERY_ATTEMPTS` and
-`LOG_QUERY_INTERVAL_SECONDS` when the default two-minute polling window is too short.
-The token-limit profile intentionally uses a low limit for a quick 429 check; override
-`TOKEN_LIMIT_ATTEMPTS` for a different configuration.
+### Execution Model and Shared Behavior
+
+`run_all.sh` first reads feature flags from Terraform outputs, then runs scripts in the following
+order. Steps in brackets run only when their corresponding feature is enabled; disabled steps are
+reported as `Skip`.
+
+```text
+00 -> 01 -> [02] -> [03] -> [06] -> [04] -> [05] -> [07] -> [08] -> [09 cleanup]
+```
+
+Scripts `00` and `01` always run. Script `09` runs only with `CLEANUP_AFTER_RUN=true`. Execution stops
+at the first failed step and prints the final success message only after every enabled check passes.
+Run an individual script when only one capability needs to be verified again.
+
+`_common.sh` isn't executed directly. It provides these shared operations:
+
+- load resource IDs, endpoints, feature flags, and the APIM subscription key from `terraform output -json`;
+- validate required commands, outputs, features, and positive integer parameters;
+- store `curl` response bodies and headers in temporary files and inspect HTTP status, JSON, and headers;
+- acquire an Azure access token for Content Safety with an explicit subscription and scope;
+- remove HTTP temporary files after success, errors, or termination signals.
+
+### Purpose and Success Criteria by Script
+
+| Script | Purpose and operations | Success criteria and side effects |
+| --- | --- | --- |
+| `00_validate_prerequisites.sh` | Checks `az`, `curl`, `jq`, `terraform`, the Azure session, and common Terraform outputs. It also checks feature-specific outputs and Content Safety token acquisition when applicable | Succeeds when all required values and permissions are available. It doesn't modify Azure resources |
+| `01_test_core.sh` | Calls the Hello and mock APIs with a subscription key and checks policy-generated JSON, the OpenAPI example, and the marker header. It then repeats Hello requests to exercise the subscription rate limit | Succeeds when both APIs return HTTP 200 with expected payloads and repeated requests reach HTTP 429. It consumes the current rate-limit window |
+| `02_test_weighted_routing.sh` | Calls the weighted endpoint 24 times by default and counts response backend names as primary or secondary | Succeeds after observing each backend at least once. A small probabilistic sample can occasionally see only one backend |
+| `03_test_failover.sh` | Repeats requests to the failure endpoint, observing primary HTTP 503 responses and the secondary response after the circuit breaker opens. It waits one second between attempts | Succeeds when an HTTP 200 response identifies the secondary before the attempt limit. It deliberately triggers primary failures |
+| `04_test_ai_gateway.sh` | Calls an OpenAI-compatible chat completion using the APIM subscription key as the client credential; APIM uses managed identity for the backend | Succeeds with HTTP 200 and non-empty completion text. It consumes model quota and billable tokens |
+| `05_test_token_limit.sh` | Repeatedly sends a token-consuming prompt to the AI gateway and records `x-llm-tokens-consumed` when available | Succeeds when the token rate limit returns HTTP 429 before the attempt limit. It can affect later AI requests until the rate-limit window renews |
+| `06_test_content_safety.sh` | Uses an Azure access token to create or update a blocklist and item, waits for propagation, then sends an AI request for the blocked term | Succeeds when the Content Safety policy rejects the request with HTTP 403. Remove the created blocklist data with `09_cleanup.sh` |
+| `07_test_llm_logs.sh` | Queries the past 24 hours of `ApiManagementGatewayLlmLog` in Log Analytics and, when none are found, polls up to 12 times at 10-second intervals by default | Succeeds after finding at least one record. It is read-only but requires a prior AI gateway request and telemetry ingestion |
+| `08_test_custom_metrics.sh` | Queries the past 24 hours of `AppMetrics` in Log Analytics and retrieves token metric records plus up to 20 metric names | Succeeds after finding at least one record. It is read-only but requires a prior AI gateway request and telemetry ingestion |
+| `09_cleanup.sh` | Requires the exact `CONFIRM_CLEANUP=delete-apim-playground-data` value, then deletes the Content Safety blocklist created by the scripts | HTTP 200/204 or an already-absent HTTP 404 is successful. It doesn't delete Terraform-managed resources |
+| `run_all.sh` | Runs the tests in order according to feature flags and reports disabled layers as `Skip` | Succeeds when every enabled test passes. With `CLEANUP_AFTER_RUN=true`, it also runs `09_cleanup.sh` last |
+
+### Runtime Tuning and Safety
+
+Tune routing attempts with `BACKEND_REQUESTS` and `FAILOVER_ATTEMPTS`; AI requests with `AI_PROMPT`
+and `AI_MAX_TOKENS`; and token-limit checks with `TOKEN_LIMIT_ATTEMPTS`, `TOKEN_LIMIT_MAX_TOKENS`, and
+`TOKEN_LIMIT_PROMPT`. Content Safety uses `CONTENT_SAFETY_BLOCKED_TEXT` and
+`CONTENT_SAFETY_PROPAGATION_SECONDS`; telemetry polling uses `LOG_QUERY_ATTEMPTS` and
+`LOG_QUERY_INTERVAL_SECONDS`.
+
+Telemetry ingestion is eventually consistent. Increase the query attempts or interval when the
+default polling window of about two minutes is too short. Scripts `07` and `08` don't generate
+telemetry, so run the applicable AI requests in scripts `04` through `06` first.
+
+The scripts handle the APIM subscription key and temporary Azure access tokens in memory. Don't use
+`set -x` or `sh -x`, which would print expanded command arguments, and don't expose keys, tokens,
+request headers, or `terraform output -json` in CI logs. HTTP temporary files are removed on exit,
+and the Content Safety token is cleared from its shell variable after use.
 
 ## Configuration
 
