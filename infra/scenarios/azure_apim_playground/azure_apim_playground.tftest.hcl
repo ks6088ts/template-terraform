@@ -558,7 +558,7 @@ run "observability_enabled" {
       length(module.log_analytics) == 1,
       length(module.application_insights) == 1,
       azurerm_role_assignment.apim_monitoring_metrics_publisher[0].role_definition_name == "Monitoring Metrics Publisher",
-      azurerm_api_management_logger.application_insights[0].application_insights[0].identity_client_id == "systemAssigned",
+      azurerm_api_management_logger.application_insights[0].application_insights[0].identity_client_id == "SystemAssigned",
       azapi_resource.application_insights_diagnostic[0].body.properties.frontend.request.body.bytes == 0,
       azapi_resource.application_insights_diagnostic[0].body.properties.backend.response.body.bytes == 0,
       !azapi_resource.application_insights_diagnostic[0].body.properties.metrics,

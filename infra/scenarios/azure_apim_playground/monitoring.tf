@@ -71,7 +71,7 @@ resource "azurerm_api_management_logger" "application_insights" {
 
   application_insights {
     connection_string  = module.application_insights[0].connection_string
-    identity_client_id = "systemAssigned"
+    identity_client_id = "SystemAssigned"
   }
 
   depends_on = [azurerm_role_assignment.apim_monitoring_metrics_publisher]
