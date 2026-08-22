@@ -642,11 +642,15 @@ Azure subscription、backend key、現在の profile を確認してください
 | Circuit breaker が disabled | Consumption または誤った profile | Active profile で destroy してから Developer profile を作成し、SKU を in-place で変更しない |
 | AI が HTTP 401/403 | APIM identity の RBAC 未反映、resource ID 不正 | Role assignment を確認し、伝播後に再実行 |
 | `ChangingSkuTypeNotSupported` | Plan が APIM SKU を in-place で変更しようとした | Deployment 済みの profile と変数へ戻して destroy し、目的の profile を新しい deployment として作成 |
+| `FlagMustBeSetForRestore` | 同名の Cognitive Services account が soft-delete 中 | `az cognitiveservices account list-deleted` で対象を確認し、復元が不要な場合だけ `az cognitiveservices account purge -n <name> -g <resource-group> -l <location>` を実行 |
 | `ServiceModelDeprecating` | 設定した model が新規 deployment を受け付けない | Lab 0 を再実行し、quota と capacity がある `GenerallyAvailable` model/SKU を選択 |
 | Model deployment が失敗 | Region、lifecycle、deployment SKU、quota、capacity が利用不可 | Lab 0 の model/usage/capacity query を確認 |
 | Blocked term が HTTP 200 | Blocklist/item の伝播待ち | `CONTENT_SAFETY_PROPAGATION_SECONDS` を増やす |
 | LLM log/metric がない | AI request 未実行、ingestion delay、feature disabled | `run_all.sh` 後に polling 回数と間隔を増やす |
 | Token limit が HTTP 429 にならない | Counter window または model token usage の差 | `TOKEN_LIMIT_ATTEMPTS` を増やす |
+
+purge は resource のデータと key を永久削除します。既存 resource を保持する場合は purge せずに recover し、
+復元した resource を Terraform state に import してください。
 
 ### 本番採用前に決めること
 

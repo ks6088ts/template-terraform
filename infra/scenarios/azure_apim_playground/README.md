@@ -645,11 +645,15 @@ resources, don't approve it. Check the Azure subscription, backend key, and curr
 | Circuit breaker is disabled | Consumption or the wrong profile is active | Destroy with the active profile, then create the Developer profile; don't change SKU in place |
 | AI returns HTTP 401/403 | APIM identity RBAC hasn't propagated or resource ID is wrong | Check role assignments and retry after propagation |
 | `ChangingSkuTypeNotSupported` | A plan attempted to change APIM SKU in place | Restore the deployed profile and variables, destroy it, then create the target profile as a new deployment |
+| `FlagMustBeSetForRestore` | A Cognitive Services account with the same name is soft-deleted | Confirm it with `az cognitiveservices account list-deleted`; only when recovery isn't needed, run `az cognitiveservices account purge -n <name> -g <resource-group> -l <location>` |
 | `ServiceModelDeprecating` | The configured model no longer accepts new deployments | Repeat Lab 0 and select a `GenerallyAvailable` model/SKU with quota and capacity |
 | Model deployment fails | Region, lifecycle, deployment SKU, quota, or capacity isn't available | Repeat the model, usage, and capacity queries from Lab 0 |
 | Blocked term returns HTTP 200 | Blocklist or item is propagating | Increase `CONTENT_SAFETY_PROPAGATION_SECONDS` |
 | LLM log or metric is missing | No AI request, ingestion delay, or disabled feature | Run `run_all.sh`, then increase polling attempts and interval |
 | Token limit doesn't return HTTP 429 | Counter window or model token usage differs | Increase `TOKEN_LIMIT_ATTEMPTS` |
+
+Purge permanently deletes the resource's data and keys. To retain the existing resource, recover it
+instead and import the recovered resource into the Terraform state.
 
 ### Decisions before production adoption
 

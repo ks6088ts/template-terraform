@@ -596,6 +596,7 @@ run "llm_logging_enabled" {
       length(azapi_resource.ai_llm_diagnostic) == 1,
       azapi_resource.ai_llm_diagnostic[0].name == "azuremonitor",
       endswith(azapi_resource.ai_llm_diagnostic[0].body.properties.loggerId, "/loggers/azuremonitor"),
+      !contains(keys(azapi_resource.ai_llm_diagnostic[0].body.properties), "httpCorrelationProtocol"),
       azapi_resource.ai_llm_diagnostic[0].body.properties.largeLanguageModel.logs == "enabled",
       azapi_resource.ai_llm_diagnostic[0].body.properties.largeLanguageModel.requests.messages == "all",
       azapi_resource.ai_llm_diagnostic[0].body.properties.largeLanguageModel.requests.maxSizeInBytes == 16384,

@@ -138,10 +138,9 @@ resource "azapi_resource" "ai_llm_diagnostic" {
 
   body = {
     properties = {
-      alwaysLog               = "allErrors"
-      httpCorrelationProtocol = "W3C"
-      logClientIp             = var.observability.log_client_ip
-      loggerId                = "${module.api_management.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      logClientIp = var.observability.log_client_ip
+      loggerId    = "${module.api_management.id}/loggers/azuremonitor"
       sampling = {
         percentage   = var.observability.sampling_percentage
         samplingType = "fixed"

@@ -1,5 +1,8 @@
 provider "azurerm" {
   features {
+    cognitive_account {
+      purge_soft_delete_on_destroy = true
+    }
     enhanced_validation {
       locations          = true
       resource_providers = true
