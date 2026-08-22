@@ -50,6 +50,7 @@ opt-in layer では次の機能を追加します。
 
 - Terraform `>= 1.11.0`
 - 対象 subscription に認証済みの Azure CLI
+- Telemetry query 用の Azure CLI `log-analytics` extension（`az extension add --name log-analytics --yes`）
 - データプレーン検証用の `curl` と `jq`
 - 選択した Azure resource と role assignment を作成できる権限
 - Foundry を新規作成する場合は、対象 region での model availability と quota
@@ -141,9 +142,11 @@ CONFIRM_CLEANUP=delete-apim-playground-data ./scripts/09_cleanup.sh
 terraform destroy -var-file=profiles/new_foundry.tfvars
 ```
 
-`09_cleanup.sh` が削除するのは script が作成した Content Safety blocklist だけです。
-Terraform 管理 resource は変更しません。`run_all.sh` の最後に削除する場合は
-`CLEANUP_AFTER_RUN=true` を設定します。
+`09_cleanup.sh` が削除するのは script が作成した Content Safety blocklist item だけです。
+APIM policy の参照を安定させるため空の blocklist container は保持し、Terraform 管理 resource は
+変更しません。`run_all.sh` の最後に item を削除する場合は
+`CLEANUP_AFTER_RUN=true` を設定します。途中の test が失敗した場合も item cleanup を試行し、元の
+test failure を終了 code として返します。
 
 ## 段階式ハンズオン
 
@@ -582,7 +585,7 @@ AI_MAX_TOKENS=64 \
 ./scripts/04_test_ai_gateway.sh
 
 TOKEN_LIMIT_ATTEMPTS=40 \
-TOKEN_LIMIT_MAX_TOKENS=1 \
+TOKEN_LIMIT_MAX_TOKENS=64 \
 ./scripts/05_test_token_limit.sh
 
 CONTENT_SAFETY_PROPAGATION_SECONDS=10 \
@@ -599,7 +602,7 @@ LOG_QUERY_INTERVAL_SECONDS=15 \
 
 ### Cleanup
 
-Content Safety を有効にした場合は、Terraform destroy の前に script が作成した blocklist を削除します。
+Content Safety を有効にした場合は、Terraform destroy の前に script が作成した blocklist item を削除します。
 
 ```bash
 CONFIRM_CLEANUP=delete-apim-playground-data ./scripts/09_cleanup.sh
@@ -608,11 +611,14 @@ CONFIRM_CLEANUP=delete-apim-playground-data ./scripts/09_cleanup.sh
 期待する結果:
 
 ```text
-Deleted Content Safety blocklist: apim-playground
+Removed 1 Content Safety test blocklist item(s): apim-playground
+Content Safety blocklist container was retained to preserve the API Management policy reference.
 Terraform-managed infrastructure was not changed.
 ```
 
-既に blocklist がない場合も成功します。検証と data-plane cleanup を 1 回で行う場合:
+既に test item または blocklist がない場合も成功します。blocklist container を削除して同名で再作成すると
+Content Safety 内部 ID の反映待ちにより APIM request が一時的に HTTP 403 になるため、container は
+Content Safety account を Terraform destroy するまで保持します。検証と data-plane cleanup を 1 回で行う場合:
 
 ```bash
 CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
@@ -690,17 +696,17 @@ step が失敗するとその時点で停止し、すべて成功した場合だ
 
 | Script | 目的と実行内容 | 成功条件・副作用 |
 | --- | --- | --- |
-| `00_validate_prerequisites.sh` | `az`、`curl`、`jq`、`terraform`、Azure session、共通 Terraform output を確認する。有効な feature ごとに追加 output と Content Safety token acquisition も検証する | 必須値と権限をすべて確認できれば成功。Azure resource は変更しない |
+| `00_validate_prerequisites.sh` | `az`、`curl`、`jq`、`terraform`、Azure session、共通 Terraform output を確認する。有効な feature ごとに追加 output、`log-analytics` extension、Content Safety token acquisition も検証する | 必須値と権限をすべて確認できれば成功。Azure resource は変更しない |
 | `01_test_core.sh` | Subscription key 付きで Hello API と mock API を呼び、policy 生成 JSON、OpenAPI example、marker header を検証する。その後 Hello API を反復して subscription rate limit を発生させる | 2 つの API が HTTP 200 と期待 payload を返し、反復 request が HTTP 429 に到達すれば成功。rate-limit window を消費する |
 | `02_test_weighted_routing.sh` | Weighted endpoint を既定 24 回呼び、response の backend 名を primary / secondary ごとに集計する | 両 backend を 1 回以上観測すれば成功。sample が少ないと確率的に片方だけになる場合がある |
 | `03_test_failover.sh` | Failure endpoint を反復し、primary の HTTP 503 と circuit breaker 作動後の secondary response を観測する。attempt 間には 1 秒待機する | Attempt 上限までに secondary を示す HTTP 200 を取得すれば成功。意図的に primary failure を発生させる |
 | `04_test_ai_gateway.sh` | APIM subscription key を client credential として OpenAI-compatible chat completion を呼ぶ。APIM から backend へは managed identity を使用する | HTTP 200 と空でない completion text を取得すれば成功。Model quota と token cost を消費する |
 | `05_test_token_limit.sh` | Token を消費する prompt を AI gateway へ反復送信し、`x-llm-tokens-consumed` header を可能な場合は記録する | Attempt 上限までに token rate limit の HTTP 429 を取得すれば成功。rate-limit window が更新されるまで後続 AI request に影響する場合がある |
-| `06_test_content_safety.sh` | Azure access token で blocklist と item を作成または更新し、伝播を待ってから blocklist 語を要求する AI request を送信する | Content Safety policy が request を HTTP 403 で拒否すれば成功。作成した blocklist data は `09_cleanup.sh` で削除する |
-| `07_test_llm_logs.sh` | 過去 24 時間の `ApiManagementGatewayLlmLog` を Log Analytics へ KQL query し、見つからない場合は既定 10 秒間隔で最大 12 回 polling する | 1 件以上の record を取得すれば成功。Read-only だが、事前に AI gateway request と telemetry ingestion が必要 |
-| `08_test_custom_metrics.sh` | 過去 24 時間の `AppMetrics` を Log Analytics へ query し、token metric record と最大 20 個の metric name を取得する | 1 件以上の record を取得すれば成功。Read-only だが、事前に AI gateway request と telemetry ingestion が必要 |
-| `09_cleanup.sh` | `CONFIRM_CLEANUP=delete-apim-playground-data` の完全一致を確認してから、script が作成した Content Safety blocklist を削除する | HTTP 200/204、または既に存在しない HTTP 404 なら成功。Terraform 管理 resource は削除しない |
-| `run_all.sh` | Feature flag に応じて上記 test を順番に実行し、無効な layer を `Skip` として表示する | 有効な test がすべて成功すれば成功。`CLEANUP_AFTER_RUN=true` では最後に `09_cleanup.sh` も実行する |
+| `06_test_content_safety.sh` | Azure access token で blocklist と item を作成または更新し、伝播を待ってから blocked prompt と safe control prompt を送信する | Blocked prompt を HTTP 403 で拒否し、safe control prompt を HTTP 200 で許可すれば成功。作成した test item は `09_cleanup.sh` で削除する |
+| `07_test_llm_logs.sh` | 過去 24 時間の `ApiManagementGatewayLlmLog` を Log Analytics へ KQL query し、見つからない場合は既定 10 秒間隔で最大 12 回 polling する | 1 件以上の record を取得すれば成功。Query error は即時表示して停止する。事前に AI gateway request と telemetry ingestion が必要 |
+| `08_test_custom_metrics.sh` | 過去 24 時間の `AppMetrics` を Log Analytics へ query し、token metric record と最大 20 個の metric name を取得する | 1 件以上の record を取得すれば成功。Query error は即時表示して停止する。事前に AI gateway request と telemetry ingestion が必要 |
+| `09_cleanup.sh` | `CONFIRM_CLEANUP=delete-apim-playground-data` の完全一致を確認し、script の test text と一致する Content Safety blocklist item を削除する | Item が削除済み、または blocklist が存在しない場合も成功。内部 ID を安定させるため blocklist container と Terraform 管理 resource は削除しない |
+| `run_all.sh` | Feature flag に応じて上記 test を順番に実行し、無効な layer を `Skip` として表示する | 有効な test がすべて成功すれば成功。`CLEANUP_AFTER_RUN=true` では成功時の最後だけでなく、途中失敗時にも `09_cleanup.sh` を実行する |
 
 ### 実行時の調整と安全性
 
@@ -748,7 +754,7 @@ Foundry deployment、Content Safety account、monitoring resource を所有し�
 directory が実行するデータプレーン操作は次のものだけです。
 
 - Gateway endpoint の呼び出し
-- deterministic な Content Safety blocklist の作成と削除
+- deterministic な Content Safety blocklist container の作成・更新と test item の追加・削除
 - Log Analytics と Application Insights data の query
 
 APIM、Foundry、RBAC、monitoring のコントロールプレーンを script から変更することはありません。

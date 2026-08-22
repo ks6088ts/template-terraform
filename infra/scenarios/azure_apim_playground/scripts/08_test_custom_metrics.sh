@@ -10,6 +10,7 @@ require_common_commands
 load_terraform_outputs
 require_feature llm_token_metrics "$LLM_TOKEN_METRICS_ENABLED"
 require_value log_analytics_workspace_customer_id "$LOG_ANALYTICS_WORKSPACE_CUSTOMER_ID"
+require_az_extension log-analytics
 validate_positive_integer LOG_QUERY_ATTEMPTS "$LOG_QUERY_ATTEMPTS"
 validate_positive_integer LOG_QUERY_INTERVAL_SECONDS "$LOG_QUERY_INTERVAL_SECONDS"
 
@@ -21,15 +22,19 @@ ATTEMPT=1
 RECORD_COUNT=0
 METRIC_NAMES=""
 while [ "$ATTEMPT" -le "$LOG_QUERY_ATTEMPTS" ]; do
+  log "Querying Application Insights custom metrics (${ATTEMPT}/${LOG_QUERY_ATTEMPTS})."
   if QUERY_RESULT=$(az monitor log-analytics query \
     --workspace "$LOG_ANALYTICS_WORKSPACE_CUSTOMER_ID" \
     --analytics-query "$TOKEN_METRIC_QUERY" \
-    --output json 2>/dev/null); then
+    --output json); then
     RECORD_COUNT=$(printf '%s' "$QUERY_RESULT" | jq -r '.[0].Records // 0')
-    METRIC_NAMES=$(printf '%s' "$QUERY_RESULT" | jq -r '.[0].MetricNames // [] | join(", ")')
+    METRIC_NAMES=$(printf '%s' "$QUERY_RESULT" | jq -r '
+      .[0].MetricNames // []
+      | if type == "string" then fromjson else . end
+      | join(", ")
+    ')
   else
-    RECORD_COUNT=0
-    METRIC_NAMES=""
+    die "Log Analytics query for Application Insights custom metrics failed."
   fi
 
   if [ "$RECORD_COUNT" -gt 0 ]; then
@@ -37,6 +42,7 @@ while [ "$ATTEMPT" -le "$LOG_QUERY_ATTEMPTS" ]; do
   fi
   ATTEMPT=$((ATTEMPT + 1))
   if [ "$ATTEMPT" -le "$LOG_QUERY_ATTEMPTS" ]; then
+    log "No Application Insights custom metrics found yet; retrying in ${LOG_QUERY_INTERVAL_SECONDS} seconds."
     sleep "$LOG_QUERY_INTERVAL_SECONDS"
   fi
 done

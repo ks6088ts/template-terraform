@@ -7,7 +7,7 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 . "${SCRIPT_DIR}/_common.sh"
 
 : "${TOKEN_LIMIT_ATTEMPTS:=30}"
-: "${TOKEN_LIMIT_MAX_TOKENS:=1}"
+: "${TOKEN_LIMIT_MAX_TOKENS:=64}"
 : "${TOKEN_LIMIT_PROMPT:=Summarize this request in one word. This deliberately repeated prompt consumes enough input tokens to exercise the configured API Management language model token counter without returning a long completion. Summarize this request in one word. This deliberately repeated prompt consumes enough input tokens to exercise the configured API Management language model token counter without returning a long completion.}"
 
 require_common_commands

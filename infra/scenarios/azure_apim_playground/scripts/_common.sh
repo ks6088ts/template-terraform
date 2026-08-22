@@ -37,6 +37,12 @@ require_common_commands() {
   require_command terraform
 }
 
+require_az_extension() {
+  AZ_EXTENSION_NAME=$1
+  az extension show --name "$AZ_EXTENSION_NAME" --output none >/dev/null 2>&1 \
+    || die "Required Azure CLI extension not found: ${AZ_EXTENSION_NAME}. Install it with: az extension add --name ${AZ_EXTENSION_NAME} --yes"
+}
+
 terraform_output_value() {
   printf '%s' "$TERRAFORM_OUTPUTS" | jq -r --arg output_name "$1" '
     .[$output_name].value as $value

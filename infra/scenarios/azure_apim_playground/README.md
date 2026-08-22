@@ -50,6 +50,7 @@ The opt-in layers add:
 
 - Terraform `>= 1.11.0`
 - Azure CLI authenticated to the target subscription
+- Azure CLI `log-analytics` extension for telemetry queries (`az extension add --name log-analytics --yes`)
 - `curl` and `jq` for data-plane checks
 - Permissions to create the selected Azure resources and role assignments
 - Model availability and quota in the selected region when provisioning Foundry
@@ -140,9 +141,10 @@ CONFIRM_CLEANUP=delete-apim-playground-data ./scripts/09_cleanup.sh
 terraform destroy -var-file=profiles/new_foundry.tfvars
 ```
 
-`09_cleanup.sh` deletes only the Content Safety blocklist created by the scripts.
-It never changes Terraform-managed resources. Set `CLEANUP_AFTER_RUN=true` to perform
-that cleanup at the end of `run_all.sh`.
+`09_cleanup.sh` deletes only the Content Safety blocklist item created by the scripts. It retains the
+empty blocklist container to keep the APIM policy reference stable and never changes Terraform-managed
+resources. Set `CLEANUP_AFTER_RUN=true` to remove the item at the end of `run_all.sh`. Cleanup is also
+attempted after an earlier test failure while preserving that test's exit code.
 
 ## Progressive Hands-on Labs
 
@@ -585,7 +587,7 @@ AI_MAX_TOKENS=64 \
 ./scripts/04_test_ai_gateway.sh
 
 TOKEN_LIMIT_ATTEMPTS=40 \
-TOKEN_LIMIT_MAX_TOKENS=1 \
+TOKEN_LIMIT_MAX_TOKENS=64 \
 ./scripts/05_test_token_limit.sh
 
 CONTENT_SAFETY_PROPAGATION_SECONDS=10 \
@@ -602,7 +604,7 @@ LOG_QUERY_INTERVAL_SECONDS=15 \
 
 ### Cleanup
 
-For a profile with Content Safety, delete the script-created blocklist before Terraform destroy.
+For a profile with Content Safety, delete the script-created blocklist item before Terraform destroy.
 
 ```bash
 CONFIRM_CLEANUP=delete-apim-playground-data ./scripts/09_cleanup.sh
@@ -611,11 +613,15 @@ CONFIRM_CLEANUP=delete-apim-playground-data ./scripts/09_cleanup.sh
 Expected result:
 
 ```text
-Deleted Content Safety blocklist: apim-playground
+Removed 1 Content Safety test blocklist item(s): apim-playground
+Content Safety blocklist container was retained to preserve the API Management policy reference.
 Terraform-managed infrastructure was not changed.
 ```
 
-An already-absent blocklist is also successful. To validate and clean data in one run:
+An already-absent test item or blocklist is also successful. Deleting and recreating a container with
+the same name can temporarily make APIM requests return HTTP 403 while the new Content Safety internal
+ID propagates, so retain the container until Terraform destroys the Content Safety account. To validate
+and clean data in one run:
 
 ```bash
 CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
@@ -695,17 +701,17 @@ Run an individual script when only one capability needs to be verified again.
 
 | Script | Purpose and operations | Success criteria and side effects |
 | --- | --- | --- |
-| `00_validate_prerequisites.sh` | Checks `az`, `curl`, `jq`, `terraform`, the Azure session, and common Terraform outputs. It also checks feature-specific outputs and Content Safety token acquisition when applicable | Succeeds when all required values and permissions are available. It doesn't modify Azure resources |
+| `00_validate_prerequisites.sh` | Checks `az`, `curl`, `jq`, `terraform`, the Azure session, and common Terraform outputs. It also checks feature-specific outputs, the `log-analytics` extension, and Content Safety token acquisition when applicable | Succeeds when all required values and permissions are available. It doesn't modify Azure resources |
 | `01_test_core.sh` | Calls the Hello and mock APIs with a subscription key and checks policy-generated JSON, the OpenAPI example, and the marker header. It then repeats Hello requests to exercise the subscription rate limit | Succeeds when both APIs return HTTP 200 with expected payloads and repeated requests reach HTTP 429. It consumes the current rate-limit window |
 | `02_test_weighted_routing.sh` | Calls the weighted endpoint 24 times by default and counts response backend names as primary or secondary | Succeeds after observing each backend at least once. A small probabilistic sample can occasionally see only one backend |
 | `03_test_failover.sh` | Repeats requests to the failure endpoint, observing primary HTTP 503 responses and the secondary response after the circuit breaker opens. It waits one second between attempts | Succeeds when an HTTP 200 response identifies the secondary before the attempt limit. It deliberately triggers primary failures |
 | `04_test_ai_gateway.sh` | Calls an OpenAI-compatible chat completion using the APIM subscription key as the client credential; APIM uses managed identity for the backend | Succeeds with HTTP 200 and non-empty completion text. It consumes model quota and billable tokens |
 | `05_test_token_limit.sh` | Repeatedly sends a token-consuming prompt to the AI gateway and records `x-llm-tokens-consumed` when available | Succeeds when the token rate limit returns HTTP 429 before the attempt limit. It can affect later AI requests until the rate-limit window renews |
-| `06_test_content_safety.sh` | Uses an Azure access token to create or update a blocklist and item, waits for propagation, then sends an AI request for the blocked term | Succeeds when the Content Safety policy rejects the request with HTTP 403. Remove the created blocklist data with `09_cleanup.sh` |
-| `07_test_llm_logs.sh` | Queries the past 24 hours of `ApiManagementGatewayLlmLog` in Log Analytics and, when none are found, polls up to 12 times at 10-second intervals by default | Succeeds after finding at least one record. It is read-only but requires a prior AI gateway request and telemetry ingestion |
-| `08_test_custom_metrics.sh` | Queries the past 24 hours of `AppMetrics` in Log Analytics and retrieves token metric records plus up to 20 metric names | Succeeds after finding at least one record. It is read-only but requires a prior AI gateway request and telemetry ingestion |
-| `09_cleanup.sh` | Requires the exact `CONFIRM_CLEANUP=delete-apim-playground-data` value, then deletes the Content Safety blocklist created by the scripts | HTTP 200/204 or an already-absent HTTP 404 is successful. It doesn't delete Terraform-managed resources |
-| `run_all.sh` | Runs the tests in order according to feature flags and reports disabled layers as `Skip` | Succeeds when every enabled test passes. With `CLEANUP_AFTER_RUN=true`, it also runs `09_cleanup.sh` last |
+| `06_test_content_safety.sh` | Uses an Azure access token to create or update a blocklist and item, waits for propagation, then sends a blocked prompt and a safe control prompt | Succeeds when the blocked prompt returns HTTP 403 and the safe control prompt returns HTTP 200. Remove the created test item with `09_cleanup.sh` |
+| `07_test_llm_logs.sh` | Queries the past 24 hours of `ApiManagementGatewayLlmLog` in Log Analytics and, when none are found, polls up to 12 times at 10-second intervals by default | Succeeds after finding at least one record. Query errors are shown immediately and stop the script. It requires a prior AI gateway request and telemetry ingestion |
+| `08_test_custom_metrics.sh` | Queries the past 24 hours of `AppMetrics` in Log Analytics and retrieves token metric records plus up to 20 metric names | Succeeds after finding at least one record. Query errors are shown immediately and stop the script. It requires a prior AI gateway request and telemetry ingestion |
+| `09_cleanup.sh` | Requires the exact `CONFIRM_CLEANUP=delete-apim-playground-data` value, then removes Content Safety blocklist items matching the script's test text | An already-absent item or blocklist is also successful. It preserves the blocklist container's internal ID and doesn't delete Terraform-managed resources |
+| `run_all.sh` | Runs the tests in order according to feature flags and reports disabled layers as `Skip` | Succeeds when every enabled test passes. With `CLEANUP_AFTER_RUN=true`, it runs `09_cleanup.sh` both after success and after an earlier test failure |
 
 ### Runtime Tuning and Safety
 
@@ -753,7 +759,7 @@ RBAC, diagnostics, Foundry deployments, Content Safety accounts, and monitoring
 resources. The `scripts/` directory performs only these data-plane actions:
 
 - invoke gateway endpoints;
-- create/delete the deterministic Content Safety blocklist;
+- create/update the deterministic Content Safety blocklist container and add/remove its test item;
 - query Log Analytics and Application Insights data.
 
 No script mutates the APIM, Foundry, RBAC, or monitoring control plane.

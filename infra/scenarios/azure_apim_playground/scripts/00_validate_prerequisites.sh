@@ -30,6 +30,10 @@ if [ "$OBSERVABILITY_ENABLED" = "true" ]; then
   require_value application_insights_app_id "$APPLICATION_INSIGHTS_APP_ID"
 fi
 
+if [ "$LLM_LOGGING_ENABLED" = "true" ] || [ "$LLM_TOKEN_METRICS_ENABLED" = "true" ]; then
+  require_az_extension log-analytics
+fi
+
 log "Prerequisite validation succeeded."
 log "Subscription: ${AZURE_SUBSCRIPTION_ID}"
 log "Resource group: ${RESOURCE_GROUP_NAME}"

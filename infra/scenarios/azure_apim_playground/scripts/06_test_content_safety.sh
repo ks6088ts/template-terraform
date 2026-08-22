@@ -84,3 +84,33 @@ log "Content Safety blocked the configured term with HTTP 403."
 if [ -n "$BLOCKLIST_ITEM_ID" ]; then
   log "Blocklist item ID: ${BLOCKLIST_ITEM_ID}"
 fi
+
+SAFE_AI_PAYLOAD=$(jq -n \
+  --arg model "$AI_DEPLOYMENT_NAME" \
+  --arg reasoning_effort "$AI_REASONING_EFFORT" \
+  '{
+    model: $model,
+    messages: [
+      {
+        role: "user",
+        content: "Reply with exactly: APIM content safety verified"
+      }
+    ],
+    max_completion_tokens: 64,
+    stream: false
+  } + (if $reasoning_effort == "" then {} else {reasoning_effort: $reasoning_effort} end)')
+http_request \
+  --request POST \
+  "${AI_GATEWAY_URL}/chat/completions" \
+  --header "api-key: ${PLAYGROUND_SUBSCRIPTION_KEY}" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json" \
+  --data "$SAFE_AI_PAYLOAD"
+expect_http_status 200
+
+jq -e '
+  .choices
+  | type == "array" and any(.[]; (.message.content // "") | length > 0)
+' "$HTTP_BODY_FILE" >/dev/null || die "Content Safety safe control response did not contain completion text."
+
+log "Content Safety allowed the safe control prompt with HTTP 200."

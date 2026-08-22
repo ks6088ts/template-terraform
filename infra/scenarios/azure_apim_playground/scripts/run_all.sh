@@ -13,7 +13,21 @@ run_step() {
   STEP_SCRIPT=$2
   log ""
   log "== ${STEP_LABEL} =="
-  sh "${SCRIPT_DIR}/${STEP_SCRIPT}"
+  if sh "${SCRIPT_DIR}/${STEP_SCRIPT}"; then
+    return 0
+  else
+    STEP_EXIT_CODE=$?
+  fi
+
+  if [ "$CLEANUP_AFTER_RUN" = "true" ] && [ "$STEP_SCRIPT" != "09_cleanup.sh" ]; then
+    log ""
+    log "== Data-plane cleanup after failed step =="
+    if ! CONFIRM_CLEANUP=delete-apim-playground-data sh "${SCRIPT_DIR}/09_cleanup.sh"; then
+      log "Warning: data-plane cleanup also failed."
+    fi
+  fi
+
+  exit "$STEP_EXIT_CODE"
 }
 
 skip_step() {
