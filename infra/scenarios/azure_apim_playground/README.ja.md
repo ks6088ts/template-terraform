@@ -72,9 +72,9 @@ opt-in layer では次の機能を追加します。
 | 選択: AI gateway | `profiles/new_foundry.tfvars` または local copy | AI、token limit、Content Safety、LLM logs、token metrics | 60～90 分 + 作成時間 |
 
 > [!IMPORTANT]
-> 既存 deployment の `location` 変更、および APIM SKU が Consumption tier の境界をまたぐ変更は
-> サポートしません。値を変更する前に現在の構成で playground を destroy し、変更後の構成で再作成
-> してください。再作成すると resource 名、URL、managed identity、生成 key が変わります。
+> 既存 deployment の `location` または `sku_name` の変更は、変更元と変更先の APIM tier にかかわらず
+> サポートしません。値を変更する前に現在 deployment している構成で playground を destroy し、変更後の
+> 構成で再作成してください。再作成すると resource 名、URL、managed identity、生成 key が変わります。
 
 ## クイックスタート
 
@@ -97,17 +97,31 @@ APIM の作成には数分かかることがあります。Consumption の初回
 opt-in layer を使用するときは profile を指定します。`plan`、`apply`、`destroy` には
 同じ `-var-file` を指定してください。
 
-Azure は Consumption tier からの upgrade または Consumption tier への downgrade をサポート
-しません。このシナリオでは、その移行を自動化しません。`location` を変更する場合、または
-Consumption 境界をまたぐ場合は、構成を変更する前に現在 deployment している変数で playground を
-destroy し、変更後の構成を apply してください。Consumption 境界をまたぐ APIM が
-`~ update in-place` と表示される plan は apply しないでください。dedicated tier 間の変更は通常どおり
-plan できます。
+Profile は、新しい playground の APIM SKU と opt-in feature を選択するために使用します。このシナリオは
+dedicated tier 間を含め、既存 deployment の `sku_name` または `location` の変更をサポートしません。
+Azure 自体も Consumption tier への移行と Consumption tier からの移行を in-place ではサポートしません。
+別の SKU または region を使用する場合は、現在 deployment している profile と変数で destroy してから、
+目的の構成で新しい playground を作成します。APIM の `sku_name` または `location` を in-place で変更する
+plan は apply しないでください。
 
-`ChangingSkuTypeNotSupported` または `ServiceModelDeprecating` で apply が失敗した後は、再試行前に
-残っている state を確認してください。Consumption 境界をまたいだ場合、または `location` を変更した
-場合は、現在 deployment している変数へ戻して playground を destroy してから、目的の profile を
-apply します。再 apply 前に plan の対象 region と選択した model を確認してください。
+Profile を使用した deployment では次の順序で実行します。Content Safety を使用している場合は先に cleanup
+を実行してください。
+
+```shell
+CURRENT_PROFILE="profiles/<currently-deployed-profile>.tfvars"
+terraform plan -destroy -var-file="$CURRENT_PROFILE"
+terraform destroy -var-file="$CURRENT_PROFILE"
+
+TARGET_PROFILE="profiles/<target-profile>.tfvars"
+terraform plan -var-file="$TARGET_PROFILE"
+terraform apply -parallelism=1 -var-file="$TARGET_PROFILE"
+
+unset CURRENT_PROFILE TARGET_PROFILE
+```
+
+既定の core deployment を destroy するときは `-var-file` を省略します。SKU 変更の apply に失敗すると
+partial state が残る場合があります。deployment 済みの profile と変数へ戻し、state を確認して destroy を
+完了してから、目的の構成を作成してください。
 
 | Profile | 用途 | 重要な注意点 |
 | --- | --- | --- |
@@ -227,6 +241,23 @@ resource 定義を網羅的には検証しないため、control plane test の�
 
 ### Lab 1: Core API を構築する
 
+```mermaid
+flowchart LR
+    subgraph APIM["Azure API Management"]
+        Product["公開済み product<br/>Active subscription"] --> VersionSet["Version set<br/>Segment: v1"]
+        VersionSet --> CoreAPI["Core API<br/>/playground/v1"]
+        CoreAPI --> APIPolicy["API policy<br/>rate limit + credential removal"]
+        NamedValue["Scenario named value"] -. "policy value" .-> APIPolicy
+        HeaderFragment["Response-header policy fragment"] -. "included fragment" .-> APIPolicy
+        APIPolicy --> Hello["GET /hello"]
+        APIPolicy --> Mock["GET /mock"]
+        Hello --> HelloPolicy["return-response<br/>Policy 生成 JSON"]
+        Mock --> MockPolicy["mock-response<br/>OpenAPI example"]
+    end
+
+    Client["Client / 01_test_core.sh"] -->|"Ocp-Apim-Subscription-Key"| Product
+```
+
 #### 1.1 静的検証、test、apply
 
 ```bash
@@ -294,6 +325,22 @@ terraform destroy
 このラボは `Consumption_0` のまま、2 つの Container Apps と 3:1 weighted backend pool を
 追加します。重みは確率的な比率であり、24 requests が厳密に 18:6 になる保証はありません。
 
+```mermaid
+flowchart LR
+    subgraph APIM["Azure API Management: Consumption_0"]
+        API["APIM resilience API<br/>GET /weighted"] --> Pool["Weighted backend pool"]
+        NoBreaker["この Lab では<br/>circuit breaker なし"] -.-> Pool
+        Pool -->|"weight 3"| PrimaryBackend["Primary APIM backend"]
+        Pool -->|"weight 1"| SecondaryBackend["Secondary APIM backend"]
+    end
+
+    Client["02_test_weighted_routing.sh<br/>24 requests"] -->|"Subscription key"| API
+    PrimaryBackend --> Primary["Container App<br/>primary"]
+    SecondaryBackend --> Secondary["Container App<br/>secondary"]
+    Primary -. "x-backend-name: primary" .-> Client
+    Secondary -. "x-backend-name: secondary" .-> Client
+```
+
 ```bash
 PROFILE="profiles/consumption_load_balancing.tfvars"
 
@@ -328,7 +375,33 @@ unset PROFILE
 
 このラボは `Developer_1` を作成し、weighted pool、cookie affinity、deterministic 503 backend、
 circuit breaker、priority secondary、標準 monitoring を有効にします。backend circuit breaker は
-Consumption tier ではサポートされません。
+Consumption tier ではサポートされません。この Lab は新しい deployment として扱います。別の Lab が
+active な場合は、その SKU を in-place で変更せず、現在の profile で destroy してから作成してください。
+
+```mermaid
+flowchart TB
+    subgraph APIM["Azure API Management: Developer_1"]
+        Gateway["APIM gateway"] --> API["Resilience API"]
+        API --> WeightedOperation["GET /weighted"]
+        API --> FailoverOperation["GET /failover"]
+        WeightedOperation --> WeightedPool["Weighted pool<br/>cookie affinity"]
+        WeightedPool -->|"weight 3"| PrimaryBackend["Primary backend"]
+        WeightedPool -->|"weight 1"| SecondaryBackend["Secondary backend"]
+        FailoverOperation --> PriorityPool["Priority pool"]
+        PriorityPool -->|"priority 1"| FailingBackend["Failing primary backend"]
+        PriorityPool -->|"priority 2"| SecondaryBackend
+        Breaker["Circuit breaker<br/>2 failures / 1 min<br/>trip: 1 min"] -.-> FailingBackend
+    end
+
+    Client["検証スクリプト"] -->|"Subscription key"| Gateway
+    PrimaryBackend --> Primary["Container App<br/>primary"]
+    SecondaryBackend --> Secondary["Container App<br/>secondary"]
+    FailingBackend --> Failure["Deterministic HTTP 503 origin"]
+
+    API -. "API diagnostics" .-> AppInsights["Application Insights"]
+    Gateway -. "resource logs + metrics" .-> LogAnalytics["Log Analytics"]
+    AppInsights -->|"workspace-based"| LogAnalytics
+```
 
 ```bash
 PROFILE="profiles/full_developer.tfvars"
@@ -366,6 +439,34 @@ unset PROFILE
 ```
 
 ### Lab 4: AI gateway と governance を確認する
+
+選択する profile の SKU が active な Lab と異なる場合は、新しい deployment として扱います。現在の変数で
+active な構成を destroy してから、選択した AI profile を作成してください。
+
+```mermaid
+flowchart TB
+    Client["Client / 検証スクリプト"] -->|"APIM subscription key"| Gateway["APIM AI API<br/>/ai/openai/v1"]
+
+    subgraph Policies["APIM inbound policy chain"]
+        Gateway --> Auth["Managed identity authentication"]
+        Auth --> SafetyPolicy["llm-content-safety"]
+        SafetyPolicy --> TokenLimit["llm-token-limit"]
+        TokenLimit --> TokenMetric["llm-emit-token-metric"]
+        TokenMetric --> Route["AI backend routing"]
+    end
+
+    SafetyPolicy -->|"prompt / completion を検査"| Safety["Azure AI Content Safety<br/>categories + blocklist"]
+    Safety -->|"blocked"| Rejected["HTTP 403"]
+    TokenLimit -->|"rate limit"| Limited["HTTP 429"]
+    TokenLimit -->|"quota"| Quota["HTTP 403"]
+    Route -->|"provision mode"| Foundry["新規 Microsoft Foundry<br/>model deployment"]
+    Route -->|"existing mode"| ExistingAI["既存 OpenAI v1 endpoint"]
+
+    Identity["APIM system-assigned identity"] -. "Cognitive Services User" .-> Foundry
+    Identity -. "Cognitive Services User" .-> ExistingAI
+    Identity -. "Cognitive Services User" .-> Safety
+    Operator["Terraform caller / 06 script"] -. "Cognitive Services User" .-> Safety
+```
 
 #### 4.1 AI profile を選択する
 
@@ -414,6 +515,34 @@ APIM managed identity の role assignment が反映されるまで、apply 完�
 reasoning ではなく表示本文へ completion budget を使用します。validation script は output が non-null
 の場合だけこの field を送ります。`AI_MAX_TOKENS` と `TOKEN_LIMIT_MAX_TOKENS` は request の
 `max_completion_tokens` を制御します。
+
+有効な observability resource は workspace-based Application Insights を使用します。APIM は個別の
+diagnostic と policy を通じて、標準 gateway telemetry、AI usage log、custom token metric を送信します。
+
+```mermaid
+flowchart LR
+    subgraph APIM["Azure API Management"]
+        Gateway["APIM gateway"] --> GatewayDiagnostic["Gateway / API diagnostics"]
+        AIAPI["AI API"] --> LLMDiagnostic["AI LLM diagnostic"]
+        AIAPI --> TokenMetric["llm-emit-token-metric"]
+    end
+
+    subgraph Monitoring["Azure Monitor"]
+        AppInsights["Application Insights"] -->|"workspace-based"| LogAnalytics["Log Analytics workspace"]
+    end
+
+    GatewayDiagnostic -->|"requests + errors"| AppInsights
+    LLMDiagnostic -->|"LLM usage logs"| AppInsights
+    TokenMetric -->|"custom token metrics"| AppInsights
+    Gateway -->|"resource logs + metrics"| LogAnalytics
+    Identity["APIM managed identity"] -. "Monitoring Metrics Publisher" .-> AppInsights
+    Privacy["Prompt / completion 本文<br/>既定で無効"] -.-> LLMDiagnostic
+    LogsTest["07_test_llm_logs.sh"] -->|"KQL: ApiManagementGatewayLlmLog"| LogAnalytics
+    MetricsTest["08_test_custom_metrics.sh"] -->|"KQL: AppMetrics"| LogAnalytics
+```
+
+Telemetry ingestion は eventual consistency です。test は log と metric がすぐ利用可能になると仮定せず、
+Log Analytics を polling します。
 
 #### 4.3 すべての有効な test を実行する
 
@@ -497,9 +626,9 @@ Azure subscription、backend key、現在の profile を確認してください
 | Core が HTTP 401/403 | APIM subscription key がない、または不正 | Key を `terraform output -raw` から shell 変数へ再取得 |
 | Core がすぐ HTTP 429 | 同じ renewal window で request 済み | Window の更新後に再実行 |
 | Weighted test で片方だけ観測 | 少ない sample による確率的偏り | `BACKEND_REQUESTS` を増やす |
-| Circuit breaker が disabled | Consumption または誤った profile | Developer profile を plan し、全置換を確認してから apply |
+| Circuit breaker が disabled | Consumption または誤った profile | Active profile で destroy してから Developer profile を作成し、SKU を in-place で変更しない |
 | AI が HTTP 401/403 | APIM identity の RBAC 未反映、resource ID 不正 | Role assignment を確認し、伝播後に再実行 |
-| `ChangingSkuTypeNotSupported` | 古い構成が APIM の Consumption SKU を in-place update しようとした | 現在のコードと active profile を使い、suffix と APIM が作成または置換され、`~ update in-place` でないことを確認 |
+| `ChangingSkuTypeNotSupported` | Plan が APIM SKU を in-place で変更しようとした | Deployment 済みの profile と変数へ戻して destroy し、目的の profile を新しい deployment として作成 |
 | `ServiceModelDeprecating` | 設定した model が新規 deployment を受け付けない | Lab 0 を再実行し、quota と capacity がある `GenerallyAvailable` model/SKU を選択 |
 | Model deployment が失敗 | Region、lifecycle、deployment SKU、quota、capacity が利用不可 | Lab 0 の model/usage/capacity query を確認 |
 | Blocked term が HTTP 200 | Blocklist/item の伝播待ち | `CONTENT_SAFETY_PROPAGATION_SECONDS` を増やす |
@@ -540,8 +669,8 @@ core rate limit を除く feature object の既定値はすべて `null` です�
 
 | Input | 動作 |
 | --- | --- |
-| `location` | 既定は `eastus2`。既存 deployment の変更は非対応で、再作成が必要 |
-| `sku_name` | 既定は `Consumption_0`。Consumption 境界をまたぐ変更は非対応で、再作成が必要 |
+| `location` | 既定は `eastus2`。変更時は playground の destroy と再作成が必要 |
+| `sku_name` | 既定は `Consumption_0`。すべての SKU 変更で playground の destroy と再作成が必要 |
 | `core_rate_limit` | Core API の calls と renewal period を設定 |
 | `backend_pool` | Container Apps と weighted routing を有効化。nested `circuit_breaker` は任意 |
 | `ai_backend` | `provision` または `existing` のどちらか一方が必須。新規 deployment の既定 SKU は `DataZoneStandard` |
@@ -573,8 +702,9 @@ APIM、Foundry、RBAC、monitoring のコントロールプレーンを script �
 - Circuit breaker、`llm-token-limit`、`llm-content-safety` を `Consumption_0` で指定すると、
     Terraform precondition が拒否します。`Developer_1` または対応する上位 tier を使用してください。
 - [APIM の upgrade と scale](https://learn.microsoft.com/azure/api-management/upgrade-and-scale)では、
-    Consumption への移行と Consumption からの移行をサポートしません。この境界をまたぐ profile では
-    scenario が suffix を更新して全置換を plan するため、apply 前に破壊的な変更を確認してください。
+    Consumption への移行と Consumption からの移行をサポートしません。このシナリオではさらに厳しく、
+    既存 deployment の `sku_name` 変更をすべて非対応とします。deployment 済みの profile と変数で
+    destroy してから、目的の profile を新しい playground として作成してください。
 - Backend pool は stable API `2024-05-01` を使用します。Cookie affinity は
     `2024-10-01-preview`、AI diagnostics と Content Safety backend integration は
     `2024-06-01-preview` です。

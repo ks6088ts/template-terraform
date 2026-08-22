@@ -72,10 +72,10 @@ optional labs.
 | Optional: AI gateway | `profiles/new_foundry.tfvars` or a local copy | AI, token limits, Content Safety, LLM logs, and token metrics | 60-90 minutes plus provisioning |
 
 > [!IMPORTANT]
-> Changing `location` or moving the APIM SKU into or out of the Consumption tier is not supported for
-> an existing deployment. Destroy the playground with its current configuration before changing either
-> value, then create it again with the intended configuration. Resource names, URLs, managed identities,
-> and generated keys change when the playground is recreated.
+> Changing `location` or `sku_name` is not supported for an existing deployment, regardless of the
+> source and target APIM tiers. Destroy the playground with its currently deployed configuration before
+> changing either value, then create it again with the intended configuration. Resource names, URLs,
+> managed identities, and generated keys change when the playground is recreated.
 
 ## Quick Start
 
@@ -98,16 +98,29 @@ have cold-start latency.
 Use a profile for an opt-in layer. Use the same `-var-file` for `plan`, `apply`, and
 `destroy`.
 
-Azure does not support an in-place upgrade from or downgrade to the Consumption tier. This scenario
-does not automate that migration. To change `location` or cross the Consumption boundary, destroy the
-existing playground with the currently deployed variables before changing the configuration, then apply
-the intended configuration. Do not apply a plan that shows APIM as `~ update in-place` across the
-Consumption boundary. Dedicated-to-dedicated SKU changes can be planned normally.
+Profiles select the APIM SKU and optional features for a new playground. This scenario does not support
+changing `sku_name` or `location` on an existing deployment, including changes between dedicated tiers.
+Azure also does not support an in-place move to or from the Consumption tier. To use another SKU or
+region, first destroy with the currently deployed profile and variables, then create a new playground
+with the intended configuration. Never apply a plan that changes APIM `sku_name` or `location` in place.
 
-After a failed apply with `ChangingSkuTypeNotSupported` or `ServiceModelDeprecating`, inspect the
-remaining state before retrying. If the attempted change crossed the Consumption boundary or changed
-`location`, restore the currently deployed variables and destroy the playground before applying the
-intended profile. Confirm the target region and selected model in the plan before applying again.
+For a profile-based deployment, use this order and run the Content Safety cleanup first when applicable:
+
+```shell
+CURRENT_PROFILE="profiles/<currently-deployed-profile>.tfvars"
+terraform plan -destroy -var-file="$CURRENT_PROFILE"
+terraform destroy -var-file="$CURRENT_PROFILE"
+
+TARGET_PROFILE="profiles/<target-profile>.tfvars"
+terraform plan -var-file="$TARGET_PROFILE"
+terraform apply -parallelism=1 -var-file="$TARGET_PROFILE"
+
+unset CURRENT_PROFILE TARGET_PROFILE
+```
+
+Omit `-var-file` when destroying the default core deployment. A failed SKU-change apply can leave
+partial state; restore the deployed profile and variables, inspect the state, and complete destroy
+before creating the target configuration.
 
 | Profile | Purpose | Important notes |
 | --- | --- | --- |
@@ -229,6 +242,23 @@ tests after the control-plane tests.
 
 ### Lab 1: Build the core API
 
+```mermaid
+flowchart LR
+    subgraph APIM["Azure API Management"]
+        Product["Published product<br/>Active subscription"] --> VersionSet["Version set<br/>Segment: v1"]
+        VersionSet --> CoreAPI["Core API<br/>/playground/v1"]
+        CoreAPI --> APIPolicy["API policy<br/>rate limit + credential removal"]
+        NamedValue["Scenario named value"] -. "policy value" .-> APIPolicy
+        HeaderFragment["Response-header policy fragment"] -. "included fragment" .-> APIPolicy
+        APIPolicy --> Hello["GET /hello"]
+        APIPolicy --> Mock["GET /mock"]
+        Hello --> HelloPolicy["return-response<br/>Policy-generated JSON"]
+        Mock --> MockPolicy["mock-response<br/>OpenAPI example"]
+    end
+
+    Client["Client / 01_test_core.sh"] -->|"Ocp-Apim-Subscription-Key"| Product
+```
+
 #### 1.1 Run static checks, tests, and apply
 
 ```bash
@@ -296,6 +326,22 @@ terraform destroy
 This lab stays on `Consumption_0` and adds two Container Apps and a 3:1 weighted backend pool.
 Weights are probabilistic; 24 requests aren't guaranteed to produce exactly 18:6.
 
+```mermaid
+flowchart LR
+    subgraph APIM["Azure API Management: Consumption_0"]
+        API["APIM resilience API<br/>GET /weighted"] --> Pool["Weighted backend pool"]
+        NoBreaker["No circuit breaker<br/>in this lab"] -.-> Pool
+        Pool -->|"weight 3"| PrimaryBackend["Primary APIM backend"]
+        Pool -->|"weight 1"| SecondaryBackend["Secondary APIM backend"]
+    end
+
+    Client["02_test_weighted_routing.sh<br/>24 requests"] -->|"Subscription key"| API
+    PrimaryBackend --> Primary["Container App<br/>primary"]
+    SecondaryBackend --> Secondary["Container App<br/>secondary"]
+    Primary -. "x-backend-name: primary" .-> Client
+    Secondary -. "x-backend-name: secondary" .-> Client
+```
+
 ```bash
 PROFILE="profiles/consumption_load_balancing.tfvars"
 
@@ -330,7 +376,33 @@ unset PROFILE
 
 This lab creates `Developer_1` and enables a weighted pool, cookie affinity, a deterministic 503
 backend, a circuit breaker, a priority secondary, and standard monitoring. Backend circuit breakers
-aren't supported in the Consumption tier.
+aren't supported in the Consumption tier. Treat this as a new deployment: destroy any active lab with
+its current profile before creating this one instead of changing its SKU in place.
+
+```mermaid
+flowchart TB
+    subgraph APIM["Azure API Management: Developer_1"]
+        Gateway["APIM gateway"] --> API["Resilience API"]
+        API --> WeightedOperation["GET /weighted"]
+        API --> FailoverOperation["GET /failover"]
+        WeightedOperation --> WeightedPool["Weighted pool<br/>cookie affinity"]
+        WeightedPool -->|"weight 3"| PrimaryBackend["Primary backend"]
+        WeightedPool -->|"weight 1"| SecondaryBackend["Secondary backend"]
+        FailoverOperation --> PriorityPool["Priority pool"]
+        PriorityPool -->|"priority 1"| FailingBackend["Failing primary backend"]
+        PriorityPool -->|"priority 2"| SecondaryBackend
+        Breaker["Circuit breaker<br/>2 failures / 1 min<br/>trip: 1 min"] -.-> FailingBackend
+    end
+
+    Client["Validation scripts"] -->|"Subscription key"| Gateway
+    PrimaryBackend --> Primary["Container App<br/>primary"]
+    SecondaryBackend --> Secondary["Container App<br/>secondary"]
+    FailingBackend --> Failure["Deterministic HTTP 503 origin"]
+
+    API -. "API diagnostics" .-> AppInsights["Application Insights"]
+    Gateway -. "resource logs + metrics" .-> LogAnalytics["Log Analytics"]
+    AppInsights -->|"workspace-based"| LogAnalytics
+```
 
 ```bash
 PROFILE="profiles/full_developer.tfvars"
@@ -368,6 +440,34 @@ unset PROFILE
 ```
 
 ### Lab 4: Validate the AI gateway and governance
+
+Treat this as a new deployment when its profile uses a different SKU from the active lab. Destroy the
+active configuration with its current variables before creating the selected AI profile.
+
+```mermaid
+flowchart TB
+    Client["Client / validation scripts"] -->|"APIM subscription key"| Gateway["APIM AI API<br/>/ai/openai/v1"]
+
+    subgraph Policies["APIM inbound policy chain"]
+        Gateway --> Auth["Managed identity authentication"]
+        Auth --> SafetyPolicy["llm-content-safety"]
+        SafetyPolicy --> TokenLimit["llm-token-limit"]
+        TokenLimit --> TokenMetric["llm-emit-token-metric"]
+        TokenMetric --> Route["AI backend routing"]
+    end
+
+    SafetyPolicy -->|"screen prompt / completion"| Safety["Azure AI Content Safety<br/>categories + blocklist"]
+    Safety -->|"blocked"| Rejected["HTTP 403"]
+    TokenLimit -->|"rate limit"| Limited["HTTP 429"]
+    TokenLimit -->|"quota"| Quota["HTTP 403"]
+    Route -->|"provision mode"| Foundry["Provisioned Microsoft Foundry<br/>model deployment"]
+    Route -->|"existing mode"| ExistingAI["Existing OpenAI v1 endpoint"]
+
+    Identity["APIM system-assigned identity"] -. "Cognitive Services User" .-> Foundry
+    Identity -. "Cognitive Services User" .-> ExistingAI
+    Identity -. "Cognitive Services User" .-> Safety
+    Operator["Terraform caller / 06 script"] -. "Cognitive Services User" .-> Safety
+```
 
 #### 4.1 Select an AI profile
 
@@ -416,6 +516,35 @@ The `new_foundry` profile sets `ai_reasoning_effort` to `none` so its low-token 
 text without spending the completion budget on reasoning. Validation scripts send this field only
 when the output is non-null. `AI_MAX_TOKENS` and `TOKEN_LIMIT_MAX_TOKENS` control the
 `max_completion_tokens` request field.
+
+The enabled observability resources use a workspace-based Application Insights instance. APIM sends
+standard gateway telemetry, AI usage logs, and custom token metrics through separate diagnostics and
+policies:
+
+```mermaid
+flowchart LR
+    subgraph APIM["Azure API Management"]
+        Gateway["APIM gateway"] --> GatewayDiagnostic["Gateway / API diagnostics"]
+        AIAPI["AI API"] --> LLMDiagnostic["AI LLM diagnostic"]
+        AIAPI --> TokenMetric["llm-emit-token-metric"]
+    end
+
+    subgraph Monitoring["Azure Monitor"]
+        AppInsights["Application Insights"] -->|"workspace-based"| LogAnalytics["Log Analytics workspace"]
+    end
+
+    GatewayDiagnostic -->|"requests + errors"| AppInsights
+    LLMDiagnostic -->|"LLM usage logs"| AppInsights
+    TokenMetric -->|"custom token metrics"| AppInsights
+    Gateway -->|"resource logs + metrics"| LogAnalytics
+    Identity["APIM managed identity"] -. "Monitoring Metrics Publisher" .-> AppInsights
+    Privacy["Prompt / completion bodies<br/>disabled by default"] -.-> LLMDiagnostic
+    LogsTest["07_test_llm_logs.sh"] -->|"KQL: ApiManagementGatewayLlmLog"| LogAnalytics
+    MetricsTest["08_test_custom_metrics.sh"] -->|"KQL: AppMetrics"| LogAnalytics
+```
+
+Telemetry ingestion is eventually consistent. The tests poll Log Analytics instead of assuming that
+logs and metrics are immediately available.
 
 #### 4.3 Run all enabled tests
 
@@ -499,9 +628,9 @@ resources, don't approve it. Check the Azure subscription, backend key, and curr
 | Core returns HTTP 401/403 | APIM subscription key is missing or invalid | Reload the key into a shell variable with `terraform output -raw` |
 | Core immediately returns HTTP 429 | Requests already used the renewal window | Retry after the window renews |
 | Weighted test sees one backend | Probabilistic skew in a small sample | Increase `BACKEND_REQUESTS` |
-| Circuit breaker is disabled | Consumption or the wrong profile is active | Plan the Developer profile and review the full replacement before apply |
+| Circuit breaker is disabled | Consumption or the wrong profile is active | Destroy with the active profile, then create the Developer profile; don't change SKU in place |
 | AI returns HTTP 401/403 | APIM identity RBAC hasn't propagated or resource ID is wrong | Check role assignments and retry after propagation |
-| `ChangingSkuTypeNotSupported` | An old configuration planned APIM as an in-place Consumption SKU update | Use the current code and active profile; confirm the suffix and APIM are created or replaced, never `~ update in-place` |
+| `ChangingSkuTypeNotSupported` | A plan attempted to change APIM SKU in place | Restore the deployed profile and variables, destroy it, then create the target profile as a new deployment |
 | `ServiceModelDeprecating` | The configured model no longer accepts new deployments | Repeat Lab 0 and select a `GenerallyAvailable` model/SKU with quota and capacity |
 | Model deployment fails | Region, lifecycle, deployment SKU, quota, or capacity isn't available | Repeat the model, usage, and capacity queries from Lab 0 |
 | Blocked term returns HTTP 200 | Blocklist or item is propagating | Increase `CONTENT_SAFETY_PROPAGATION_SECONDS` |
@@ -542,8 +671,8 @@ All feature objects default to `null`, except the core rate limit. Important inp
 
 | Input | Behavior |
 | --- | --- |
-| `location` | Defaults to `eastus2`; changing an existing deployment is unsupported and requires recreation |
-| `sku_name` | Defaults to `Consumption_0`; crossing the Consumption boundary is unsupported and requires recreation |
+| `location` | Defaults to `eastus2`; any change requires destroying and recreating the playground |
+| `sku_name` | Defaults to `Consumption_0`; any SKU change requires destroying and recreating the playground |
 | `core_rate_limit` | Configures core API calls and renewal period |
 | `backend_pool` | Enables Container Apps and weighted routing; nested `circuit_breaker` is optional |
 | `ai_backend` | Requires exactly one of `provision` or `existing`; provisioned deployments default to `DataZoneStandard` |
@@ -575,8 +704,9 @@ No script mutates the APIM, Foundry, RBAC, or monitoring control plane.
 - Circuit breaker, `llm-token-limit`, and `llm-content-safety` profiles are rejected on
     `Consumption_0` by Terraform preconditions. Use `Developer_1` or a supported higher tier.
 - [Upgrading and scaling APIM](https://learn.microsoft.com/azure/api-management/upgrade-and-scale)
-    does not support moving to or from Consumption. The scenario rotates its suffix and plans a full
-    replacement when a profile crosses that boundary; review that destructive plan before apply.
+    does not support moving to or from Consumption. This scenario takes the stricter approach of not
+    supporting any `sku_name` change on an existing deployment. Destroy with the deployed profile and
+    variables, then create the target profile as a new playground.
 - Backend pools use stable API `2024-05-01`. Cookie affinity uses
     `2024-10-01-preview`. AI diagnostics and Content Safety backend integration use
     `2024-06-01-preview`.
