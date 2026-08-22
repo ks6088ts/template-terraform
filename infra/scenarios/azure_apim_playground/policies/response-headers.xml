@@ -1,0 +1,8 @@
+<fragment>
+    <set-header name="x-apim-playground" exists-action="override">
+        <value>{{playground-scenario-name}}</value>
+    </set-header>
+    <set-header name="x-correlation-id" exists-action="override">
+        <value>@(context.RequestId.ToString())</value>
+    </set-header>
+</fragment>
