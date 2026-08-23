@@ -1,0 +1,27 @@
+<policies>
+    <inbound>
+        <base />
+        <return-response>
+            <set-status code="200" reason="OK" />
+            <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+            </set-header>
+            <set-header name="x-apim-playground" exists-action="override">
+                <value>{{playground-scenario-name}}</value>
+            </set-header>
+            <set-header name="x-correlation-id" exists-action="override">
+                <value>@(context.RequestId.ToString())</value>
+            </set-header>
+            <set-body>{"message":"hello from Azure API Management","source":"policy"}</set-body>
+        </return-response>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

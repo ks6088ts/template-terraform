@@ -1,0 +1,54 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "APIM Playground Resilience API",
+    "version": "1.0.0",
+    "description": "Operations for validating backend pools and circuit breakers."
+  },
+  "paths": {
+    "/weighted": {
+      "get": {
+        "operationId": "get-weighted",
+        "summary": "Route through a weighted backend pool",
+        "responses": {
+          "200": {
+            "description": "Request details echoed by the selected backend",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/failover": {
+      "get": {
+        "operationId": "get-failover",
+        "summary": "Route through a priority pool with a circuit breaker",
+        "responses": {
+          "200": {
+            "description": "Request details echoed by the healthy secondary backend",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Circuit-breaker exercises aren't enabled"
+          },
+          "503": {
+            "description": "The deterministic primary failure before the circuit opens"
+          }
+        }
+      }
+    }
+  }
+}

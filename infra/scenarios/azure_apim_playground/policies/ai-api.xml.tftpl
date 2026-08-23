@@ -1,0 +1,24 @@
+<policies>
+  <inbound>
+    <base />
+    <set-header name="api-key" exists-action="delete" />
+    <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+    <set-query-parameter name="api-key" exists-action="delete" />
+    <set-query-parameter name="subscription-key" exists-action="delete" />
+    <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+    ${content_safety_policy}
+    ${token_limit_policy}
+    ${token_metric_policy}
+    <set-backend-service backend-id="${backend_id}" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+    <include-fragment fragment-id="${response_fragment_id}" />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

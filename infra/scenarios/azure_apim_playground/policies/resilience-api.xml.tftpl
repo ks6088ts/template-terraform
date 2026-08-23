@@ -1,0 +1,17 @@
+<policies>
+  <inbound>
+    <base />
+    <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+    <set-query-parameter name="subscription-key" exists-action="delete" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+    <include-fragment fragment-id="${response_fragment_id}" />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>
