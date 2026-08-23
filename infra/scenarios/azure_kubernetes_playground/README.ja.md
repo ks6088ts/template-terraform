@@ -79,18 +79,6 @@ az account set --subscription <subscription-id-or-name>
 
 preflight は、必須コマンド、Terraform のバージョン、Azure CLI セッション、VM SKU の利用可否、初期構成である system node 2 台と user node 1 台に必要な regional/family vCPU quota を確認します。構成を変更した場合は、`LOCATION`、`SYSTEM_VM_SIZE`、`USER_VM_SIZE`、`SYSTEM_NODE_COUNT`、`USER_NODE_MIN_COUNT` を上書きして検証してください。
 
-## 以前の playground からの移行
-
-以前の既定値は `Standard_B2s` の system node 1 台と `kubenet` でした。network plugin の変更は AKS クラスターの再作成を伴い、system pool の VM size 変更は pool のローテーションを伴います。通常の in-place 更新ではなく、置換として扱ってください。
-
-1. PVC 内を含め、保持が必要なアプリケーションデータを退避します。
-2. `helm list -A` で release を記録し、破棄可能な workload を削除します。
-3. Terraform state を安全にバックアップします。
-4. `make plan SCENARIO=azure_kubernetes_playground` を実行し、置換対象を確認します。
-5. 破棄可能なハンズオン環境では、`make destroy` 後の新規 `make deploy` を優先します。
-
-node-local な `hostPath` データは移行しないでください。node rotation や cluster replacement をまたいで保持されません。
-
 ## デプロイ
 
 共通ワークフローと `SCENARIO=azure_kubernetes_playground` を使用してインフラストラクチャをデプロイし、
@@ -179,7 +167,7 @@ helm upgrade --install openwebui open-webui/open-webui \
 | シナリオ | 対応状態 | 必要な対応 |
 | --- | --- | --- |
 | 0. AKS setup | 対応済み | 外部リポジトリのクラスター作成スクリプトではなく、この Terraform を使用します。 |
-| 1. HTTP publishing | 移行が必要 | 保守終了した upstream ingress-nginx は導入しません。port-forward を使うか、manifest を保守中の Gateway API 実装へ移行します。 |
+| 1. HTTP publishing | Gateway が必要 | ローカルアクセスには port-forward、HTTP 公開には保守中の Gateway API 実装を使用します。ingress-nginx は導入しません。 |
 | 2. Prometheus/Grafana | cleanup 前提で対応 | `KUBE_PROMETHEUS_STACK_CHART_VERSION` を使います。単体 Grafana は追加の public LoadBalancer を作るため port-forward を優先し、Ingress 名を重複させません。 |
 | 3. Argo CD/Workflows | CLI 導入後に対応 | `argocd` と `argo` を導入し、固定した Argo chart version を使って、次の大規模シナリオ前に両 release を削除します。 |
 | 4. Keycloak | cleanup 前提で対応 | `KEYCLOAK_CHART_VERSION` を使い、PVC が Bound であることを確認します。Docker Hub 認証により pull 制限を緩和できます。 |
@@ -192,7 +180,7 @@ helm upgrade --install openwebui open-webui/open-webui \
 
 ### Ingress と Gateway API
 
-upstream ingress-nginx は 2026 年 3 月に保守を終了したため、このシナリオでは導入しません。AKS は長期的な方向として Gateway API を推奨しています。`ingressClassName: nginx` を持つ既存リソースをそのまま適用せず、採用する Gateway 実装へ移行するか、ローカル限定の演習では `kubectl port-forward` を使用してください。
+このシナリオは ingress controller をインストールしません。ローカル限定の演習では `kubectl port-forward` を使用します。HTTP を公開する場合は、保守中の Gateway API 実装を導入し、必要な `Gateway` と `HTTPRoute` を定義してください。
 
 同じ namespace に複数の controller を導入しないでください。外部サンプルには host を指定しない同一 `/` route も複数あるため、同時実行できません。
 

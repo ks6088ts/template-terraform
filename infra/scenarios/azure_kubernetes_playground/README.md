@@ -79,18 +79,6 @@ az account set --subscription <subscription-id-or-name>
 
 The preflight checks the required commands, Terraform version, Azure CLI session, VM SKU availability, and regional/family vCPU quota for the initial two system nodes and one user node. Override `LOCATION`, `SYSTEM_VM_SIZE`, `USER_VM_SIZE`, `SYSTEM_NODE_COUNT`, or `USER_NODE_MIN_COUNT` when validating a customized configuration.
 
-## Upgrade from the previous playground
-
-The previous defaults used one `Standard_B2s` system node and `kubenet`. Changing the network plugin recreates the AKS cluster, and changing the system-pool VM size rotates that pool. Treat this as a replacement, not an in-place workshop upgrade.
-
-1. Export any application data that must survive, including data in PVCs.
-2. Record Helm releases with `helm list -A` and remove disposable workloads.
-3. Back up Terraform state securely.
-4. Run `make plan SCENARIO=azure_kubernetes_playground` and verify the replacement actions.
-5. For a disposable workshop, prefer `make destroy` followed by a fresh `make deploy`.
-
-Don't migrate node-local `hostPath` data. It isn't portable across node rotation or cluster replacement.
-
 ## Deploy
 
 Deploy the infrastructure with the shared workflow and
@@ -180,7 +168,7 @@ This profile deliberately disables the bundled Ollama, Pipelines, and Redis work
 | Scenario | Readiness | Required action |
 | --- | --- | --- |
 | 0. AKS setup | Ready | Use this Terraform deployment instead of the upstream cluster creation script. |
-| 1. HTTP publishing | Migration required | Don't install retired upstream ingress-nginx. Use port-forward or migrate manifests to a maintained Gateway API implementation. |
+| 1. HTTP publishing | Gateway required | Use port-forward for local access or a maintained Gateway API implementation for HTTP publishing. Don't deploy ingress-nginx. |
 | 2. Prometheus/Grafana | Ready with cleanup | Use `KUBE_PROMETHEUS_STACK_CHART_VERSION`. Prefer port-forward; standalone Grafana creates another public LoadBalancer. Use distinct Ingress names. |
 | 3. Argo CD/Workflows | Ready with tools | Install `argocd` and `argo`, use the pinned Argo chart versions, and remove both releases before the next heavy scenario. |
 | 4. Keycloak | Ready with cleanup | Use `KEYCLOAK_CHART_VERSION` and verify PVC binding. Docker Hub authentication can reduce pull throttling. |
@@ -193,7 +181,7 @@ This profile deliberately disables the bundled Ollama, Pipelines, and Redis work
 
 ### Ingress and Gateway API
 
-The upstream ingress-nginx project ended maintenance in March 2026, so this scenario intentionally doesn't install it. AKS recommends Gateway API as the long-term direction. Existing resources with `ingressClassName: nginx` must not be applied unchanged; migrate them to the selected Gateway implementation or use `kubectl port-forward` for local-only exercises.
+This scenario doesn't install an ingress controller. Use `kubectl port-forward` for local-only exercises or deploy a maintained Gateway API implementation and define the required `Gateway` and `HTTPRoute` resources.
 
 Don't install multiple controllers into the same namespace. Several upstream examples also use the same hostless `/` route and must not run concurrently.
 
