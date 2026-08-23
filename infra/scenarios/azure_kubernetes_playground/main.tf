@@ -50,6 +50,7 @@ module "kubernetes_service" {
 
   name                = local.resource_name
   resource_group_name = module.resource_group.name
+  node_resource_group = "rg-aks-${local.resource_name}-nodes"
   location            = module.resource_group.location
   kubernetes_version  = var.kubernetes_version
   oidc_issuer_enabled = var.oidc_issuer_enabled

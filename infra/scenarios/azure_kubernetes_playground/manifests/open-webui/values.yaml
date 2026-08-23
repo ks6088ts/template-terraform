@@ -1,0 +1,31 @@
+ollama:
+  enabled: false
+
+pipelines:
+  enabled: false
+
+websocket:
+  manager: ""
+  redis:
+    enabled: false
+
+persistence:
+  enabled: true
+  size: 2Gi
+  accessModes:
+    - ReadWriteOnce
+
+service:
+  type: ClusterIP
+
+extraEnvFrom:
+  - secretRef:
+      name: open-webui-secrets
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1
+    memory: 1Gi

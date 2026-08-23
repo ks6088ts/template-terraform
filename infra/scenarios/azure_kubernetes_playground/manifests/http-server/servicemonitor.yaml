@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: http-server
+  labels:
+    app.kubernetes.io/name: http-server
+    app.kubernetes.io/part-of: azure-kubernetes-playground
+spec:
+  namespaceSelector:
+    matchNames:
+      - workshop-http
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: http-server
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 10s

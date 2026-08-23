@@ -17,7 +17,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: telemetrygen
-          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0
           args:
             - metrics
             - --otlp-endpoint=otel-collector:4317

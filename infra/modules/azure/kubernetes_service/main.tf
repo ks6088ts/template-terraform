@@ -2,19 +2,21 @@ resource "azurerm_kubernetes_cluster" "this" {
   name                = "aks-${var.name}"
   location            = var.location
   resource_group_name = var.resource_group_name
+  node_resource_group = var.node_resource_group
   dns_prefix          = var.dns_prefix != null ? var.dns_prefix : "aks-${var.name}"
   kubernetes_version  = var.kubernetes_version
   oidc_issuer_enabled = var.oidc_issuer_enabled
   tags                = var.tags
 
   default_node_pool {
-    name                 = var.default_node_pool_name
-    node_count           = var.node_count
-    vm_size              = var.vm_size
-    os_disk_size_gb      = var.os_disk_size_gb
-    auto_scaling_enabled = var.auto_scaling_enabled
-    min_count            = var.auto_scaling_enabled ? var.min_count : null
-    max_count            = var.auto_scaling_enabled ? var.max_count : null
+    name                        = var.default_node_pool_name
+    node_count                  = var.node_count
+    vm_size                     = var.vm_size
+    os_disk_size_gb             = var.os_disk_size_gb
+    temporary_name_for_rotation = var.temporary_name_for_rotation
+    auto_scaling_enabled        = var.auto_scaling_enabled
+    min_count                   = var.auto_scaling_enabled ? var.min_count : null
+    max_count                   = var.auto_scaling_enabled ? var.max_count : null
   }
 
   identity {

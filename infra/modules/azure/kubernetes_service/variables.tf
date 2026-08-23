@@ -8,6 +8,12 @@ variable "resource_group_name" {
   type        = string
 }
 
+variable "node_resource_group" {
+  description = "Name of the resource group containing AKS nodes (null for an Azure-generated name)"
+  type        = string
+  default     = null
+}
+
 variable "location" {
   description = "Azure region for the AKS cluster"
   type        = string
@@ -37,6 +43,17 @@ variable "default_node_pool_name" {
   default     = "default"
 }
 
+variable "temporary_name_for_rotation" {
+  description = "Temporary node pool name used when rotating the default node pool"
+  type        = string
+  default     = "temporary"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9]{0,11}$", var.temporary_name_for_rotation))
+    error_message = "Temporary node pool name must start with a lowercase letter, contain only lowercase letters and digits, and be at most 12 characters long."
+  }
+}
+
 variable "node_count" {
   description = "Number of nodes in the default node pool"
   type        = number
@@ -51,7 +68,7 @@ variable "node_count" {
 variable "vm_size" {
   description = "VM size for the default node pool"
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_B2s_v2"
 }
 
 variable "os_disk_size_gb" {

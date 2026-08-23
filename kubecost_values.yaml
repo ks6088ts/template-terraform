@@ -1,0 +1,1731 @@
+## Kubecost configuration
+##
+
+global:
+  ## @param clusterId The id of the cluster REQUIRED
+  ##
+  clusterId: cluster-one
+  ## @param global.federatedStorage.config The config for the federated storage
+  ## @param global.federatedStorage.existingSecret The name of an existing secret to use for the federated storage config. Note, you cannot set both `config` and `existingSecret`.
+  ## The name of the Secret containing a bucket config for federated storage.
+  ## The contents should be stored under a key named storage-config.yaml by default.
+  ## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=cluster-long-term-storage-configuration
+  ##
+  federatedStorage:
+    config: ""
+    # A federated storage config can be provided via an existingSecret or via a string in helm values.
+    # If both are provided, the string in helm values take precedence.
+    # Example:
+    #   config: |-
+    #     type: S3
+    #     config:
+    #       bucket: ibm-kubecost-unified-agent-demo-data
+    #       endpoint: s3.amazonaws.com
+    #       region: us-west-2
+    #       access_key: xxx
+    #       secret_key: xxx
+    existingSecret: ""
+    # If you want to use a different file name for the federated storage config, you can set the fileName value.
+    fileName: federated-store.yaml # set this value to change what the file name for the yaml config is
+  ## @param global.acknowledged Acknowledgment flag for Kubecost 3.0 major upgrade
+  ## REQUIRED FOR ENTERPRISE: Kubecost 3.0 introduces breaking changes and potential data disruption
+  ## risks. Review release notes and migration guide before proceeding.
+  ## Ref: https://github.com/kubecost/kubecost/releases
+  ##
+  acknowledged: false
+  ## @param cspPricingApiKey.existingSecret The name of an existing secret to use for the GCP API key. If this is set, the secret will be used. Leave empty to create a new secret.
+  ## @param cspPricingApiKey.apiKey The GCP API key value. If this is set, the secret will be created. Leave empty to use an existing secret.
+  ## This is currently only used for GCP.
+  cspPricingApiKey:
+    existingSecret: ""
+    apiKey: ""
+  ## @param global.imageRegistry The image registry used for all images in this chart and subcharts
+  imageRegistry: icr.io
+  ## E.g.
+  ## imagePullSecrets:
+  ##   - myRegistryKeySecretName
+  ##
+  imagePullSecrets: []
+  ## @param global.defaultStorageClass The default storage class to use, unless overridden by the storageClass parameter in the finopsagent, aggregator, or localStore blocks.
+  ##
+  defaultStorageClass: ""
+  ## @param global.zone The zone to use for the finops agent
+  ##
+  zone: "" # cluster.local
+  ## Compatibility adaptations for Kubernetes platforms
+  ##
+  compatibility:
+    ## Compatibility adaptations for Openshift
+    ##
+    openshift:
+      ## @param global.compatibility.openshift.adaptSecurityContext Adapt the securityContext sections of the deployment to make them compatible with Openshift restricted-v2 SCC: remove runAsUser, runAsGroup and fsGroup and let the platform use their allowed default IDs. Possible values: auto (apply if the detected running cluster is Openshift), force (perform the adaptation always), disabled (do not perform adaptation)
+      ##
+      adaptSecurityContext: auto
+
+  ## Kubecost Alerting
+  ## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=ui-alerts
+  ##
+  notifications:
+    # alertConfigs:
+    #   frontendUrl: http://localhost:9090  # Optional. When configured, alert notifications will include a link back to the Kubecost web portal. Value should be the publicly-accessible URL of Kubecost with no path included. Ex., https://kubecost.mycorp.org
+    #   globalSlackWebhookUrl: <SLACK_INCOMING_WEBHOOK_URL>  # Optional
+    #   globalMsTeamsWebhookUrl: https://xxxxx.webhook.office.com/webhookb2/XXXXXXXXXXXXXXXXXXXXXXXX/IncomingWebhook/XXXXXXXXXXXXXXXXXXXXXXXX  # Optional
+    #   globalAlertEmails:
+    #     - recipient@example.com
+    #     - additionalRecipient@example.com
+    #   globalEmailSubject: Custom Subject
+    #   alerts:
+    #     # Application health alerts are reported.
+    #     - type: health    # Monitors Kubecost health based on multi-cluster diagnostics.
+    #       window: 1h      # The frequency to poll for alert status.
+    #       ownerContact:   # Optional. Adds email address specific to this alert. Is additive to globalAlertEmails.
+    #         - owner@example.com
+    #         - owner2@example.com
+    #       slackWebhookUrl: <SLACK_INCOMING_WEBHOOK_URL>  # Optional. Adds a Slack webhook specific to this alert. Is additive to globalSlackWebhookUrl.
+    #       msTeamsWebhookUrl: https://xxxxx.webhook.office.com/webhookb2/XXXXXXXXXXXXXXXXXXXXXXXX/IncomingWebhook/XXXXXXXXXXXXXXXXXXXXXXXX  # Optional. Adds a Microsoft Teams webhook specific to this alert. Is additive to globalMsTeamsWebhookUrl.
+  chartName: "kubecost"
+
+  ## Kubecost Saved Reports
+  ## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=ui-reports
+  ##
+  savedReports:
+    enabled: false # If true, overwrites report parameters set through UI
+    reports:
+      - title: "Example Saved Report 0"
+        window: "today"
+        aggregateBy: "namespace"
+        chartDisplay: "category"
+        idle: "separate"
+        rate: "cumulative"
+        accumulate: false # daily resolution
+        filters: # Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=directory-filter-parameters-v2
+          - key: "cluster"
+            operator: ":"
+            value: "dev"
+      - title: "Example Saved Report 1"
+        window: "month"
+        aggregateBy: "controllerKind"
+        chartDisplay: "category"
+        idle: "share"
+        rate: "monthly"
+        accumulate: false
+        filters: # Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=directory-filter-parameters-v2
+          - key: "namespace"
+            operator: "!:"
+            value: "kubecost"
+      - title: "Example Saved Report 2"
+        window: "2020-11-11T00:00:00Z,2020-12-09T23:59:59Z"
+        aggregateBy: "service"
+        chartDisplay: "category"
+        idle: "hide"
+        rate: "daily"
+        accumulate: true # entire window resolution
+        filters: [] # if no filters, specify empty array
+  assetReports:
+    enabled: false # If true, overwrites report parameters set through UI
+    reports:
+      - title: "Example Asset Report 0"
+        window: "today"
+        aggregateBy: "type"
+        accumulate: false # daily resolution
+        filters:
+          - property: "cluster"
+            value: "cluster-one"
+  cloudCostReports:
+    enabled: false # If true, overwrites report parameters set through UI
+    reports:
+      - title: "Cloud Cost Report 0"
+        window: "today"
+        aggregateBy: "service"
+        accumulate: false # daily resolution
+        # filters:
+        #   - property: "service"
+        #     value: "service1" # corresponds to a value to filter cloud cost aggregate by service data on.
+
+  ## Globally set annotations and labels
+  ##
+  podAnnotations: {}
+  annotations: {} # Applies to all controllers (Deployments, StatefulSets, DaemonSets).
+  additionalLabels: {} # Applies to Deployments, StatefulSets, DaemonSets, and their pod templates
+
+  ## Globally set security context
+  ##
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+    fsGroup: 1001
+    runAsGroup: 1001
+    runAsUser: 1001
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    privileged: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  ## Installs custom CA certificates onto Kubecost pods
+  ##
+  updateCaTrust:
+    enabled: false
+    ## Security context settings for the init container.
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      runAsNonRoot: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      seccompProfile:
+        type: RuntimeDefault
+    caCertsSecret: ca-certs-secret # The name of the Secret containing custom CA certificates to mount to the cost-model container.
+    # caCertsConfig: ca-certs-config  # The name of the ConfigMap containing the CA trust configuration.
+    resources: {}
+    caCertsMountPath: /etc/pki/ca-trust/source/anchors # The path where the custom CA certificates will be mounted in the init container
+
+  ## Platform-specific configurations
+  ##
+  platforms:
+    ## Deploying to OpenShift (OCP) requires enabling this option.
+    openshift:
+      enabled: false # Deploy Kubecost to OpenShift.
+      route:
+        enabled: false # Create an OpenShift Route.
+        annotations: {} # Add annotations to the Route.
+        # host: kubecost.apps.okd4.example.com  # Add a custom host for your Route.
+
+      ## Create Security Context Constraint resources for the DaemonSets requiring additional privileges.
+      scc:
+        networkCosts: false # Creates an SCC for Kubecost network-costs. This requires network-costs be enabled.
+        clusterController: false # Creates an SCC for Kubecost Cluster Controller. This requires clusterController be enabled.
+      ## When OpenShift is enabled, the following securityContext will be applied to all resources unless they define their own.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+    ## Set options for deploying with CI/CD tools like Argo CD.
+    cicd:
+      enabled: false # Set to true when using affected CI/CD tools for access to the below configuration options.
+      skipSanityChecks: false # If true, skip all sanity/existence checks for resources like Secrets.
+
+  ## Kubecost Integrations
+  ## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=configuration-kubecost-postgres-integration
+  ##
+  integrations:
+    turbonomic:
+      enabled: false # Set to true to enable the Turbonomic integration
+      clientId: "" # Client ID generated from the OAuth Client created
+      clientSecret: "" # Client Secret generated from the OAuth Client created
+      role: "" # Role that the OAuth Client was created with (e.g. ADMINISTRATOR, SITE_ADMIN, etc.)
+      host: "" # URL to your turbonomic API. EG: https://turbonomic.example.com/
+      insecureClient: false # Do not verify certificate
+    postgres:
+      enabled: false
+      runInterval: "12h" # How frequently to run the integration.
+      databaseHost: "" # REQUIRED. ex: my.postgres.database.azure.com
+      databasePort: "" # REQUIRED. ex: 5432
+      databaseName: "" # REQUIRED. ex: postgres
+      databaseUser: "" # REQUIRED. ex: myusername
+      databasePassword: "" # REQUIRED. ex: mypassword
+      databaseSecretName: "" # OPTIONAL. Specify your own k8s secret containing the above credentials. Must have key "creds.json".
+
+      ## Configure what Postgres table to write to, and what parameters to pass
+      ## when querying Kubecost's APIs. Ensure all parameters are enclosed in
+      ## quotes. Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=kubecost-api-directory
+      queryConfigs:
+        allocations: []
+          # - databaseTable: "kubecost_allocation_data"
+          #   window: "7d"
+          #   aggregate: "namespace"
+          #   idle: "true"
+          #   shareIdle: "true"
+          #   shareNamespaces: "kubecost,kube-system"
+          #   shareLabels: ""
+          # - databaseTable: "kubecost_allocation_data_by_cluster"
+          #   window: "10d"
+          #   aggregate: "cluster"
+          #   idle: "true"
+          #   shareIdle: "false"
+          #   shareNamespaces: ""
+          #   shareLabels: ""
+        assets: []
+          # - databaseTable: "kubecost_assets_data"
+          #   window: "7d"
+          #   aggregate: "cluster"
+        cloudCosts: []
+          # - databaseTable: "kubecost_cloudcosts_data"
+          #   window: "7d"
+          #   aggregate: "service"
+
+## Provide a name override for the chart.
+# nameOverride: ""
+## Provide a full name override option for the chart.
+fullnameOverride: ""
+
+## Provide additional labels for the chart.
+# chartLabels:
+#   app.kubernetes.io/name: kubecost
+
+## Kubecost Enterprise Custom Pricing (enterprise key required)
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=configuration-csv-pricing
+##
+enterpriseCustomPricing:
+  # Enabled the feature by setting this flag to "true". If enabled, the feature
+  # requires a CSV pricing spec to be provided at the location, below, using a
+  # ConfigMap, for which we provide instructions, also below.
+  enabled: false
+  # To allow for setting the Enterprise Custom Pricing CSV via the UI, leave
+  # the configMapName and location fields unset.
+  #
+  # Use the following command to create a ConfigMap from your pricing spec CSV.
+  # You may change the ConfigMap name, or file name, as long as you set the
+  # correct configMapName and location.URI, respectively.
+  #
+  #  kubectl create configmap -n kubecost kubecost-enterprise-pricing --from-file pricing.csv
+  #
+  configMapName: "" # e.g. kubecost-enterprise-pricing
+  # The file name (e.g. pricing.csv) needs to match the file name used to make the ConfigMap (above)
+  location:
+    URI: "" # e.g. /var/configs/enterprise-pricing/pricing.csv
+  # When true (default), custom pricing is applied retroactively to historical
+  # data. Set to false to apply custom pricing only going forward.
+  applyRetroactively: true
+
+## Kubecost SAML (enterprise key required)
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=configuration-user-management-saml
+##
+saml:
+  enabled: false
+  # secretName: ""
+  # metadataSecretName: ""  # One of metadataSecretName or idpMetadataURL must be set. Defaults to idpMetadataURL if set.
+  # idpMetadataURL: ""
+  # appRootURL: ""
+  # authTimeout: 1440  # Number of minutes the JWT will be valid
+  # redirectURL: ""  # Callback URL redirected to after logout
+  # audienceURI: ""  # Usually the same as the appRootURL. Optionally any string uniquely identifying kubecost to your SAML IDP.
+  # nameIDFormat: ""  # If your SAML provider requires a specific nameid format
+  # isGLUUProvider: false  # An additional URL parameter must be appended for GLUU providers
+  # encryptionCertSecret: ""  # K8s secret storing the x509 certificate used to encrypt an Okta SAML response
+  # decryptionKeySecret: ""  # K8s secret storing the private key associated with the encryptionCertSecret
+  rbac:
+    enabled: false
+    # groups:
+    #   - name: admin
+    #     enabled: false  # If admin is disabled, all SAML users will be able to make configuration changes to the Kubecost frontend
+    #     assertionName: ""
+    #     assertionValues:
+    #       - "admin"
+    #       - "superusers"
+    #   - name: readonly
+    #     enabled: false  # If readonly is disabled, all users authorized on SAML will default to readonly
+    #     assertionName: ""
+    #     assertionValues:
+    #       - "readonly"
+    #   - name: editor
+    #     enabled: true  # If editor is enabled, editors will be allowed to edit reports/alerts scoped to them, and act as readers otherwise. Users will never default to editor.
+    #     assertionName: ""
+    #     assertionValues:
+    #       - "editor"
+
+## Kubecost OIDC (enterprise key required)
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=configuration-user-management-oidc
+##
+oidc:
+  enabled: false
+  clientID: "" # Application client_id parameter obtained from provider. Used to make requests to server.
+  clientSecret: "" # Application/client client_secret parameter obtained from provider. Used to make requests to server.
+  secretName: "kubecost-oidc-secret" # K8s secret where clientsecret will be stored
+  existingCustomSecret:
+    enabled: false
+    name: "" # Name of an existing clientSecret. Overrides the usage of oidc.clientSecret and oidc.secretName.
+  authURL: "" # Authorization endpoint for your identity provider
+  loginRedirectURL: "" # Kubecost URL endpoint which handles auth flow
+  discoveryURL: "" # Your identity provider's endpoint sharing OIDC configuration
+  skipOnlineTokenValidation: false # If true, validate JWT claims locally
+  useClientSecretPost: false # If true, only use client_secret_post method. Otherwise attempt to send the secret in both the header and the body.
+  hostedDomain: "" # Optional, blocks access to the auth domain specified in the hd claim of the provider ID token
+  useIDToken: false # If true, use ID token for authentication. Otherwise, use access token. Set it to true if your identity providers communicate a user's group in the id_token (e.g. Entra ID).
+  rbac:
+    enabled: false
+    # groups:
+    #   - name: admin  # Admins have permissions to edit Kubecost settings and save reports
+    #     enabled: false
+    #     claimName: "roles"  # Kubecost matches this string against the JWT's payload key containing RBAC info (this value is unique across identity providers)
+    #     claimValues:  # Kubecost matches these strings with the roles created in your identity provider
+    #       - "admin"
+    #       - "superusers"
+    #   - name: readonly  # Readonly users do not have permissions to edit Kubecost settings or save reports.
+    #     enabled: false
+    #     claimName: "roles"
+    #     claimValues:
+    #       - "readonly"
+    #   - name: editor  # Editors have permissions to edit reports/alerts and act as readers otherwise
+    #     enabled: false
+    #     claimName: "roles"
+    #     claimValues:
+    #       - "editor"
+
+## Kubecost Teams (enterprise key required)
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=ui-teams
+##
+teams:
+  teamsConfigMapName: "" # Name of the ConfigMap containing the teams configuration, if manually created, which overrides any other configured teams
+  teamsConfig: [] # List of teams configurations, if teamsConfigMapName is not set, which will override UI-configured teams
+    # - id: ''
+    #   name: helm-team
+    #   roles:
+    #   - id: ''
+    #     name: helm-role
+    #     description: helm configured role
+    #     pages:
+    #       showOverview: true
+    #       showAllocation: true
+    #       showAsset: true
+    #       showCloudCost: true
+    #       showClusters: true
+    #       showExternalCosts: true
+    #       showNetwork: true
+    #       showCollections: true
+    #       showReports: true
+    #       showInsights: true
+    #       showActions: true
+    #       showAlerts: true
+    #       showBudgets: true
+    #       showAnomalies: true
+    #       showEfficiency: true
+    #       showSettings: true
+    #     permissions: admin
+    #     routes: []
+    #     allocationFilters:
+    #     - key: cluster
+    #       operator: ":"
+    #       value: cluster-one
+    #     assetFilters: []
+    #     cloudCostFilters: []
+    #     resourceQuotaFilters: []
+    #   claims:
+    #     NameID: email@domain.com
+
+## Adds the HTTP_PROXY, HTTPS_PROXY, and NO_PROXY environment variables to all
+## containers. Typically used in environments that have firewall rules which
+## prevent kubecost from accessing cloud provider resources.
+## While this example is provided, testing is limited.
+## Ref: https://www.oreilly.com/library/view/security-with-go/9781788627917/5ea6a02b-3d96-44b1-ad3c-6ab60fcbbe4f.xhtml
+##
+## You must also set the finops-agent systemProxy values independently.
+## Please merge these values below with the finopsagent: values for your release.
+# finopsagent:
+#   extraEnvVars:
+#   - name: HTTP_PROXY
+#     value: httpProxyUrl
+#   - name: http_proxy
+#     value: httpProxyUrl
+#   - name: HTTPS_PROXY
+#     value: httpsProxyUrl
+#   - name: https_proxy
+#     value: httpsProxyUrl
+#   - name: NO_PROXY
+#     value: noProxy
+#   - name: no_proxy
+#     value: noProxy
+##
+systemProxy:
+  enabled: false
+  httpProxyUrl: ""
+  httpsProxyUrl: ""
+  noProxy: "localhost, 127.0.0.1" # localhost and 127.0.0.1 are required to communicate with ClickHouse when systemProxy is enabled.
+
+## deprecated: this image pull secret (on the root level) is for backwards compatibility.
+## Note that this format is different that what is used in global.imagePullSecrets
+## When both are set, global.imagePullSecrets will be used (and not this block below).
+## The below key will not be used for the finops-agent pod. Consider using global.imagePullSecrets instead.
+imagePullSecrets: []
+# - name: "image-pull-secret"
+
+## Kubecost Frontend
+##
+frontend:
+  enabled: true
+  replicas: 1
+  ## Override the image name and version for the frontend.
+  ## If not set, the image will be pulled from the registry and repository specified in the image block.
+  ## If set, the fullImageName will be used to pull the image.
+  ## Example:
+  ## fullImageName: gcr.io/kubecost1/frontend:v3.0.0
+  fullImageName: ""
+  image:
+    registry: "" # Default is "icr.io"
+    repository: kubecost/frontend
+    tag: "" # Default is to match the Chart.AppVersion
+  upstreamAggregatorConfiguration: ""
+
+  imagePullPolicy: IfNotPresent
+
+  ## Override the nginx config map name for the frontend.
+  ## If not set, the default name will be nginx-conf-{release-name} and a configmap will be created.
+  ## If set, the specified config map name will be used and no configmap will be created by this chart.
+  ## Example:
+  ## nginxConfigMapName: my-custom-nginx-config
+  nginxConfigMapName: ""
+
+  # extraEnv:
+  # - name: NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE
+  #   value: "1"
+  # securityContext:
+  #   readOnlyRootFilesystem: true
+  resources:
+    requests:
+      cpu: "10m"
+      memory: "55Mi"
+  service:
+    type: ClusterIP
+    port: 9090
+    targetPort: 9090
+    nodePort: {}
+    labels: {}
+    annotations: {}
+    loadBalancerSourceRanges: []
+    sessionAffinity:
+      enabled: false # Makes sure that connections from a client are passed to the same Pod each time, when set to `true`. You should set it when you enabled authentication through OIDC or SAML integration.
+      timeoutSeconds: 10800
+  deploymentStrategy: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priority:
+    enabled: false
+    name: ""
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 1
+    periodSeconds: 5
+    failureThreshold: 6
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 1
+    periodSeconds: 5
+    failureThreshold: 6
+  ipv6:
+    enabled: true # disable if the cluster does not support ipv6
+  timeoutSeconds: 300 # should be rarely used, but can be increased if needed
+
+  # Default server block directives; extraServerConfig overrides matching keys.
+  bufferConfig:
+    enabled: true
+    directives:
+      proxy_busy_buffers_size: "512k"
+      proxy_buffers: "4 512k"
+      proxy_buffer_size: "256k"
+      large_client_header_buffers: "8 2m"
+      client_header_buffer_size: "2m"
+
+  # Additional server block directives (merged on top of bufferConfig.directives).
+  # extraServerConfig: |-
+  #   ...
+
+  # Configurable headers for nginx responses. Applied to all route locations
+  nginxHeaders:
+    server:
+      - "'Access-Control-Allow-Origin' '*' always;"
+      - "'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;"
+      - 'Content-Security-Policy "default-src ''self'' data: telemetry.monitoring.kubecost.cloud api.userway.com cdn.userway.com api.mixpanel.com; connect-src http: https:; style-src ''self'' ''unsafe-inline''; frame-ancestors ''none''; form-action ''self'';";'
+      - Cache-Control "must-revalidate";
+      - 'X-Content-Type-Options "nosniff";'
+
+  # Set to true to set all upstreams to use <service>.<namespace>.svc.cluster.local instead of just <service>.<namespace>
+  useDefaultFqdn: false
+  forecasting:
+    fqdn: "" # Example: kubecost-forecasting.kubecost.svc.cluster.local:5000
+  aggregator:
+    fqdn: "" # Example: kubecost-aggregator.kubecost.svc.cluster.local:9004
+  cloudCost:
+    fqdn: "" # Example: kubecost-cloud-cost.kubecost.svc.cluster.local:9005
+  clusterController:
+    fqdn: "" # Example: cluster-controller.kubecost.svc.cluster.local:9731
+
+## Kubecost Local Store
+## When no federated storage bucket is configured, localStore provides local storage via a
+## container, PVC, and service for agent and aggregator communication.
+##
+localStore:
+  enabled: true
+
+  image:
+    registry: "" # Default is "icr.io"
+    repository: kubecost/cost-model
+    tag: "" # Default is to match the Chart.AppVersion
+  fullImageName: "" # Overrides the default image construction logic.
+  imagePullPolicy: IfNotPresent
+
+  ## Retention values determine for what duration into the past data will be
+  ## kept on the local store pv.
+  retention10m: 36
+  retention1h: 49
+  retention1d: 15
+
+  resources: {}
+  # requests:
+  #   cpu: 1000m
+  #   memory: 1Gi
+  # limits:
+  #   memory: 3Gi
+  #   cpu: 100m
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 200
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: {}
+  extraVolumes: []
+  extraVolumeMounts: []
+
+  persistentVolume:
+    size: 32Gi
+    ## Note that setting enabled: false means all data will be lost out on pod restart unless using federated storage.
+    enabled: true
+    storageClass: ""
+    existingClaim: "" # kubecost-cost-analyzer # use this if upgrading from kubecost 2.x
+    labels: {}
+    annotations:
+      ## The "helm.sh/resource-policy: keep" annotation is used to prevent the persistent volume from being deleted when uninstalling or moving to a different deployment method.
+      # This can be used to allow the agent history to be uploaded to cloud storage when upgrading to Enterprise.
+      helm.sh/resource-policy: keep
+
+## FinOps Agent
+## Collects kubernetes metrics and sends them to storage. Below are a subset of
+## values from the finopsagent subchart that are most commonly changed.
+## Ref: https://github.com/kubecost/finops-agent-chart/blob/main/charts/finops-agent/values.yaml
+##
+finopsagent:
+  enabled: true
+  image:
+    repository: ibm-finops/agent
+  #   registry: ""  # Default is "icr.io"
+  #   tag: ""  # Default is set in Chart.yaml
+  # fullImageName: ""  # fullImageName If set, will override the image registry, repo/name and tag.
+  # serviceAccount:
+  #   create: true
+  #   name: finops-agent
+  agent:
+    collectorDataSource:
+      enabled: true
+      ## Changing the scrapeInterval is not recommended unless there are high-cost short-lived workloads that are not captured.
+      scrapeInterval: 60s
+      ## Retention values are for the agent's local store only and do not affect Kubecost history.
+      ## These can be increased, but will require more memory.
+      retention10m: 6
+      retention1h: 3
+      retention1d: 2
+    exporter:
+      ## Emission interval is the interval at which the agent will emit metrics to the object storage.
+      ## This can be increased to reduce the number of object (versions) written to the object storage when versioning is enabled.
+      emissionInterval: 1m
+    cloudability:
+      ## Cloudability requires an API key to send data to the cloudability platform
+      enabled: false
+
+    kubecost:
+      projectID: ""
+      awsSpotDataBucket: ""
+      awsSpotDataPrefix: ""
+      awsSpotDataRegion: ""
+      customPrices:
+        enabled: false
+        CPU: ""
+        GPU: ""
+        RAM: ""
+        spotCPU: ""
+        spotGPU: ""
+        spotRAM: ""
+        storage: ""
+        internetNetworkEgress: ""
+        regionNetworkEgress: ""
+        zoneNetworkEgress: ""
+      discount: ""
+      negotiatedDiscount: ""
+      gpuLabel: ""
+      gpuLabelValue: ""
+      spotLabel: ""
+      spotLabelValue: ""
+
+## Installs Kubecost/OpenCost plugins
+## Ref: https://opencost.io/docs/integrations/plugins/
+##
+plugins:
+  enabled: false
+  install:
+    enabled: false
+    fullImageName: curlimages/curl:latest
+    securityContext:
+      allowPrivilegeEscalation: false
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1001
+  folder: /opt/opencost/plugin
+  version: "" # By default, the latest version of the plugins will be downloaded
+  enabledPlugins: []
+    # - datadog
+  existingCustomSecret:
+    enabled: false
+    name: ""
+  secretName: kubecost-plugin-secret # Name of secret to be created if existingCustomSecret is not enabled
+  configs: {}
+    # datadog: |
+    #   {
+    #   "datadog_site": "<INSERT_DATADOG_SITE>",
+    #   "datadog_api_key": "<INSERT_DATADOG_API_KEY>",
+    #   "datadog_app_key": "<INSERT_DATADOG_APP_KEY>"
+    #   }
+
+## Basic Kubecost ingress, more examples available in docs
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=installation-ingress-examples
+##
+ingress:
+  enabled: false
+  # className: "nginx"
+  labels: {}
+    # kubernetes.io/tls-acme: "true"
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-http
+    # kubernetes.io/tls-acme: "true"
+  paths: ["/"] # There's no need to route specifically to the pods-- we have an nginx deployed that handles routing
+  pathType: ImplementationSpecific
+  hosts:
+    - kubecost.local
+  tls: []
+  #  - secretName: kubecost-tls
+  #    hosts:
+  #      - kubecost.local
+
+## Optional Gateway API HTTPRoute (one per ingress). Disabled by default.
+## When enabled, only httpRoute.* values are used (no fallback to ingress).
+## Install will fail if httpRoute.enabled is true and parentRefs is empty or the first parentRef has no name.
+##
+httpRoute:
+  enabled: false
+  # parentRefs: required when enabled. Reference the Gateway(s) this route attaches to.
+  parentRefs:
+    - name: gateway
+  #     namespace: my-gateway-namespace  # optional
+  #     sectionName: http                 # optional, listener name
+  #     port: 80                          # optional, listener port
+  labels: {}
+  annotations: {}
+  hostnames:
+    - kubecost.local
+  paths: ["/"]
+  pathType: PathPrefix # Gateway API: PathPrefix, Exact, or RegularExpression
+
+## Optional daemonset to more accurately attribute network costs to the correct workload
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=configuration-network-cost
+##
+networkCosts:
+  enabled: true
+
+  ## Override the image name and version for the network costs.
+  ## If not set, the image will be pulled from the registry and repository specified in the image block.
+  ## If set, the fullImageName will be used to pull the image.
+  ## Example:
+  ## fullImageName: gcr.io/kubecost1/kubecost-network-costs:v0.18.1
+  fullImageName: ""
+  image:
+    registry: "" # Default is "icr.io"
+    repository: kubecost/network-costs
+    tag: v0.19.1
+  imagePullPolicy: IfNotPresent
+
+  updateStrategy:
+    type: RollingUpdate
+
+  prometheusScrape: false
+  serviceMonitor:
+    enabled: false
+    interval: 1m
+    scrapeTimeout: 10s
+    additionalLabels: {}
+    metricRelabelings: []
+    relabelings: []
+
+  # Traffic Logging will enable logging the top 5 destinations for each source
+  # every 30 minutes.
+  trafficLogging: true
+
+  # Log level for the network cost containers. Options are "trace", "debug", "info", "warn", "error", "fatal", "panic"
+  logLevel: info
+
+  # Leader/Follower Kubernetes Watchers: Instead of every network-costs pod running watchers for kubernetes resources, a
+  # leader is selected as the designated watcher, and delta updates are sent to every follower pod over http. This option is
+  # recommended for large kubernetes clusters to avoid overwhelming the kubernetes API.
+  leaderKubernetesWatcher: false
+
+  # Enabling this option will restrict the pod watchers to only pods that are hosted on the node network-costs in running on.
+  # This reduces the memory footprint of the pod mapping inside network costs slightly at the cost of classification accuracy
+  # on ingress. Note that this option is only applicable when leaderKubernetesWatcher is false
+  hostNodeNetworkMap: false
+
+  # Port will set both the containerPort and hostPort to this value.
+  # These must be identical due to network-costs being run on hostNetwork
+  port: 3001
+  # this daemonset can use significant resources on large clusters: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=dashboard-network-traffic-cost-allocation
+  resources:
+    limits: # remove the limits by setting cpu: null
+      cpu: 500m # can be less, will depend on cluster size
+      # memory: it is not recommended to set a memory limit
+    requests:
+      cpu: 50m
+      memory: 20Mi
+  extraArgs: []
+  config:
+    # Configuration for traffic destinations, including specific classification
+    # for IPs and CIDR blocks. This configuration will act as an override to the
+    # automatic classification provided by network-costs.
+    destinations:
+      # In Zone contains a list of address/range that will be
+      # classified as in zone.
+      in-zone:
+        # Loopback Addresses in "IANA IPv4 Special-Purpose Address Registry"
+        - "127.0.0.0/8"
+        # IPv4 Link Local Address Space
+        - "169.254.0.0/16"
+        # Private Address Ranges in RFC-1918
+        - "10.0.0.0/8" # Remove this entry if using Multi-AZ Kubernetes
+        - "172.16.0.0/12"
+        - "192.168.0.0/16"
+
+      # In Region contains a list of address/range that will be
+      # classified as in region. This is synonymous with cross
+      # zone traffic, where the regions between source and destinations
+      # are the same, but the zone is different.
+      in-region: []
+
+      # Cross Region contains a list of address/range that will be
+      # classified as non-internet egress from one region to another.
+      cross-region: []
+
+      # Internet contains a list of address/range that will be
+      # classified as internet traffic. This is synonymous with traffic
+      # that cannot be classified within the cluster.
+      # NOTE: Internet classification filters are executed _after_
+      # NOTE: direct-classification, but before in-zone, in-region,
+      # NOTE: and cross-region.
+      internet: []
+
+      # Direct Classification specifically maps an ip address or range
+      # to a region (required) and/or zone (optional). This classification
+      # takes priority over in-zone, in-region, and cross-region configurations.
+      direct-classification: []
+      # - region: "us-east1"
+      #   zone: "us-east1-c"
+      #   ips:
+      #     - "10.0.0.0/24"
+    services:
+      # google-cloud-services: when set to true, enables labeling traffic metrics with google cloud
+      # service endpoints
+      google-cloud-services: true
+      # amazon-web-services: when set to true, enables labeling traffic metrics with amazon web service
+      # endpoints.
+      amazon-web-services: true
+      # azure-cloud-services: when set to true, enables labeling traffic metrics with azure cloud service
+      # endpoints
+      azure-cloud-services: true
+      # user defined services provide a way to define custom service endpoints which will label traffic metrics
+      # falling within the defined address range.
+      # services:
+      #  - service: "test-service-1"
+      #    ips:
+      #      - "19.1.1.2"
+      #  - service: "test-service-2"
+      #    ips:
+      #      - "15.128.15.2"
+      #      - "20.0.0.0/8"
+
+  ## Network costs is a daemonset and may need to be scheduled on nodes with specific taints.
+  ## If monitoring the network costs for workloads on nodes with specific taints, add the tolerations here.
+  ## to tolerate all taints, use the following:
+  ## tolerations:
+  ##   - operator: Exists
+  ##     effect: NoSchedule
+  ## to tolerate specific taints, use the following:
+  ## tolerations:
+  ##   - operator: Equal
+  ##     effect: NoSchedule
+  ##     key: "key"
+  ##     value: "value"
+  tolerations: []
+  ## networkCosts requires that the node has topology.kubernetes.io/region and topology.kubernetes.io/zone labels.
+  ## The below nodeAffinity policy will prevent the pods from running on any node that does not have both labels.
+  ## to override this, set affinity: ""
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: topology.kubernetes.io/region
+                operator: Exists
+              - key: topology.kubernetes.io/zone
+                operator: Exists
+  service:
+    annotations: {}
+    labels: {}
+  priorityClassName: ""
+  podMonitor:
+    enabled: false
+    additionalLabels: {}
+  additionalLabels: {}
+  nodeSelector: {}
+  annotations: {}
+  healthCheckProbes: {}
+  additionalSecurityContext: {}
+
+## Kubecost Forecasting forecasts future cost patterns based on historical
+## patterns observed by Kubecost.
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=forecasting
+##
+forecasting:
+  enabled: true
+  serviceAccountName: ""
+  ## Override the image name and version for the forecasting.
+  ## If not set, the image will be pulled from the registry and repository specified in the image block.
+  ## If set, the fullImageName will be used to pull the image.
+  ## Example:
+  ## fullImageName: gcr.io/kubecost1/kubecost-modeling:v0.1.35
+  fullImageName: ""
+  image:
+    registry: "" # Default is "icr.io"
+    repository: kubecost/modeling
+    tag: v0.2.0
+  imagePullPolicy: IfNotPresent
+
+  # Resource specification block for the forecasting container.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 300Mi
+    limits:
+      cpu: 1500m
+      memory: 1Gi
+
+  # Set environment variables for the forecasting container as key/value pairs.
+  env:
+    # -t is the worker timeout which primarily affects model training time;
+    # if it is not high enough, training workers may die mid training
+    "GUNICORN_CMD_ARGS": "--log-level info -t 1200"
+    "LOG_LEVEL": "info"
+  priority:
+    enabled: false
+    name: ""
+  nodeSelector: {}
+  tolerations: []
+  annotations: {}
+  affinity: {}
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 200
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 200
+
+## The Kubecost Aggregator is the primary query backend for Kubecost
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=federation-kubecost-aggregator
+##
+aggregator:
+  enabled: true
+
+  image:
+    registry: "" # Default is "icr.io"
+    repository: kubecost/cost-model
+    tag: "" # Default is to match the Chart.AppVersion
+  fullImageName: "" # Overrides the default image construction logic.
+  imagePullPolicy: IfNotPresent
+
+  ## Retention values determine for what duration into the past data will be
+  ## ingested into Aggregator's database
+  retention1d: 91
+  retention1h: 49
+  retention10m: 36
+
+  # Replicas sets the number of Aggregator replicas.
+  replicas: 1
+
+  # Log level for the aggregator container. Options are "trace", "debug", "info", "warn", "error", "fatal", "panic"
+  logLevel: info
+
+  #   standardDiscount: "" # custom negotiated cloud provider discount, applied to all ingested asset compute costs. Overrides negotiatedDiscount on any cluster being aggregated.
+
+  # stagingEmptyDirSizeLimit changes how large the "staging"
+  # /var/configs/waterfowl emptyDir is. It only takes effect in StatefulSet
+  # configurations of Aggregator, other configurations are unaffected.
+  stagingEmptyDirSizeLimit: 2Gi
+
+  # this is the number of partitions the datastore is split into for copying
+  # the higher this number, the lower the ram usage but the longer it takes for
+  # new data to show in the kubecost UI
+  # set to 0 for max partitioning (minimum possible ram usage, but the slowest)
+  # the default of 25 is sufficient for 95%+ of users. This should only be modified
+  # after consulting with Kubecost's support team
+  numDBCopyPartitions: 25
+
+  # How many threads the read database is configured with (i.e. Kubecost API /
+  # UI queries). If value is 0, the number of threads is bounded by the
+  # number of cores
+  # default: 0 is no limit
+  dbReadThreads: 0
+
+  # How many threads the write database is configured with (i.e. ingestion of
+  # new data from S3). If increasing this value, it is recommended to increase
+  # the aggregator's memory requests & limits.
+  # default: 1
+  dbWriteThreads: 1
+
+  # How many threads to use when ingesting Asset/Allocation/CloudCost data
+  # from the federated storage bucket.
+  # default: 1
+  dbConcurrentIngestionCount: 1
+
+  # Memory limit applied to read database and write database connections. The
+  # default of "no limit" is appropriate when first establishing a baseline of
+  # resource usage required. It is eventually recommended to set these values
+  # such that dbMemoryLimit + dbWriteMemoryLimit < the total memory available
+  # to the aggregator pod.
+  # default: 0GB is no limit
+  dbMemoryLimit: 0GB
+  dbWriteMemoryLimit: 0GB
+
+  # Disable the use of the v3 database (ClickHouse) as the database for the aggregator.
+  # May require data re-ingestion
+  # default: false
+  legacyMode: false
+
+  # How much container resource usage data to retain in the DB, in terms of days.
+  #
+  # In high scale environments setting this to `0` can improve performance if hourly
+  # resolution is not a requirement.
+  #
+  # default: 1
+  containerResourceUsageRetentionDays: 1
+
+  # Trim memory on close, only change if advised by Kubecost support.
+  dbTrimMemoryOnClose: true
+
+  ## Configure the Collections service for aggregator.
+  collections:
+    cache:
+      enabled: true
+
+  ## The aggregator pod has 2 PVCs that will need to be in the same availability zone unless using multi-zone storage.
+  ## Storage classes that have 'volumeBindingMode: WaitForFirstConsumer' will do this automatically.
+  ## Settings and reports created via the UI are stored in the persistentConfigs volume.
+  persistentConfigsStorage:
+    storageClass: ""
+    ## If using high iops storage, the storageRequest may need to be increased to meet the provider's minimum ratio for gb/iops.
+    storageRequest: 1Gi
+    annotations:
+      ## The "helm.sh/resource-policy: keep" annotation is used to prevent the persistent volume from being deleted when uninstalling or moving to a different deployment method.
+      helm.sh/resource-policy: keep
+  aggregatorDbStorage:
+    ## IOPS performance of the aggregatorDbStorage will have significant impact on the performance of queries.
+    ## block storage is REQUIRED for the aggregatorDbStorage. NFS/file is not supported.
+    storageClass: ""
+    storageRequest: 128Gi
+    annotations:
+      ## The "helm.sh/resource-policy: keep" annotation is used to prevent the persistent volume from being deleted when uninstalling or moving to a different deployment method.
+      helm.sh/resource-policy: keep
+
+  # WARNING: Setting to true will mount the Aggregator database to the hostPath.
+  # If the pod gets rescheduled to another node, the database will need to be
+  # entirely rebuilt, causing significant service disruption. In large
+  # environments, database rebuilds can take over a day to complete. NOT
+  # RECOMMENDED for production use.
+  #
+  # This option should only be used when block storage is not available and your
+  # StorageClass is not compatible with ClickHouse (e.g. NFS, S3-backed
+  # storage).
+  #
+  # IMPORTANT: When using hostPath, you MUST configure:
+  # 1. nodeSelector to pin the pod to a specific node
+  # 2. securityContext with runAsUser: 0 and fsGroup: 0 (for directory permissions)
+  useHostPath: false
+
+  # Only applies when useHostPath=true. Path on the host to use for the volume.
+  hostPathDbStoragePath: /mnt/kubecost-aggregator-db
+
+  # WARNING: Setting to true will cause the database to be completely rebuilt
+  # upon any pod restart, causing significant service disruption. In large
+  # environments, database rebuilds can take over a day to complete. NOT
+  # RECOMMENDED for production use.
+  #
+  # This option should only be used when block storage is not available and your
+  # StorageClass is not compatible with ClickHouse (e.g. NFS, S3-backed
+  # storage).
+  useEmptyDir: false
+
+  # Only applies when useEmptyDir=true. Size limit for the emptyDir volume.
+  emptyDirDbStorageSizeLimit: 128Gi
+
+  resources:
+    ## Consider setting a limit after a baseline has been established
+    limits: {}
+      # memory: ""
+      # cpu: ""
+    requests:
+      memory: 3Gi
+      cpu: 100m
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 200
+
+  ## Set additional environment variables for the aggregator pod
+  extraEnv: []
+  # - name: SOME_VARIABLE
+  #   value: "some_value"
+
+  ## Add a priority class to the aggregator pod
+  priority:
+    enabled: false
+    name: ""
+
+  ## Optional - add extra ports to the aggregator container. For kubecost development purposes only - not recommended for users.
+  extraPorts: []
+  #   - name: debug
+  #     port: 40000
+  #     targetPort: 40000
+
+  extraContainerPorts: []
+  #   - name: db-metrics
+  #     protocol: TCP
+  #     targetPort: 9363
+  #     containerPort: 9363
+
+  ## Define a securityContext for the aggregator pod. This will take highest precedence.
+  securityContext: {}
+
+  ## Define the container-level security context for the aggregator pod. This will take highest precedence.
+  containerSecurityContext: {}
+
+  ## Provide a Service Account name for aggregator.
+  # serviceAccountName: ""
+
+  ## Define a nodeSelector for the aggregator pod
+  nodeSelector: {}
+
+  ## Define tolerations for the aggregator pod
+  tolerations: []
+
+  ## Annotations to be added for aggregator deployment or statefulset
+  annotations: {}
+
+  ## Define Pod affinity for the aggregator pod
+  affinity: {}
+
+  ## Define extra volumes for the aggregator pod
+  extraVolumes: []
+
+  ## Define extra volumemounts for the aggregator pod
+  extraVolumeMounts: []
+
+  # Jaeger is an optional container attached to wherever the Aggregator
+  # container is running. It is used for performance investigation. Enable if
+  # Kubecost Support asks.
+  jaeger:
+    enabled: false
+    image: jaegertracing/all-in-one
+    imageVersion: latest
+
+  service:
+    labels: {}
+
+  serviceMonitor:
+    enabled: false
+    interval: 1m
+    scrapeTimeout: 10s
+    additionalLabels: {}
+    metricRelabelings: []
+    relabelings:
+      - action: replace
+        sourceLabels:
+          - __meta_kubernetes_namespace
+        targetLabel: namespace
+
+## Kubecost Multi-cluster Heartbeat and Diagnostics
+## Each agent cluster sends its diagnostic data to a storage bucket. Data is
+## deleted after the specified retention period.
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=cluster-multi-diagnostics
+##
+diagnostics:
+  enabled: true
+  storageLookback: 1d # How far back to read from storage when aggregator initializes
+  retention: 30d # How long to keep diagnostics data before deletion in the aggregator
+heartbeat:
+  enabled: true
+  storageLookback: 1d # How far back to read from storage when aggregator initializes
+  retention: 30d # How long to keep heartbeat data before deletion in the aggregator
+
+## Kubecost Cloud Cost Pod
+## Processes cloud billing data and pushes CloudCost ETL data to the Federated Storage Bucket.
+##
+cloudCost:
+  enabled: true
+
+  image:
+    registry: "" # Default is "icr.io"
+    repository: kubecost/cost-model
+    tag: "" # Default is to match the Chart.AppVersion
+  fullImageName: "" # Overrides the default image construction logic.
+  imagePullPolicy: IfNotPresent
+
+  ## Retention values determine for what duration into the past data cloud billing data will be
+  ## queried and processed into ETL.
+  retention1d: 91
+
+  ## Specify an existing Kubernetes Secret holding the cloud integration information. This Secret must contain
+  ## a key with name `cloud-integration.json` and the contents must be in a specific format. It is expected
+  ## to exist in the release Namespace. This is mutually exclusive with cloudIntegrationJSON where only one must be defined.
+  cloudIntegrationSecret: ""
+
+  ## Specify the cloud integration information in JSON form if pointing to an existing Secret is not desired or you'd rather
+  ## define the cloud integration information directly in the values file. This will result in a new Secret being created
+  ## named `cloud-integration` in the release Namespace. It is mutually exclusive with the cloudIntegrationSecret where only one must be defined.
+  cloudIntegrationJSON: ""
+  # cloudIntegrationJSON: |-
+  #   {
+  #   "aws": {
+  #     "athena": [
+  #       {
+  #         "bucket": "<ATHENA_BUCKET_NAME>",
+  #         "region": "<ATHENA_REGION>",
+  #         "database": "<ATHENA_DATABASE>",
+  #         "table": "<ATHENA_TABLE>",
+  #         "workgroup": "<ATHENA_WORKGROUP>",
+  #         "account": "<ACCOUNT_NUMBER>",
+  #         "authorizer": {
+  #           "authorizerType": "AWSAccessKey",
+  #           "id": "<ACCESS_KEY_ID>",
+  #           "secret": "<ACCESS_KEY_SECRET>"
+  #         }
+  #       }
+  #     ]
+  #   },
+  #   "azure": {
+  #     "storage": [
+  #       {
+  #         "subscriptionID": "<SUBSCRIPTON_ID>",
+  #         "account": "<STORAGE_ACCOUNT>",
+  #         "container": "<STORAGE_CONTAINER>",
+  #         "path": "<CONTAINER_PATH>",
+  #         "cloud": "<CLOUD>",
+  #         "authorizer": {
+  #           "accessKey": "<STORAGE_ACCESS_KEY>",
+  #           "account": "<STORAGE_ACCOUNT>",
+  #           "authorizerType": "AzureAccessKey"
+  #         }
+  #       },
+  #       {
+  #         "subscriptionID": "<SUBSCRIPTION_ID>",
+  #         "account": "<STORAGE_ACCOUNT>",
+  #         "container": "<EXPORT_CONTAINER>",
+  #         "path": "",
+  #         "cloud": "<CLOUD>",
+  #         "authorizer": {
+  #           "accessKey": "<ACCOUNT_ACCESS_KEY>",
+  #           "account": "<STORAGE_ACCOUNT>",
+  #           "authorizerType": "AzureAccessKey"
+  #         }
+  #       }
+  #     ]
+  #   },
+  #     "gcp": {
+  #       "bigQuery": [
+  #         {
+  #           "projectID": "<GCP_PROJECT_ID>",
+  #           "dataset": "detailedbilling",
+  #           "table": "gcp_billing_export_resource_v1_0121AC_C6F51B_690771",
+  #           "authorizer": {
+  #             "authorizerType": "GCPServiceAccountKey",
+  #             "key": {
+  #               "type": "service_account",
+  #               "project_id": "<GCP_PROJECT_ID>",
+  #               "private_key_id": "<PRIVATE_KEY_ID>",
+  #               "private_key": "<PRIVATE_KEY>",
+  #               "client_email": "<CLIENT_EMAIL>",
+  #               "client_id": "<CLIENT_ID>",
+  #               "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  #               "token_uri": "https://oauth2.googleapis.com/token",
+  #               "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  #               "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/<CERT_NAME>"
+  #               }
+  #             }
+  #           }
+  #         ]
+  #       }
+  #     }
+
+  resources: {}
+    # requests:
+    #   cpu: 1000m
+    #   memory: 1Gi
+
+  refreshRateHours: "6"
+  queryWindowDays: "7"
+  runWindowDays: "3"
+
+  ## By default, the cloud cost pod will use the same service account as the aggregator pod.
+  ## This can be overridden to use a different service account.
+  serviceAccountName: ""
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 200
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  logLevel: info
+  extraEnv: []
+  # - name: EXTRA_ENV_VAR
+  #   value: "extra_env_var_value"
+  extraVolumes: []
+  extraVolumeMounts: []
+
+  ## Persistent storage for cloud cost configs
+  ## Settings and configurations created via the UI are stored in the persistentConfigs volume.
+  persistentConfigsStorage:
+    enabled: true
+    storageClass: "" # Uses global.defaultStorageClass if not specified
+    size: 1Gi
+    existingClaim: "" # Optional: use an existing PVC instead of creating a new one
+    annotations:
+      ## The "helm.sh/resource-policy: keep" annotation is used to prevent the persistent volume from being deleted when uninstalling or moving to a different deployment method.
+      helm.sh/resource-policy: keep
+
+## Kubecost Cluster Controller for Automated Right Sizing and Turndown
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=configuration-cluster-controller
+##
+clusterController:
+  enabled: true
+  serviceAccount:
+    create: true
+    annotations: {}
+
+  ## Override the image name and version for the cluster controller.
+  ## If not set, the image will be pulled from the registry and repository specified in the image block.
+  ## If set, the fullImageName will be used to pull the image.
+  ## Example:
+  ## fullImageName: gcr.io/kubecost1/cluster-controller:v0.16.34
+  fullImageName: ""
+  image:
+    registry: "" # Default is "icr.io"
+    repository: kubecost/cluster-controller
+    tag: v0.16.39
+  imagePullPolicy: IfNotPresent
+  logLevel: info
+  extraEnv: []
+  # - name: EXTRA_ENV_VAR
+  #   value: "extra_env_var_value"
+  priorityClassName: ""
+  tolerations: []
+  annotations: {}
+  labels: {}
+  securityContext: {}
+  resources: {}
+  affinity: {}
+  nodeSelector: {}
+  ## A separate bucket config specific to action storage can alternatively be supplied via a Secret or a yaml block
+  ## The name of the Secret containing the bucket config. The contents should be stored under a key named actions-store.yaml
+  # storageConfigSecret: actions-store
+
+  ## (If not using Secret) Define storage config directly in yaml, as below:
+  # storageConfig: |-
+  # # AWS EXAMPLE
+  #   type: S3
+  #   config:
+  #     bucket: kubecost-actions-storage-bucket
+  #     endpoint: s3.amazonaws.com
+  #     region: us-east-1
+  #     # best practice is to use pod identities to access AWS resources. Otherwise it is possible to use an access_key and secret_key
+  #     access_key: "<your-access-key>"
+  #     secret_key: "<your-secret-key>"
+  # # AZURE EXAMPLE
+  #   type: AZURE
+  #   config:
+  #     storage_account: ""
+  #     storage_account_key: ""
+  #     container: ""
+  #     max_retries: 0
+  # # GCP EXAMPLE
+  #   type: GCS
+  #   config:
+  #     bucket: kubecost-actions-storage-bucket
+  #     service_account: |-
+  #       {
+  #         "type": "service_account",
+  #         "project_id": "...",
+  #         "private_key_id": "...",
+  #         "private_key": "...",
+  #         "client_email": "...",
+  #         "client_id": "...",
+  #         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  #         "token_uri": "https://oauth2.googleapis.com/token",
+  #         "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  #         "client_x509_cert_url": ""
+  #       }
+
+  # If an enterprise v2 license is configured, actions will sign configuration files pushed to the store with that license
+  # The cluster controller will be able to validate these files automatically
+  # If on free or trial-tier, or if self-management of signing credentials is desired, signing using a user-configured RSA key can be enabled
+
+  # If this is configured, the private key must also be configured on the cluster controller under .kubecostProductConfigs.actions.signing.rsa
+  signing:
+    rsa:
+      enabled: false # Enables signing via a user-provided RSA key. Requires publicKeySecret to be set.
+      publicKeySecret: "" # The name of the secret containing the priv.pem public key matching the private key configured on the aggregator
+
+  rbac:
+    # In 3.x, only containerRequestRightSizing, resourceQuotaRightSizing, and namespaceTurndown are supported, all other features are in progress.
+    containerRequestRightSizing: true
+    resourceQuotaRightSizing: true
+    namespaceTurndown: true
+    clusterRightSizing: false
+    clusterTurndown: false
+
+  # Controls the rate at which the cluster controller executes operations against the k8s API.
+  # rateLimiter:
+  #   eventsPerSecond: 0.1
+  #   eventBurst: 10
+
+## Kubecost Bug Reports
+## Enables k8s role bindings to access pods/logs limited to .Release.Namespace
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=install-capture-bug-report
+##
+reporting:
+  logCollection: true
+
+serviceAccount:
+  create: true # Set this to false if you're bringing your own service account.
+  annotations: {}
+
+## Kubecost Admission Controller (beta feature)
+## To use this feature, ensure you have run the `create-admission-controller.sh`
+## script. This generates a k8s secret with TLS keys/certificates and a
+## corresponding CA bundle.
+##
+kubecostAdmissionController:
+  enabled: false
+  secretName: webhook-server-tls
+  caBundle: ${CA_BUNDLE}
+
+# Enables or disables the Cost Event Audit pipeline, which tracks recent changes at cluster level
+# and provides an estimated cost impact via the Kubecost Predict API.
+#
+# It is disabled by default to avoid problems in high-scale environments.
+costEventsAudit:
+  enabled: false
+
+## Disable updates to kubecost from the frontend UI and via POST request
+## This feature is considered beta, enterprise users should use teams:
+## https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=ui-teams
+# readonly: false
+
+## Enables or disables the sending of anonymized telemetry data to help
+## improve Kubecost.
+## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=telemetry
+##
+telemetry:
+  enabled: true
+
+## These configs can also be set from the Settings page in the Kubecost product
+## UI. Values in this block override config changes in the Settings UI on pod
+## restart
+##
+kubecostProductConfigs:
+  actions:
+    # Enable multi-cluster cluster controller actions (v2)
+    enabled: false
+
+    ## The Actions feature can optionally use an external storage config that is independent from the federated storage config.
+    ## By default, Actions will use the same bucket config as set in federated storage
+
+    ## This independent bucket config can be supplied via a Secret or a yaml block
+    ## The name of the Secret containing the bucket config. The contents should be stored under a key named actions-store.yaml
+    # storageConfigSecret: actions-store
+
+    ## (If not using Secret) Define storage config directly in yaml, as below:
+    # storageConfig: |-
+    # # AWS EXAMPLE
+    #   type: S3
+    #   config:
+    #     bucket: kubecost-actions-storage-bucket
+    #     endpoint: s3.amazonaws.com
+    #     region: us-east-1
+    #     # best practice is to use pod identities to access AWS resources. Otherwise it is possible to use an access_key and secret_key
+    #     access_key: "<your-access-key>"
+    #     secret_key: "<your-secret-key>"
+    # # AZURE EXAMPLE
+    #   type: AZURE
+    #   config:
+    #     storage_account: ""
+    #     storage_account_key: ""
+    #     container: ""
+    #     max_retries: 0
+    # # GCP EXAMPLE
+    #   type: GCS
+    #   config:
+    #     bucket: kubecost-actions-storage-bucket
+    #     service_account: |-
+    #       {
+    #         "type": "service_account",
+    #         "project_id": "...",
+    #         "private_key_id": "...",
+    #         "private_key": "...",
+    #         "client_email": "...",
+    #         "client_id": "...",
+    #         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    #         "token_uri": "https://oauth2.googleapis.com/token",
+    #         "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    #         "client_x509_cert_url": ""
+    #       }
+
+    # If an enterprise v2 license is configured, actions will sign configuration files pushed to the store with that license
+    # If on free or trial-tier, or if self-management of signing credentials is desired, signing using a user-configured RSA key can be enabled
+
+    # If this is configured, the public key must also be configured on the cluster controller under .clusterController.signing.rsa
+    signing:
+      rsa:
+        enabled: false # Enables signing via a user-provided RSA key. Requires privateKeySecret to be set.
+        privateKeySecret: "" # The name of the secret containing the priv.pem private key
+
+    ## Actions can reference configuration at a global or cluster-specific level
+    # config:
+    #   global: # Define global action configuration
+    #     containerRequestRightSizing:
+    #       enabled: true
+    #     resourceQuotaRightSizing:
+    #       enabled: true
+    #     namespaceTurndown:
+    #       enabled: true
+    #   clusters: # Define cluster-specific action configuration, where top-level keys are cluster names
+    #     cluster-1:
+    #       containerRequestRightSizing:
+    #         enabled: false
+    #       resourceQuotaRightSizing:
+    #         enabled: false
+    #       namespaceTurndown:
+    #         enabled: false
+    #     cluster-2:
+    #       containerRequestRightSizing:
+    #         enabled: false
+    #       resourceQuotaRightSizing:
+    #         enabled: false
+    #       namespaceTurndown:
+    #         enabled: false
+    #   actions:
+    #     containerRequestRightSizing:
+    #       resize-my-cluster:
+    #           cpu: true
+    #           enabled: true
+    #           filter: "cluster:\"my-cluster\""
+    #           memory: true
+    #           profile: "Development"
+    #           rightSizingWindow: "24h"
+    #     namespaceTurndown:
+    #       turndown-my-namespace:
+    #         dryRun: false
+    #         enabled: true
+    #         exclusionWindow: ""
+    #         filter: "cluster:\"my-cluster\"+namespace:\"my-namespace\""
+    #         maintenanceWindow: "* 5-9 * * 0||* 5-9 * * 1||* 5-9 * * 2||* 5-9 * * 3||* 5-9 * * 4||* 5-9 * * 5||* 5-9 * * 6"
+
+  ## Kubecost Budgets and Budgets Actions
+  ## Ref: https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=ui-budgets
+  ##
+  budgets:
+    configmapName: ""
+    budgetsConfig:
+    # - name: "Example Budget 0"
+    #   budgetType: "allocations"  # allocations, asset, cloud or collections
+    #   interval: "weekly"  # weekly or monthly
+    #   intervalDay: 1  # 1-7, 1 is Monday when interval is weekly. 1-31, when interval is monthly.
+    #   spendLimit: 50  # in USD
+    #   values:
+    #     cluster:
+    #     - "cluster-one"
+    #     # namespace:
+    #     #   - "namespace-one"
+    #     #   - "namespace-two"
+    #     # label:
+    #     #   - "label-one:value-one"
+    #     #   - "label-two:value-two"
+    #   actions:
+    #   - amount: 0
+    #     percentage: 50
+    #     emails:
+    #     - "budget-alert@example.com"
+    #     # slackWebhooks:
+    #     #   - "<SLACK_INCOMING_WEBHOOK_URL>"
+    #     # msTeamsWebhooks:
+    #     #   - "https://xxxxx.webhook.office.com"
+
+  ## The cluster profile represents a predefined set of parameters to use when calculating savings.
+  ## Possible values are: [ development, production, high-availability ]
+  clusterProfile: production
+
+  ## Provide a mapping from Account ID to a readable Account Name in a key/value object. Provide Account IDs as they are displayed in CloudCost
+  ## as the 'key' and the Account Name associated with it as the 'value'
+  # cloudAccountMapping:
+  #   EXAMPLE_ACCOUNT_ID: EXAMPLE_ACCOUNT_NAME
+
+  ## Kubecost settings surfaced to the frontend
+  ##
+  labelMappingConfigs: # Names of k8s labels or annotations used to designate different allocation concepts
+    owner_label: "owner"
+    team_label: "team"
+    department_label: "dept"
+    product_label: "product"
+    environment_label: "env"
+  sharedNamespaces: "" # Namespaces with shared workloads, example value: "kube-system\,ingress-nginx\,kubecost\,monitoring"
+  sharedLabelNames: ""
+  sharedLabelValues: "" # Default shared label values, e.g., "app:prometheus"
+  sharedOverhead: 0 # Value representing a fixed external cost per month to be distributed among aggregations.
+  shareTenancyCosts: true # Enable or disable sharing costs such as cluster management fees
+  currencyCode: "USD" # Official support for USD, AUD, BRL, CAD, CHF, CNY, DKK, EUR, GBP, IDR, INR, JPY, NOK, PLN, SEK
+  negotiatedDiscount: "" # Custom negotiated cloud provider discount
+  defaultIdle: false
+
+  ## Apply Enterprise product license
+  productKey:
+    enabled: false
+    key: ""
+    secretname: "" # Reference an existing k8s secret created from a file named productkey.json of format { "key": "enterprise-key-here" }. If the secretname is specified, a configmap with the key will not be created.
+    mountPath: "" # (use instead of secretname) Declare the path at which the product key file is mounted (eg. "/some/custom/path/productkey.json" by a secrets provisioner). The file must be of format { "key": "enterprise-key-here" }.
+
+  #   # The following block enables the use of a custom SMTP server which overrides Kubecost's built-in, external SMTP server for alerts and reports
+  #   smtp:
+  #     config:  |
+  #       {
+  #         "sender_email": "",
+  #         "host": "",
+  #         "port": 587,
+  #         "authentication": true,
+  #         "username": "",
+  #         "password": "",
+  #         "secure": true
+  #       }
+  #     secretname: smtpconfigsecret # Reference an existing k8s secret created from a file named smtp.json of format specified by config above. If the secretname is specified, a configmap with the key will not be created.
+  #     mountPath: "/some/custom/path/smtp.json" # (use instead of secretname) Declare the path at which the SMTP config file is mounted (eg. by a secrets provisioner). The file must be of format specified by config above.
+
+  carbonEstimates: false # Enables Kubecost beta carbon estimation endpoints /assets/carbon and /allocations/carbon
+
+  ## The below options to hide UI elements are only supported in Enterprise
+  hideDiagnostics: false # useful if the primary is not monitored. Supported in limited environments.
+  hideOrphanedResources: false # OrphanedResources works on the primary-cluster's cloud-provider only.
+  hideKubecostActions: false
+  hideReservedInstances: false
+  hideSpotCommander: false
+  hideUnclaimedVolumes: false
+  hideCloudIntegrationsUI: false
+  hideBellIcon: true # Deprecated in v2.7. Default is true, which hides the bell icon in the top right corner of the UI. The new diagnostics is top level in left nav. Change to false to restore the bell icon.
+  hideTeams: false
+  hideCloudCosts: false
+
+#   savingsProfiles: # Define custom profiles for Savings Insights/Actions
+#     requestSizing: # Supported parameters are explained in https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=apis-container-request-right-sizing-recommendation-api-v2
+#     - name: "custom1"
+#       algorithmCPU: "max"
+#       algorithmRAM: "max"
+#       targetUtilizationCPU: 0.80
+#       targetUtilizationRAM: 0.80
+#       minRecCPUMillicores: 10
+#       minRecRAMBytes: 20971520
+#     - name: "custom2"
+#       algorithmCPU: "quantileOfAverages"
+#       algorithmRAM: "quantileOfAverages"
+#       quantileCPU: 0.95
+#       quantileRAM: 0.95
+#       targetUtilizationCPU: 0.50
+#       targetUtilizationRAM: 0.50
+#     resourceQuotaSizing: # Supported parameters are explained in https://www.ibm.com/docs/en/kubecost/self-hosted/3.x?topic=apis-resource-quota
+#     - name: "custom1"
+#       cpuRequestMetric: "request.max"
+#       cpuRequestHeadroom: 0.25
+#       ramRequestMetric: "request.max"
+#       ramRequestHeadroom: 0.25
+#       cpuLimitMetric: "limit.max"
+#       cpuLimitHeadroom: 0.5
+#       ramLimitMetric: "limit.max"
+#       ramLimitHeadroom: 0.5
+#     - name: "custom2"
+#       cpuRequestMetric: "request.p95"
+#       cpuRequestHeadroom: 0.5
+#       ramRequestMetric: "request.p95"
+#       ramRequestHeadroom: 0.5
+#   savingsRecommendationsAllowLists: # Define select list of instance types to be evaluated in computing Savings Recommendations
+#     AWS: []
+#     GCP: []
+#     Azure: []
+#   savingsRecommendationsNodegroupCustomLabels: # Define select list of labels to be used to identify node groups
+#     AWS: []
+#     GCP: []
+#     Azure: []
+
+# Customize the branding, the UI will only honor these values for custom enterprise licenses
+# branding:
+#   productName: "" # Name to use to refer to the product in messaging
+#   footerHTML: "" # HTML to use on the footer
+#   primaryAccentColor: "" # Needs to be legible on #ffffff and #343434 backgrounds
+#   font: "" # Either not set or set to 'ibm'
+#   fullLogoBase64: "" # base64 encoded binary asset to use as the full logo, used in the nav bar when the nav is expanded
+#   fullLogoExt: "" # the extension of the full logo
+#   fullLogoAltText: "" # alt text to apply to the img tags for the full logo
+#   squareLogoBase64: "" # base64 encoded binary asset to use for the square logo, used in the collapsed nav as well as empty and loading states
+#   squareLogoExt: "" # the extension of the square logo
+#   squareLogoAltText: "" # alt text to apply to the img tags for the square logo
+
+# Set to true if the deployment is a SaaS deployment (Internal flag for Kubecost to use, users should not set this on their own)
+saasDeployment: false
+
+# -- Array of extra K8s manifests to deploy
+## Note: Supports use of custom Helm templates
+extraObjects: []
+#  Istio:
+#   - apiVersion: networking.istio.io/v1alpha3
+#     kind: VirtualService
+#     metadata:
+#       name: my-virtualservice
+#     spec:
+#       hosts:
+#       - kubecost.myorg.com
+#       gateways:
+#       - my-gateway
+#       http:
+#       - route:
+#         - destination:
+#             host: kubecost.kubecost.svc.cluster.local
+#             port:
+#               number: 80
+
+# -- Optional override for the image used for the basic health test container
+basicHealth:
+  registry: docker.io
+  repository: alpine/curl
+  tag: 8.17.0
+
+# -- Optional override for the image used for the HTTPRoute helm test (only when httpRoute.enabled)
+httprouteTest:
+  image: bitnami/kubectl:1.31

@@ -1,0 +1,34 @@
+apiVersion: k8s.keycloak.org/v2beta1
+kind: Keycloak
+metadata:
+  name: workshop-keycloak
+  labels:
+    app.kubernetes.io/name: workshop-keycloak
+    app.kubernetes.io/part-of: azure-kubernetes-playground
+spec:
+  instances: 1
+  db:
+    vendor: postgres
+    host: postgres-db
+    database: keycloak
+    usernameSecret:
+      name: keycloak-db-secret
+      key: username
+    passwordSecret:
+      name: keycloak-db-secret
+      key: password
+  http:
+    httpEnabled: true
+  hostname:
+    strict: false
+  ingress:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+  resources:
+    requests:
+      cpu: 500m
+      memory: 896Mi
+    limits:
+      cpu: 2
+      memory: 2Gi

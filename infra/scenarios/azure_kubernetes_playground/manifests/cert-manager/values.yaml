@@ -1,0 +1,9 @@
+crds:
+  enabled: true
+
+config:
+  gatewayAPI:
+    enabled: true
+
+prometheus:
+  enabled: false

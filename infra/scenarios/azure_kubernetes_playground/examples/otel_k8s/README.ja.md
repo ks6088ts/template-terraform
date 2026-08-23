@@ -12,47 +12,47 @@ Kubernetes 上に構成された OpenTelemetry ベースのオブザーバビリ
 
 ### Kubernetes の基礎
 
-| トピック                | 学べるファイル                                            | 解説                                                                                                                         |
-|-------------------------|-----------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| **Namespace**           | `namespace.yaml`                                          | リソースの論理的な分離単位。`playground-otel` Namespace を作成し、全リソースをこの中に配置する                               |
-| **Deployment**          | `jaeger.yaml`, `prometheus.yaml`, `otel-collector.yaml`   | Pod のレプリカ管理。`replicas`, `selector`, `template` の構造を理解する                                                      |
-| **Service (ClusterIP)** | 各 `---` 以降の Service 定義                              | クラスタ内 DNS によるサービスディスカバリ。`otel-collector:4317` のように名前でアクセスできる仕組み                          |
-| **ConfigMap**           | `configmap-otel-collector.yaml`, `configmap-prometheus.yaml` | 設定ファイルを Pod から分離して管理する方法。`volumeMounts` + `subPath` でファイルとしてマウント                              |
-| **Job**                 | `job-telemetrygen-traces.yaml`, `job-telemetrygen-metrics.yaml` | 一度きりのバッチ処理。`backoffLimit` によるリトライ制御、`restartPolicy: Never` の意味                                    |
-| **Label / Selector**    | 全ファイル                                                | `app.kubernetes.io/name`, `app.kubernetes.io/part-of` などの推奨ラベル規約と、`selector.matchLabels` による Pod の紐付け      |
-| **リソース要求 / 上限** | 全 Deployment / Job                                       | CPU・メモリのリソース管理。`requests` (最低保証) と `limits` (上限) の違い                                                   |
-| **Readiness Probe**     | `otel-collector.yaml`, `jaeger.yaml`, `prometheus.yaml`   | Pod がトラフィックを受け入れ可能かのヘルスチェック。`httpGet` による HTTP ベースのプローブ                                  |
-| **Port Forward**        | README の利用方法                                         | `kubectl port-forward` によるローカルからクラスタ内サービスへのアクセス                                                     |
-| **一時 Pod (kubectl run)** | README の動作確認                                      | `kubectl run --rm -it` でデバッグ用の使い捨て Pod を起動する手法                                                            |
+| トピック | 学べるファイル | 解説 |
+| --- | --- | --- |
+| **Namespace** | `namespace.yaml` | リソースの論理的な分離単位。`playground-otel` Namespace を作成し、全リソースをこの中に配置する |
+| **Deployment** | `jaeger.yaml`, `prometheus.yaml`, `otel-collector.yaml` | Pod のレプリカ管理。`replicas`, `selector`, `template` の構造を理解する |
+| **Service (ClusterIP)** | 各 `---` 以降の Service 定義 | クラスタ内 DNS によるサービスディスカバリ。`otel-collector:4317` のように名前でアクセスできる仕組み |
+| **ConfigMap** | `configmap-otel-collector.yaml`, `configmap-prometheus.yaml` | 設定ファイルを Pod から分離して管理する方法。`volumeMounts` + `subPath` でファイルとしてマウント |
+| **Job** | `job-telemetrygen-traces.yaml`, `job-telemetrygen-metrics.yaml` | 一度きりのバッチ処理。`backoffLimit` によるリトライ制御、`restartPolicy: Never` の意味 |
+| **Label / Selector** | 全ファイル | `app.kubernetes.io/name`, `app.kubernetes.io/part-of` などの推奨ラベル規約と、`selector.matchLabels` による Pod の紐付け |
+| **リソース要求 / 上限** | 全 Deployment / Job | CPU・メモリのリソース管理。`requests` (最低保証) と `limits` (上限) の違い |
+| **Readiness Probe** | `otel-collector.yaml`, `jaeger.yaml`, `prometheus.yaml` | Pod がトラフィックを受け入れ可能かのヘルスチェック。`httpGet` による HTTP ベースのプローブ |
+| **Port Forward** | README の利用方法 | `kubectl port-forward` によるローカルからクラスタ内サービスへのアクセス |
+| **一時 Pod (kubectl run)** | README の動作確認 | `kubectl run --rm -it` でデバッグ用の使い捨て Pod を起動する手法 |
 
 ### OpenTelemetry の基礎
 
-| トピック                 | 学べるファイル                       | 解説                                                                                                                              |
-|--------------------------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| **テレメトリの 3 本柱**  | 全体構成                             | トレース (Traces)、メトリクス (Metrics)、ログ (Logs) の 3 種類のテレメトリデータを実際に扱う                                     |
-| **OTLP プロトコル**      | `configmap-otel-collector.yaml`      | OpenTelemetry 標準の通信プロトコル。gRPC (`:4317`) と HTTP (`:4318`) の 2 種類                                                   |
-| **Collector パイプライン** | `configmap-otel-collector.yaml`    | `receivers → processors → exporters` のパイプライン構造を理解する                                                                |
-| **Receiver**             | `configmap-otel-collector.yaml`      | `otlp` receiver による gRPC/HTTP でのデータ受信                                                                                    |
-| **Processor**            | `configmap-otel-collector.yaml`      | `batch` processor によるデータのバッファリングと一括送信                                                                          |
-| **Exporter**             | `configmap-otel-collector.yaml`      | `otlp/jaeger` (トレース)、`prometheus` / `prometheusremotewrite` (メトリクス)、`debug` (標準出力) の使い分け                       |
-| **Extension**            | `configmap-otel-collector.yaml`      | `health_check` extension によるヘルスチェックエンドポイントの提供                                                                 |
-| **telemetrygen**         | `job-telemetrygen-*.yaml`            | 公式テストツールによるサンプルテレメトリの生成方法                                                                                  |
+| トピック | 学べるファイル | 解説 |
+| --- | --- | --- |
+| **テレメトリの 3 本柱** | 全体構成 | トレース (Traces)、メトリクス (Metrics)、ログ (Logs) の 3 種類のテレメトリデータを実際に扱う |
+| **OTLP プロトコル** | `configmap-otel-collector.yaml` | OpenTelemetry 標準の通信プロトコル。gRPC (`:4317`) と HTTP (`:4318`) の 2 種類 |
+| **Collector パイプライン** | `configmap-otel-collector.yaml` | `receivers → processors → exporters` のパイプライン構造を理解する |
+| **Receiver** | `configmap-otel-collector.yaml` | `otlp` receiver による gRPC/HTTP でのデータ受信 |
+| **Processor** | `configmap-otel-collector.yaml` | `batch` processor によるデータのバッファリングと一括送信 |
+| **Exporter** | `configmap-otel-collector.yaml` | `otlp/jaeger` (トレース)、`prometheus` / `prometheusremotewrite` (メトリクス)、`debug` (標準出力) の使い分け |
+| **Extension** | `configmap-otel-collector.yaml` | `health_check` extension によるヘルスチェックエンドポイントの提供 |
+| **telemetrygen** | `job-telemetrygen-*.yaml` | 公式テストツールによるサンプルテレメトリの生成方法 |
 
 ### 分散トレーシング (Jaeger)
 
-| トピック                    | 解説                                                                    |
-|-----------------------------|-------------------------------------------------------------------------|
-| **Trace / Span の概念**     | Jaeger UI でトレースを検索し、Span のツリー構造を確認する               |
-| **Service Name**            | `service.name` 属性によるサービスの識別方法                             |
-| **OTLP によるエクスポート** | OTel Collector から Jaeger への OTLP gRPC エクスポートの設定            |
+| トピック | 解説 |
+| --- | --- |
+| **Trace / Span の概念** | Jaeger UI でトレースを検索し、Span のツリー構造を確認する |
+| **Service Name** | `service.name` 属性によるサービスの識別方法 |
+| **OTLP によるエクスポート** | OTel Collector から Jaeger への OTLP gRPC エクスポートの設定 |
 
 ### メトリクス (Prometheus)
 
-| トピック                    | 解説                                                                                                            |
-|-----------------------------|-----------------------------------------------------------------------------------------------------------------|
-| **Scrape と Remote Write**  | Prometheus がメトリクスを取得する 2 つの方法を体験する                                                         |
-| **PromQL**                  | Prometheus UI でクエリを書いてメトリクスを可視化する                                                           |
-| **scrape_configs**          | `configmap-prometheus.yaml` で OTel Collector のメトリクスエンドポイント (`:8889`) をスクレイプ対象に設定       |
+| トピック | 解説 |
+| --- | --- |
+| **Scrape と Remote Write** | Prometheus がメトリクスを取得する 2 つの方法を体験する |
+| **PromQL** | Prometheus UI でクエリを書いてメトリクスを可視化する |
+| **scrape_configs** | `configmap-prometheus.yaml` で OTel Collector のメトリクスエンドポイント (`:8889`) をスクレイプ対象に設定 |
 
 ---
 
@@ -90,29 +90,32 @@ flowchart LR
 
 ### コンポーネント一覧
 
-| コンポーネント                | イメージ                                                                      | K8s リソース          | 役割                                     |
-|-------------------------------|-------------------------------------------------------------------------------|-----------------------|------------------------------------------|
-| **Jaeger**                    | `jaegertracing/all-in-one`                                                    | Deployment と Service | 分散トレーシングバックエンドと UI        |
-| **Prometheus**                | `prom/prometheus`                                                             | Deployment と Service | メトリクス収集・クエリエンジン           |
-| **OpenTelemetry Collector**   | `otel/opentelemetry-collector-contrib`                                        | Deployment と Service | テレメトリの受信・処理・エクスポート     |
-| **telemetrygen (トレース)**   | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen`          | Job                   | サンプルトレースを生成（5 分間）         |
-| **telemetrygen (メトリクス)** | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen`          | Job                   | サンプルメトリクスを生成（5 分間）       |
+| コンポーネント | イメージ | K8s リソース | 役割 |
+| --- | --- | --- | --- |
+| **Jaeger** | `jaegertracing/all-in-one:1.76.0` | Deployment と Service | 分散トレーシングバックエンドと UI |
+| **Prometheus** | `prom/prometheus:v3.14.0` | Deployment と Service | メトリクス収集・クエリエンジン |
+| **OpenTelemetry Collector** | `otel/opentelemetry-collector-contrib:0.159.0` | Deployment と Service | テレメトリの受信・処理・エクスポート |
+| **telemetrygen (トレース)** | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0` | Job | サンプルトレースを生成（5 分間） |
+| **telemetrygen (メトリクス)** | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0` | Job | サンプルメトリクスを生成（5 分間） |
 
 ### ファイル構成
 
-| ファイル                         | 内容                                      |
-|----------------------------------|-------------------------------------------|
-| `namespace.yaml`                 | `playground-otel` Namespace               |
-| `configmap-otel-collector.yaml`  | OTel Collector の設定（ConfigMap）        |
-| `configmap-prometheus.yaml`      | Prometheus の設定（ConfigMap）             |
-| `jaeger.yaml`                    | Jaeger の Deployment と Service           |
-| `prometheus.yaml`                | Prometheus の Deployment と Service       |
-| `otel-collector.yaml`            | OTel Collector の Deployment と Service   |
-| `job-telemetrygen-traces.yaml`   | トレース生成 Job                          |
-| `job-telemetrygen-metrics.yaml`  | メトリクス生成 Job                        |
+| ファイル | 内容 |
+| --- | --- |
+| `namespace.yaml` | `playground-otel` Namespace |
+| `configmap-otel-collector.yaml` | OTel Collector の設定（ConfigMap） |
+| `configmap-prometheus.yaml` | Prometheus の設定（ConfigMap） |
+| `jaeger.yaml` | Jaeger の Deployment と Service |
+| `prometheus.yaml` | Prometheus の Deployment と Service |
+| `otel-collector.yaml` | OTel Collector の Deployment と Service |
+| `job-telemetrygen-traces.yaml` | トレース生成 Job |
+| `job-telemetrygen-metrics.yaml` | メトリクス生成 Job |
 
 > [!CAUTION]
-> 全マニフェストのイメージタグは `:latest` を使用しています。本番環境では再現性・安定性のために特定バージョンへのピン留め（例: `jaegertracing/all-in-one:1.62`）を推奨します。
+> 再現可能な workshop にするため、すべての runtime image を固定しています。
+> Jaeger `1.76.0` は legacy 1.x series であり、compact な all-in-one 学習 backend
+> としてだけ使用します。本番ではこの stack を流用せず、support 対象の Jaeger v2
+> deployment または managed observability backend を評価してください。
 
 ## データフロー
 
@@ -138,6 +141,16 @@ flowchart LR
 
 ### デプロイ
 
+Scenario directory では連番 script を使用します。Target subscription / cluster
+context を検証し、すべての Deployment / Job を待機してから Jaeger と Prometheus
+の API を確認します。
+
+```shell
+./scripts/11_deploy_otel_lightweight.sh
+```
+
+個々の apply operation を学ぶ場合は、この example directory で次を実行します。
+
 ```shell
 # Namespace を先に作成（他リソースが参照するため）
 kubectl apply -f namespace.yaml
@@ -154,10 +167,10 @@ kubectl get all -n playground-otel
 
 ### UI へのアクセス (port-forward)
 
-| サービス      | コマンド                                                                    | URL                      |
-|---------------|-----------------------------------------------------------------------------|--------------------------|
-| Jaeger UI     | `kubectl port-forward -n playground-otel svc/jaeger 16686:16686`            | <http://localhost:16686> |
-| Prometheus UI | `kubectl port-forward -n playground-otel svc/prometheus 9090:9090`          | <http://localhost:9090>  |
+| サービス | コマンド | URL |
+| --- | --- | --- |
+| Jaeger UI | `kubectl port-forward -n playground-otel svc/jaeger 16686:16686` | <http://localhost:16686> |
+| Prometheus UI | `kubectl port-forward -n playground-otel svc/prometheus 9090:9090` | <http://localhost:9090> |
 
 ### 動作確認
 
@@ -170,10 +183,10 @@ kubectl get all -n playground-otel
 
 同一クラスタ内のアプリケーションから、以下のエンドポイントへテレメトリを送信できます。
 
-| プロトコル | エンドポイント (同一 Namespace) | エンドポイント (他 Namespace)                                  |
-|------------|----------------------------------|-----------------------------------------------------------------|
-| OTLP gRPC  | `otel-collector:4317`            | `otel-collector.playground-otel.svc.cluster.local:4317`         |
-| OTLP HTTP  | `otel-collector:4318`            | `otel-collector.playground-otel.svc.cluster.local:4318`         |
+| プロトコル | エンドポイント (同一 Namespace) | エンドポイント (他 Namespace) |
+| --- | --- | --- |
+| OTLP gRPC | `otel-collector:4317` | `otel-collector.playground-otel.svc.cluster.local:4317` |
+| OTLP HTTP | `otel-collector:4318` | `otel-collector.playground-otel.svc.cluster.local:4318` |
 
 環境変数の設定例:
 
@@ -185,39 +198,39 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector.playground-otel.svc.cl
 
 クラスタ内に一時的な Pod を起動し、CLI でテレメトリを送信して動作確認できます。
 
-**1. telemetrygen でトレースを送信する**
+##### 1. telemetrygen でトレースを送信する
 
 ```shell
 kubectl run telemetrygen-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0 \
   -- traces --otlp-endpoint otel-collector:4317 --otlp-insecure --traces 5 --service my-test-service
 ```
 
-**2. telemetrygen でメトリクスを送信する**
+##### 2. telemetrygen でメトリクスを送信する
 
 ```shell
 kubectl run telemetrygen-metrics-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0 \
   -- metrics --otlp-endpoint otel-collector:4317 --otlp-insecure --metrics 5 --service my-test-service
 ```
 
-**3. telemetrygen でログを送信する**
+##### 3. telemetrygen でログを送信する
 
 ```shell
 kubectl run telemetrygen-logs-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0 \
   -- logs --otlp-endpoint otel-collector:4317 --otlp-insecure --logs 5 --service my-test-service
 ```
 
-**4. curl で OTLP HTTP エンドポイントにトレースを送信する**
+##### 4. curl で OTLP HTTP エンドポイントにトレースを送信する
 
 ```shell
 kubectl run curl-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.17.0 \
   -- curl -X POST http://otel-collector:4318/v1/traces \
     -H "Content-Type: application/json" \
     -d '{
@@ -255,8 +268,17 @@ kubectl apply -f job-telemetrygen-traces.yaml -f job-telemetrygen-metrics.yaml
 
 ### クリーンアップ
 
+Scenario directory では confirmation-gated cleanup script を使用します。
+
 ```shell
-# 全リソースを削除
+CONFIRM_CLEANUP=delete-kubernetes-workshop-resources \
+  ./scripts/99_cleanup.sh otel-lightweight
+```
+
+この example が宣言する resource だけを削除する場合は、example directory で
+次を実行します。
+
+```shell
 kubectl delete -f .
 ```
 
@@ -346,7 +368,7 @@ kubectl port-forward -n playground-otel svc/jaeger 16686:16686 &
 # 2. telemetrygen でトレースを手動送信
 kubectl run trace-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0 \
   -- traces --otlp-endpoint otel-collector:4317 --otlp-insecure --traces 10 --service my-app
 
 # 3. http://localhost:16686 を開く
@@ -369,7 +391,7 @@ kubectl port-forward -n playground-otel svc/prometheus 9090:9090 &
 # 2. telemetrygen でメトリクスを手動送信
 kubectl run metrics-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0 \
   -- metrics --otlp-endpoint otel-collector:4317 --otlp-insecure --metrics 10 --service my-app
 
 # 3. http://localhost:9090 を開く
@@ -404,7 +426,7 @@ up
 # 1. telemetrygen でログを送信
 kubectl run logs-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:0.159.0 \
   -- logs --otlp-endpoint otel-collector:4317 --otlp-insecure --logs 5 --service my-app
 
 # 2. OTel Collector のログで受信されたログデータを確認
@@ -424,7 +446,7 @@ curl でトレースデータの JSON を直接送信し、OTLP プロトコル�
 ```shell
 kubectl run curl-trace --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.17.0 \
   -- curl -X POST http://otel-collector:4318/v1/traces \
     -H "Content-Type: application/json" \
     -d '{
@@ -486,13 +508,13 @@ kubectl top pods -n playground-otel
 # OTel Collector の Readiness Probe エンドポイントに直接アクセス
 kubectl run probe-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.17.0 \
   -- curl -s http://otel-collector:13133/
 
 # Jaeger の Readiness Probe
 kubectl run probe-test-jaeger --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.17.0 \
   -- curl -s http://jaeger:16686/ | head -5
 
 # Probe の設定と状態を確認
@@ -514,13 +536,13 @@ kubectl describe deploy otel-collector -n playground-otel | grep -A 5 "Readiness
 # 一時 Pod からクラスタ内 DNS を確認
 kubectl run dns-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=busybox:latest \
+  --image=busybox:1.37.0 \
   -- nslookup otel-collector
 
 # 別の Namespace からのアクセスには FQDN が必要
 kubectl run dns-test --rm -it --restart=Never \
   -n default \
-  --image=busybox:latest \
+  --image=busybox:1.37.0 \
   -- nslookup otel-collector.playground-otel.svc.cluster.local
 
 # Service のエンドポイント（紐付いた Pod の IP）を確認
@@ -561,7 +583,7 @@ kubectl apply -f job-telemetrygen-traces.yaml
 
 ConfigMap を変更して OTel Collector の動作を変えてみます。
 
-**例: batch processor にタイムアウトを設定する**
+#### 例: batch processor にタイムアウトを設定する
 
 `configmap-otel-collector.yaml` の `processors` セクションを以下のように変更します:
 
@@ -599,16 +621,16 @@ kubectl rollout status deploy/otel-collector -n playground-otel
 
 このスタックを拡張して、さらに理解を深めることができます。
 
-| テーマ                           | ヒント                                                                                                     |
-|----------------------------------|------------------------------------------------------------------------------------------------------------|
-| **ログバックエンドの追加**       | Loki を追加し、OTel Collector の `logs` パイプラインにエクスポーターを追加する                             |
-| **Grafana ダッシュボード**       | Grafana を追加し、Prometheus/Jaeger/Loki をデータソースとして統合ダッシュボードを作成する                  |
-| **HPA によるオートスケール**     | OTel Collector の Deployment に HorizontalPodAutoscaler を設定し、負荷に応じたスケーリングを試す          |
-| **Ingress の設定**               | Jaeger/Prometheus の UI を Ingress 経由で公開する                                                          |
-| **NetworkPolicy**                | Namespace 内の通信を制限し、必要なポートのみ許可する                                                       |
-| **実アプリのインストルメンテーション** | 自作アプリに OpenTelemetry SDK を組み込み、テレメトリを送信する                                      |
-| **Helm Chart 化**                | このマニフェスト群を Helm Chart としてパッケージングする                                                  |
-| **Azure Monitor 連携**           | OTel Collector から Azure Monitor Exporter でテレメトリを Azure に送信する                                |
+| テーマ | ヒント |
+| --- | --- |
+| **ログバックエンドの追加** | Loki を追加し、OTel Collector の `logs` パイプラインにエクスポーターを追加する |
+| **Grafana ダッシュボード** | Grafana を追加し、Prometheus/Jaeger/Loki をデータソースとして統合ダッシュボードを作成する |
+| **HPA によるオートスケール** | OTel Collector の Deployment に HorizontalPodAutoscaler を設定し、負荷に応じたスケーリングを試す |
+| **Gateway API の設定** | Jaeger/Prometheus の UI を AKS managed Gateway と専用 HTTPRoute で公開する |
+| **NetworkPolicy** | Namespace 内の通信を制限し、必要なポートのみ許可する |
+| **実アプリのインストルメンテーション** | 自作アプリに OpenTelemetry SDK を組み込み、テレメトリを送信する |
+| **Helm Chart 化** | このマニフェスト群を Helm Chart としてパッケージングする |
+| **Azure Monitor 連携** | OTel Collector から Azure Monitor Exporter でテレメトリを Azure に送信する |
 
 ## 参考リンク
 
