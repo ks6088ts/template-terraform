@@ -89,29 +89,34 @@ suppressing them.
 
 ## Review costs in GitHub Actions
 
-The `.github/workflows/infracost.yml` workflow runs only when it is triggered
-manually. Start it from the Actions tab, or with the GitHub CLI, passing the
-pull request number to review:
+The `.github/workflows/infracost.yml` workflow runs automatically when a pull
+request from this repository is opened, updated, or reopened. It checks out the
+pull request head, installs the pinned Infracost CLI, and runs the same
+`make cost` command used locally. The `Estimate costs` step log contains the
+repository-wide scan summary, FinOps and tagging findings, and monthly costs
+grouped by scenario.
+
+To run an estimate explicitly, select a branch in the Actions tab, or pass that
+branch to the GitHub CLI:
 
 ```bash
-gh workflow run infracost.yml -f pull_request_number=123
+gh workflow run infracost.yml --ref feature/example
 ```
 
-The workflow checks out that pull request and its base branch, then posts a
-cost-difference comment. Manual triggering keeps cost review an explicit,
-opt-in step instead of running on every push. The workflow deliberately does not
-upload a repository-wide baseline, because these scenarios are not deployed and
-such a baseline would report infrastructure that does not exist.
+The workflow does not run on pushes or closed pull requests. It reports the
+estimate for the pull request head and does not maintain a default-branch
+baseline or post a cost-difference comment.
 
-The action and the scanner version are both pinned, so a workflow run is
-reproducible. Update `INFRACOST_SCANNER_VERSION` and the action commit together.
+The workflow downloads the pinned CLI release and verifies its official SHA-256
+checksum before installing it. Review compatibility before updating
+`INFRACOST_VERSION`.
 
 Create the credential with the official setup flow, which issues a token of the
 correct type for the current major version and stores it as a repository secret
 named `INFRACOST_API_KEY`:
 
 ```bash
-infracost ci setup
+infracost ci setup --ci-pipeline
 ```
 
 Tokens issued for Infracost CLI versions before 2.0 are not compatible. To set
@@ -122,20 +127,23 @@ of shell history:
 gh secret set INFRACOST_API_KEY
 ```
 
-No AWS, Azure, or Google Cloud credentials are required. The workflow does send
-pull request metadata to Infracost Cloud, including the repository URL, pull
-request number, title, author, and labels, alongside the parsed cost data.
+No AWS, Azure, or Google Cloud credentials are required. The workflow passes the
+repository secret to the CLI through its supported non-interactive
+authentication variable, and `make cost` sends the parsed cost data to
+Infracost Cloud.
 
-Because a manually triggered run executes in this repository's context, the
-credential is also available for pull requests from forks, so they can be
-reviewed the same way. Infracost parses Terraform code and does not run
-Terraform, but review fork changes before triggering a run.
+GitHub does not expose repository secrets or a write token to workflows
+triggered by pull requests from forks or Dependabot, so the automatic job skips
+them. After reviewing a Dependabot pull request, run the workflow manually on
+its branch. Fork branches cannot be selected by `workflow_dispatch`, so check
+out a reviewed fork locally and run `make cost` there. Infracost parses
+Terraform code and does not run Terraform, but always review untrusted changes
+before scanning them.
 
-The workflow reports cost and policy changes but does not enforce a budget, and
-a manually triggered workflow cannot act as a required status check. To block
-expensive changes automatically, create an Infracost Cost Guardrail with
-approval before merge, and report the status through the Infracost GitHub App or
-an automatically triggered workflow.
+The workflow output is informational: it reports estimated costs and policy
+findings in the Actions log but does not enforce a budget or post a pull request
+comment. Use the Infracost GitHub App or a dedicated diff integration when you
+need cost-difference comments and Cost Guardrail status checks.
 
 Cost estimation is not part of `make ci-test`, because it requires the Infracost
 credential. The `test` workflow covers credential-free static analysis

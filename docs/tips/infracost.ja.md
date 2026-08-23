@@ -82,26 +82,30 @@ Terraform ステートの変更やクラウドリソースの作成は行いま�
 
 ## GitHub Actions でのコストレビュー
 
-`.github/workflows/infracost.yml` は、手動で実行したときにのみ起動します。Actions タブ、または
-GitHub CLI から、レビュー対象の Pull Request 番号を指定して実行します。
+`.github/workflows/infracost.yml` は、同一リポジトリからの Pull Request が作成、更新、または
+再オープンされたときに自動実行されます。Pull Request の head をチェックアウトし、固定バージョンの
+Infracost CLI をインストールして、ローカルと同じ `make cost` コマンドを実行します。`Estimate costs`
+ステップのログには、リポジトリ全体の走査サマリー、FinOps とタグポリシーの指摘、シナリオ別の月額
+コストが出力されます。
+
+明示的に試算する場合は、Actions タブでブランチを選択するか、GitHub CLI にブランチを指定して
+実行します。
 
 ```bash
-gh workflow run infracost.yml -f pull_request_number=123
+gh workflow run infracost.yml --ref feature/example
 ```
 
-workflow は指定された Pull Request とそのベースブランチをチェックアウトし、コスト差分を
-コメントします。手動実行にすることで、push のたびに実行されるのではなく、コストレビューを
-明示的な操作として実行できます。リポジトリ全体のベースラインは意図的にアップロードしません。
-これらのシナリオはデプロイされておらず、存在しないインフラストラクチャを計上してしまうためです。
+workflow は push や閉じられた Pull Request では実行しません。Pull Request の head に対する試算を
+出力し、デフォルトブランチのベースライン維持やコスト差分コメントの投稿は行いません。
 
-Action と scanner のバージョンはいずれも固定しているため、実行結果は再現可能です。更新する際は
-`INFRACOST_SCANNER_VERSION` と Action のコミットを合わせて変更してください。
+workflow は固定した CLI リリースをダウンロードし、公式の SHA-256 チェックサムを検証してから
+インストールします。`INFRACOST_VERSION` を更新する前に、互換性を確認してください。
 
 認証情報は公式のセットアップフローで作成します。現行メジャーバージョンに適合するトークンが発行され、
 `INFRACOST_API_KEY` という名前のリポジトリシークレットとして保存されます。
 
 ```bash
-infracost ci setup
+infracost ci setup --ci-pipeline
 ```
 
 Infracost CLI 2.0 より前のバージョン向けに発行したトークンには互換性がありません。手動でシークレットを
@@ -111,18 +115,19 @@ Infracost CLI 2.0 より前のバージョン向けに発行したトークン�
 gh secret set INFRACOST_API_KEY
 ```
 
-AWS、Azure、Google Cloud の資格情報は不要です。ただし workflow は、解析したコスト情報に加えて、
-リポジトリ URL、Pull Request 番号、タイトル、作成者、ラベルなどのメタデータを Infracost Cloud へ
-送信します。
+AWS、Azure、Google Cloud の資格情報は不要です。workflow は CLI が対応する非対話認証用の環境変数を
+介してリポジトリシークレットを渡し、`make cost` は解析したコスト情報を Infracost Cloud へ送信します。
 
-手動実行はこのリポジトリのコンテキストで動作するため、fork からの Pull Request でも認証情報を利用でき、
-同じ手順でレビューできます。Infracost は Terraform コードを解析するだけで Terraform を実行しませんが、
-fork の変更内容を確認してから実行してください。
+GitHub は fork または Dependabot の Pull Request をトリガーとする workflow にリポジトリシークレットや
+書き込みトークンを渡さないため、自動実行のジョブでは対象外にします。Dependabot の変更内容を確認した
+後、そのブランチを選択して workflow を手動実行してください。fork のブランチは `workflow_dispatch` で
+選択できないため、確認済みの fork をローカルへチェックアウトして `make cost` を実行します。Infracost は
+Terraform コードを解析するだけで Terraform を実行しませんが、必ず未信頼の変更内容を確認してから
+走査してください。
 
-workflow はコストとポリシーの変更を報告しますが、予算の強制は行わず、手動実行の workflow は必須の
-ステータスチェックにはできません。高額な変更を自動的にブロックするには、マージ前の承認を有効にした
-Infracost Cost Guardrail を作成し、Infracost GitHub App または自動実行の workflow でステータスを
-報告してください。
+workflow の出力は情報提供のみです。Actions のログへ試算コストとポリシーの指摘を出力しますが、
+予算の強制や Pull Request コメントの投稿は行いません。コスト差分コメントと Infracost Cost Guardrail
+のステータスチェックが必要な場合は、Infracost GitHub App または専用の diff 連携を使用してください。
 
 コスト見積もりは Infracost の認証情報を必要とするため、`make ci-test` には含めていません。認証不要の
 静的解析（`terraform fmt`、`terraform validate`、TFLint、Trivy、actionlint）は `test` workflow が、

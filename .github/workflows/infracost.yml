@@ -1,54 +1,51 @@
 name: infracost
 
 on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
   workflow_dispatch:
-    inputs:
-      pull_request_number:
-        description: Pull request number to review
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 env:
-  INFRACOST_SCANNER_VERSION: 0.2.10
+  INFRACOST_VERSION: 2.16.2
 
 concurrency:
-  group: infracost-${{ inputs.pull_request_number }}
+  group: infracost-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  diff:
+  cost:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
-      - name: Resolve pull request base
-        id: pr
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: Install Infracost
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ inputs.pull_request_number }}
         run: |
-          base_ref=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName --jq .baseRefName)
-          echo "base-ref=$base_ref" >> "$GITHUB_OUTPUT"
-      - name: Checkout head
-        uses: actions/checkout@v7
-        with:
-          ref: refs/pull/${{ inputs.pull_request_number }}/head
-          path: head
-      - name: Checkout base
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ steps.pr.outputs.base-ref }}
-          path: base
-      - name: Report cost diff
-        uses: infracost/actions/diff@fb736a8f219195d6efdca58682069b16fe1bc280 # v4.2.0
-        with:
-          api-key: ${{ secrets.INFRACOST_API_KEY }}
-          version: ${{ env.INFRACOST_SCANNER_VERSION }}
-          base-path: base
-          head-path: head
-          pr-number: ${{ inputs.pull_request_number }}
+          archive="infracost-linux-amd64.tar.gz"
+          gh release download "v${INFRACOST_VERSION}" \
+            --repo infracost/cli \
+            --pattern "$archive" \
+            --pattern "$archive.sha256" \
+            --dir "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP"
+          sha256sum --check "$archive.sha256"
+          tar -xzf "$archive"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Estimate costs
+        env:
+          INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
+        run: make cost
