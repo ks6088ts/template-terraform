@@ -45,7 +45,8 @@ make cost
 
 The target prints the scan summary, then a per-scenario listing with untruncated
 project names and monthly costs. Scenarios without billable resources are
-omitted from that listing.
+omitted from that listing. The listing is printed only for a whole-repository
+scan, because a single-scenario scan already reports one total.
 
 Limit the scan to a single scenario using the same `SCENARIO` variable as the
 other targets, and pass CLI flags with `INFRACOST_ARGS`:

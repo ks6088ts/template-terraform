@@ -102,8 +102,11 @@ plan:
 .PHONY: cost
 cost: ## estimate monthly cost with Infracost
 	infracost scan $(INFRACOST_PATH) $(INFRACOST_ARGS)
-	@echo
-	infracost inspect $(INFRACOST_PATH) --group-by project
+	@if [ "$(INFRACOST_PATH)" = "." ]; then \
+		echo; \
+		echo "Cost per scenario:"; \
+		infracost inspect . --group-by project; \
+	fi
 
 .PHONY: test
 test: init ## test codes
