@@ -1,7 +1,7 @@
 ---
 title: Terraform Tips
 description: Shared Terraform workflows, provider authentication, and remote state guidance for every scenario
-ms.date: 2026-08-13
+ms.date: 2026-08-23
 ms.topic: overview
 ---
 
@@ -12,6 +12,7 @@ Use these guides for setup and operations that are shared across scenarios:
 * [Terraform workflow](terraform-workflow.md)
 * [Provider authentication](provider-authentication.md)
 * [Azure Blob Storage backend](azure-blob-backend.md)
+* [Cloud cost estimates with Infracost](infracost.md)
 
 Scenario READMEs contain only the inputs, command overrides, validation, and
 post-deployment operations that are specific to that scenario.

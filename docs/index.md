@@ -1,7 +1,7 @@
 ---
 title: Documentation
 description: Entry point for shared Terraform guidance and deployable scenarios
-ms.date: 2026-08-13
+ms.date: 2026-08-23
 ms.topic: overview
 ---
 
@@ -21,6 +21,7 @@ validation, and post-deployment operations.
 * [Terraform workflow](tips/terraform-workflow.md)
 * [Provider authentication](tips/provider-authentication.md)
 * [Azure Blob Storage backend](tips/azure-blob-backend.md)
+* [Cloud cost estimates with Infracost](tips/infracost.md)
 
 ## Scenario catalog
 
