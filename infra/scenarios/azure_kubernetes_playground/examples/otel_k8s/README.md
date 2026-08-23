@@ -2,6 +2,8 @@
 description: Build and explore an OpenTelemetry observability stack on Kubernetes
 ---
 
+<!-- markdownlint-disable MD013 MD060 -->
+
 # OpenTelemetry Observability Stack on Kubernetes
 
 This OpenTelemetry observability stack runs on Kubernetes. Its manifests reproduce the configuration of the [local version (Docker Compose)](../otel_local/README.md).
@@ -100,8 +102,8 @@ flowchart LR
 
 ### Files
 
-| File                            | Contents                                  |
-|---------------------------------|-------------------------------------------|
+| File | Contents |
+| --------------------------------- | ------------------------------------------- |
 | `namespace.yaml` | `playground-otel` Namespace |
 | `configmap-otel-collector.yaml` | OTel Collector configuration (ConfigMap) |
 | `configmap-prometheus.yaml` | Prometheus configuration (ConfigMap) |
@@ -111,8 +113,8 @@ flowchart LR
 | `job-telemetrygen-traces.yaml` | Trace generation Job |
 | `job-telemetrygen-metrics.yaml` | Metrics generation Job |
 
-> [!CAUTION]
-> All manifests use the `:latest` image tag. Pin specific versions in production, such as `jaegertracing/all-in-one:1.62`, for reproducibility and stability.
+> [!NOTE]
+> The manifests pin Jaeger all-in-one `1.76.0`, Prometheus `3.14.0`, OpenTelemetry Collector `0.159.0`, and telemetrygen `v0.159.0`. Review upstream release notes and validate the entire stack before updating them together.
 
 ## Data Flow
 
@@ -155,9 +157,9 @@ kubectl get all -n playground-otel
 ### Access the UIs (port-forward)
 
 | Service | Command | URL |
-|---|---|---|
-| Jaeger UI | `kubectl port-forward -n playground-otel svc/jaeger 16686:16686` | http://localhost:16686 |
-| Prometheus UI | `kubectl port-forward -n playground-otel svc/prometheus 9090:9090` | http://localhost:9090 |
+| --- | --- | --- |
+| Jaeger UI | `kubectl port-forward -n playground-otel svc/jaeger 16686:16686` | <http://localhost:16686> |
+| Prometheus UI | `kubectl port-forward -n playground-otel svc/prometheus 9090:9090` | <http://localhost:9090> |
 
 ### Verify the stack
 
@@ -171,7 +173,7 @@ After deployment, the `telemetrygen` Jobs automatically send sample data (traces
 Applications in the same cluster can send telemetry to the following endpoints.
 
 | Protocol | Endpoint (same Namespace) | Endpoint (another Namespace) |
-|---|---|---|
+| --- | --- | --- |
 | OTLP gRPC | `otel-collector:4317` | `otel-collector.playground-otel.svc.cluster.local:4317` |
 | OTLP HTTP | `otel-collector:4318` | `otel-collector.playground-otel.svc.cluster.local:4318` |
 
@@ -185,39 +187,39 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector.playground-otel.svc.cl
 
 Start a temporary Pod in the cluster and send telemetry from the CLI to verify the stack.
 
-**1. Send traces with telemetrygen**
+##### 1. Send traces with telemetrygen
 
 ```shell
 kubectl run telemetrygen-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- traces --otlp-endpoint otel-collector:4317 --otlp-insecure --traces 5 --service my-test-service
 ```
 
-**2. Send metrics with telemetrygen**
+##### 2. Send metrics with telemetrygen
 
 ```shell
 kubectl run telemetrygen-metrics-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- metrics --otlp-endpoint otel-collector:4317 --otlp-insecure --metrics 5 --service my-test-service
 ```
 
-**3. Send logs with telemetrygen**
+##### 3. Send logs with telemetrygen
 
 ```shell
 kubectl run telemetrygen-logs-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- logs --otlp-endpoint otel-collector:4317 --otlp-insecure --logs 5 --service my-test-service
 ```
 
-**4. Send a trace to the OTLP HTTP endpoint with curl**
+##### 4. Send a trace to the OTLP HTTP endpoint with curl
 
 ```shell
 kubectl run curl-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -X POST http://otel-collector:4318/v1/traces \
     -H "Content-Type: application/json" \
     -d '{
@@ -346,7 +348,7 @@ kubectl port-forward -n playground-otel svc/jaeger 16686:16686 &
 # 2. Send traces manually with telemetrygen
 kubectl run trace-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- traces --otlp-endpoint otel-collector:4317 --otlp-insecure --traces 10 --service my-app
 
 # 3. Open http://localhost:16686
@@ -369,7 +371,7 @@ kubectl port-forward -n playground-otel svc/prometheus 9090:9090 &
 # 2. Send metrics manually with telemetrygen
 kubectl run metrics-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- metrics --otlp-endpoint otel-collector:4317 --otlp-insecure --metrics 10 --service my-app
 
 # 3. Open http://localhost:9090
@@ -404,7 +406,7 @@ The current stack sends logs only to the `debug` exporter (stdout).
 # 1. Send logs with telemetrygen
 kubectl run logs-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- logs --otlp-endpoint otel-collector:4317 --otlp-insecure --logs 5 --service my-app
 
 # 2. Check the received log data in the OTel Collector logs
@@ -424,7 +426,7 @@ Send trace data directly as JSON with curl to understand the OTLP protocol struc
 ```shell
 kubectl run curl-trace --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -X POST http://otel-collector:4318/v1/traces \
     -H "Content-Type: application/json" \
     -d '{
@@ -486,13 +488,13 @@ kubectl top pods -n playground-otel
 # Access the OTel Collector Readiness Probe endpoint directly
 kubectl run probe-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -s http://otel-collector:13133/
 
 # Check the Jaeger Readiness Probe
 kubectl run probe-test-jaeger --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -s http://jaeger:16686/ | head -5
 
 # Check Probe configuration and status
@@ -514,13 +516,13 @@ kubectl describe deploy otel-collector -n playground-otel | grep -A 5 "Readiness
 # Check in-cluster DNS from a temporary Pod
 kubectl run dns-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=busybox:latest \
+  --image=busybox:1.36.1 \
   -- nslookup otel-collector
 
 # Access from another Namespace requires the FQDN
 kubectl run dns-test --rm -it --restart=Never \
   -n default \
-  --image=busybox:latest \
+  --image=busybox:1.36.1 \
   -- nslookup otel-collector.playground-otel.svc.cluster.local
 
 # Check Service endpoints, which are the associated Pod IPs
@@ -561,7 +563,7 @@ kubectl apply -f job-telemetrygen-traces.yaml
 
 Change the ConfigMap to modify the OTel Collector's behavior.
 
-**Example: Set a timeout for the batch processor**
+#### Example: Set a timeout for the batch processor
 
 Change the `processors` section in `configmap-otel-collector.yaml` as follows:
 

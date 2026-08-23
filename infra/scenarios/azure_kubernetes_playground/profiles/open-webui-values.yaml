@@ -1,0 +1,22 @@
+ollama:
+  enabled: false
+
+pipelines:
+  enabled: false
+
+websocket:
+  manager: ""
+  redis:
+    enabled: false
+
+persistence:
+  enabled: true
+  size: 2Gi
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 2Gi

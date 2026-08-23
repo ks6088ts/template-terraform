@@ -2,6 +2,8 @@
 description: Kubernetes 上で OpenTelemetry オブザーバビリティスタックを構築して学習する
 ---
 
+<!-- markdownlint-disable MD013 MD060 -->
+
 # Kubernetes 上の OpenTelemetry オブザーバビリティスタック
 
 Kubernetes 上に構成された OpenTelemetry ベースのオブザーバビリティスタックです。[ローカル版 (Docker Compose)](../otel_local/README.ja.md) と同等の構成をマニフェストで再現しています。
@@ -111,8 +113,8 @@ flowchart LR
 | `job-telemetrygen-traces.yaml`   | トレース生成 Job                          |
 | `job-telemetrygen-metrics.yaml`  | メトリクス生成 Job                        |
 
-> [!CAUTION]
-> 全マニフェストのイメージタグは `:latest` を使用しています。本番環境では再現性・安定性のために特定バージョンへのピン留め（例: `jaegertracing/all-in-one:1.62`）を推奨します。
+> [!NOTE]
+> manifest は Jaeger all-in-one `1.76.0`、Prometheus `3.14.0`、OpenTelemetry Collector `0.159.0`、telemetrygen `v0.159.0` に固定しています。更新時は upstream release note を確認し、stack 全体を同時に検証してください。
 
 ## データフロー
 
@@ -185,39 +187,39 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector.playground-otel.svc.cl
 
 クラスタ内に一時的な Pod を起動し、CLI でテレメトリを送信して動作確認できます。
 
-**1. telemetrygen でトレースを送信する**
+##### 1. telemetrygen でトレースを送信する
 
 ```shell
 kubectl run telemetrygen-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- traces --otlp-endpoint otel-collector:4317 --otlp-insecure --traces 5 --service my-test-service
 ```
 
-**2. telemetrygen でメトリクスを送信する**
+##### 2. telemetrygen でメトリクスを送信する
 
 ```shell
 kubectl run telemetrygen-metrics-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- metrics --otlp-endpoint otel-collector:4317 --otlp-insecure --metrics 5 --service my-test-service
 ```
 
-**3. telemetrygen でログを送信する**
+##### 3. telemetrygen でログを送信する
 
 ```shell
 kubectl run telemetrygen-logs-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- logs --otlp-endpoint otel-collector:4317 --otlp-insecure --logs 5 --service my-test-service
 ```
 
-**4. curl で OTLP HTTP エンドポイントにトレースを送信する**
+##### 4. curl で OTLP HTTP エンドポイントにトレースを送信する
 
 ```shell
 kubectl run curl-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -X POST http://otel-collector:4318/v1/traces \
     -H "Content-Type: application/json" \
     -d '{
@@ -346,7 +348,7 @@ kubectl port-forward -n playground-otel svc/jaeger 16686:16686 &
 # 2. telemetrygen でトレースを手動送信
 kubectl run trace-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- traces --otlp-endpoint otel-collector:4317 --otlp-insecure --traces 10 --service my-app
 
 # 3. http://localhost:16686 を開く
@@ -369,7 +371,7 @@ kubectl port-forward -n playground-otel svc/prometheus 9090:9090 &
 # 2. telemetrygen でメトリクスを手動送信
 kubectl run metrics-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- metrics --otlp-endpoint otel-collector:4317 --otlp-insecure --metrics 10 --service my-app
 
 # 3. http://localhost:9090 を開く
@@ -404,7 +406,7 @@ up
 # 1. telemetrygen でログを送信
 kubectl run logs-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0 \
   -- logs --otlp-endpoint otel-collector:4317 --otlp-insecure --logs 5 --service my-app
 
 # 2. OTel Collector のログで受信されたログデータを確認
@@ -424,7 +426,7 @@ curl でトレースデータの JSON を直接送信し、OTLP プロトコル�
 ```shell
 kubectl run curl-trace --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -X POST http://otel-collector:4318/v1/traces \
     -H "Content-Type: application/json" \
     -d '{
@@ -486,13 +488,13 @@ kubectl top pods -n playground-otel
 # OTel Collector の Readiness Probe エンドポイントに直接アクセス
 kubectl run probe-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -s http://otel-collector:13133/
 
 # Jaeger の Readiness Probe
 kubectl run probe-test-jaeger --rm -it --restart=Never \
   -n playground-otel \
-  --image=curlimages/curl:latest \
+  --image=curlimages/curl:8.12.1 \
   -- curl -s http://jaeger:16686/ | head -5
 
 # Probe の設定と状態を確認
@@ -514,13 +516,13 @@ kubectl describe deploy otel-collector -n playground-otel | grep -A 5 "Readiness
 # 一時 Pod からクラスタ内 DNS を確認
 kubectl run dns-test --rm -it --restart=Never \
   -n playground-otel \
-  --image=busybox:latest \
+  --image=busybox:1.36.1 \
   -- nslookup otel-collector
 
 # 別の Namespace からのアクセスには FQDN が必要
 kubectl run dns-test --rm -it --restart=Never \
   -n default \
-  --image=busybox:latest \
+  --image=busybox:1.36.1 \
   -- nslookup otel-collector.playground-otel.svc.cluster.local
 
 # Service のエンドポイント（紐付いた Pod の IP）を確認
@@ -561,7 +563,7 @@ kubectl apply -f job-telemetrygen-traces.yaml
 
 ConfigMap を変更して OTel Collector の動作を変えてみます。
 
-**例: batch processor にタイムアウトを設定する**
+#### 例: batch processor にタイムアウトを設定する
 
 `configmap-otel-collector.yaml` の `processors` セクションを以下のように変更します:
 

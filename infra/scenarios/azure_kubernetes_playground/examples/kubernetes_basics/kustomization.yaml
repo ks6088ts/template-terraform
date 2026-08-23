@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: workshop-basics
+resources:
+  - namespace.yaml
+  - workloads.yaml
+secretGenerator:
+  - name: app-secret
+    literals:
+      - WORKSHOP_MESSAGE=generated-for-training-only

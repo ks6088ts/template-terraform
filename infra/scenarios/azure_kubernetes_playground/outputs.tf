@@ -50,6 +50,11 @@ output "aks_fqdn" {
   value       = module.kubernetes_service.fqdn
 }
 
+output "aks_oidc_issuer_url" {
+  description = "OIDC issuer URL for Microsoft Entra Workload ID federation"
+  value       = module.kubernetes_service.oidc_issuer_url
+}
+
 output "aks_kube_config_raw" {
   description = "Raw kubeconfig for connecting to the AKS cluster"
   value       = module.kubernetes_service.kube_config_raw
@@ -59,4 +64,14 @@ output "aks_kube_config_raw" {
 output "aks_node_resource_group" {
   description = "Name of the resource group containing AKS nodes"
   value       = module.kubernetes_service.node_resource_group
+}
+
+output "aks_user_node_pool_id" {
+  description = "ID of the workshop workload node pool"
+  value       = module.kubernetes_service.user_node_pool_id
+}
+
+output "aks_user_node_pool_name" {
+  description = "Name of the workshop workload node pool"
+  value       = module.kubernetes_service.user_node_pool_name
 }
