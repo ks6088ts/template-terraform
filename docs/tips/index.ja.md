@@ -1,7 +1,7 @@
 ---
 title: Terraform のヒント
 description: すべてのシナリオに共通する Terraform ワークフロー、プロバイダー認証、リモートステートのガイダンス
-ms.date: 2026-08-13
+ms.date: 2026-08-23
 ms.topic: overview
 ---
 
@@ -12,6 +12,7 @@ ms.topic: overview
 * [Terraform ワークフロー](terraform-workflow.ja.md)
 * [プロバイダー認証](provider-authentication.ja.md)
 * [Azure Blob Storage バックエンド](azure-blob-backend.ja.md)
+* [Infracost によるクラウドコスト見積もり](infracost.ja.md)
 
 各シナリオの README には、そのシナリオに固有の入力、コマンドのオーバーライド、検証、
 デプロイ後の操作のみが記載されています。

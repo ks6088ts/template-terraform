@@ -1,7 +1,7 @@
 ---
 title: ドキュメント
 description: 共通の Terraform ガイダンスとデプロイ可能なシナリオのエントリーポイント
-ms.date: 2026-08-13
+ms.date: 2026-08-23
 ms.topic: overview
 ---
 
@@ -20,6 +20,7 @@ ms.topic: overview
 * [Terraform ワークフロー](tips/terraform-workflow.ja.md)
 * [プロバイダー認証](tips/provider-authentication.ja.md)
 * [Azure Blob Storage バックエンド](tips/azure-blob-backend.ja.md)
+* [Infracost によるクラウドコスト見積もり](tips/infracost.ja.md)
 
 ## シナリオカタログ
 

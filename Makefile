@@ -19,6 +19,11 @@ SCENARIO_DIR ?= infra/scenarios/$(SCENARIO)
 SCENARIO_DIR_LIST ?= $(shell find infra/scenarios -maxdepth 1 -mindepth 1 -type d -print)
 TERRAFORM ?= cd $(SCENARIO_DIR) && terraform
 
+# Infracost
+INFRACOST_ARGS ?=
+# Scan the whole repository unless a scenario is given on the command line.
+INFRACOST_PATH ?= $(if $(filter command line,$(origin SCENARIO)),$(SCENARIO_DIR),.)
+
 .PHONY: help
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -42,6 +47,8 @@ install-deps-dev: ## install dependencies for development
 	@command -v gh >/dev/null 2>&1 || echo "Please install GitHub CLI: https://cli.github.com/"
 	@command -v tflint >/dev/null 2>&1 || echo "Please install tflint: https://github.com/terraform-linters/tflint#installation"
 	@command -v trivy >/dev/null 2>&1 || echo "Please install Trivy: https://aquasecurity.github.io/trivy/v0.57/getting-started/installation/"
+	@command -v infracost >/dev/null 2>&1 || echo "Please install Infracost: https://www.infracost.io/docs/"
+	@command -v actionlint >/dev/null 2>&1 || echo "Please install actionlint: https://github.com/rhysd/actionlint/blob/main/docs/install.md"
 
 .PHONY: clean
 clean:
@@ -75,6 +82,15 @@ trivy:
 		echo "trivy is not installed. Skipping..."; \
 	fi
 
+.PHONY: actionlint
+actionlint:
+	@if [ -x "$(shell command -v actionlint)" ]; then \
+		echo "Running actionlint..."; \
+		actionlint; \
+	else \
+		echo "actionlint is not installed. Skipping..."; \
+	fi
+
 .PHONY: fix
 fix: ## fix formatting
 	$(TERRAFORM) fmt -recursive
@@ -82,6 +98,12 @@ fix: ## fix formatting
 .PHONY: plan
 plan:
 	$(TERRAFORM) plan
+
+.PHONY: cost
+cost: ## estimate monthly cost with Infracost
+	infracost scan $(INFRACOST_PATH) $(INFRACOST_ARGS)
+	@echo
+	infracost inspect $(INFRACOST_PATH) --group-by project
 
 .PHONY: test
 test: init ## test codes
@@ -91,7 +113,7 @@ test: init ## test codes
 _ci-test-base: install-deps-dev clean init lint test plan
 
 .PHONY: ci-test
-ci-test: tflint trivy ## ci test
+ci-test: tflint trivy actionlint ## ci test
 	@for dir in $(SCENARIO_DIR_LIST) ; do \
 		echo "Test: $$dir" ; \
 		make _ci-test-base SCENARIO=$$(basename $$dir) || exit 1 ; \
