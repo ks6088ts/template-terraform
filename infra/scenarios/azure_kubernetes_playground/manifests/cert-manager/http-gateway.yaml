@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: tls-workshop
+  labels:
+    app.kubernetes.io/name: tls-workshop
+    app.kubernetes.io/part-of: azure-kubernetes-playground
+spec:
+  gatewayClassName: approuting-istio
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same

@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: hello-world
+  labels:
+    app.kubernetes.io/name: hello-world
+    app.kubernetes.io/part-of: azure-kubernetes-playground
+spec:
+  entrypoint: hello
+  templates:
+    - name: hello
+      container:
+        image: alpine:3.22.1
+        command:
+          - sh
+          - -c
+        args:
+          - echo "hello from Argo Workflows"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

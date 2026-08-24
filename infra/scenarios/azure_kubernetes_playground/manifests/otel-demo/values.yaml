@@ -1,0 +1,13 @@
+components:
+  frontend-proxy:
+    service:
+      type: ClusterIP
+
+opensearch:
+  persistence:
+    enabled: false
+
+prometheus:
+  server:
+    persistentVolume:
+      enabled: false

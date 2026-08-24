@@ -1,0 +1,14 @@
+apiVersion: k8s.keycloak.org/v2beta1
+kind: KeycloakRealmImport
+metadata:
+  name: workshop-realm
+  labels:
+    app.kubernetes.io/name: workshop-realm
+    app.kubernetes.io/part-of: azure-kubernetes-playground
+spec:
+  keycloakCRName: workshop-keycloak
+  realm:
+    id: workshop
+    realm: workshop
+    displayName: Kubernetes Workshop
+    enabled: true
