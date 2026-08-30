@@ -87,7 +87,8 @@ module "kubernetes_service" {
   user_node_pools  = var.user_node_pools
   network_profile  = var.network_profile
 
-  log_analytics_workspace_id = var.container_insights_enabled ? module.log_analytics[0].id : null
-  container_registry_id      = module.container_registry.id
-  tags                       = var.tags
+  log_analytics_workspace_id       = var.container_insights_enabled ? module.log_analytics[0].id : null
+  container_registry_id            = module.container_registry.id
+  acr_pull_role_assignment_enabled = true
+  tags                             = var.tags
 }

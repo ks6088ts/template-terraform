@@ -47,8 +47,8 @@ override_module {
     oidc_issuer_url            = "https://japaneast.oic.prod-aks.azure.com/00000000-0000-0000-0000-000000000000/00000000-0000-0000-0000-000000000001/"
     kubelet_identity_object_id = "00000000-0000-0000-0000-000000000003"
     identity_principal_id      = "00000000-0000-0000-0000-000000000006"
-    node_resource_group        = "MC_rg-azurekubernetesplayground-test1234_aks-azurekubernetesplayground-test1234_japaneast"
-    node_resource_group_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MC_rg-azurekubernetesplayground-test1234_aks-azurekubernetesplayground-test1234_japaneast"
+    node_resource_group        = "rg-aks-azurekubernetesplayground-test1234-nodes"
+    node_resource_group_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks-azurekubernetesplayground-test1234-nodes"
     user_node_pools = {
       user = {
         id                 = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ContainerService/managedClusters/aks-test/agentPools/user"
@@ -95,6 +95,7 @@ run "modern_baseline" {
       output.acr_login_server == "acrtest1234.azurecr.io",
       output.aks_current_kubernetes_version == "1.35.2",
       output.aks_oidc_issuer_url != null,
+      output.aks_node_resource_group == "rg-aks-azurekubernetesplayground-test1234-nodes",
       output.log_analytics_workspace_id == null,
       output.log_analytics_workspace_name == null,
       length(module.log_analytics) == 0,

@@ -1,7 +1,12 @@
+locals {
+  node_resource_group_name = var.node_resource_group_name != null ? var.node_resource_group_name : "rg-aks-${var.name}-nodes"
+}
+
 resource "azurerm_kubernetes_cluster" "this" {
   name                              = "aks-${var.name}"
   location                          = var.location
   resource_group_name               = var.resource_group_name
+  node_resource_group               = local.node_resource_group_name
   dns_prefix                        = var.dns_prefix != null ? var.dns_prefix : "aks-${var.name}"
   kubernetes_version                = var.kubernetes_version
   sku_tier                          = var.sku_tier
@@ -111,6 +116,16 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   lifecycle {
     precondition {
+      condition     = length(local.node_resource_group_name) <= 80
+      error_message = "The AKS node resource group name must not exceed 80 characters."
+    }
+
+    precondition {
+      condition     = lower(local.node_resource_group_name) != lower(var.resource_group_name)
+      error_message = "The AKS node resource group must differ from the cluster resource group."
+    }
+
+    precondition {
       condition     = !var.workload_identity_enabled || var.oidc_issuer_enabled
       error_message = "Workload Identity requires oidc_issuer_enabled to be true."
     }
@@ -168,9 +183,16 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
 }
 
 resource "azurerm_role_assignment" "acr_pull" {
-  count                            = var.container_registry_id == null ? 0 : 1
+  count                            = var.acr_pull_role_assignment_enabled ? 1 : 0
   scope                            = var.container_registry_id
   role_definition_name             = "AcrPull"
   principal_id                     = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
   skip_service_principal_aad_check = true
+
+  lifecycle {
+    precondition {
+      condition     = var.container_registry_id != null
+      error_message = "container_registry_id must be set when acr_pull_role_assignment_enabled is true."
+    }
+  }
 }

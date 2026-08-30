@@ -13,6 +13,22 @@ variable "resource_group_name" {
   type        = string
 }
 
+variable "node_resource_group_name" {
+  description = "Optional name for the AKS-managed node resource group. Defaults to a deterministic name that remains within the AKS 80-character limit."
+  type        = string
+  default     = null
+
+  validation {
+    condition = var.node_resource_group_name == null || try(
+      length(var.node_resource_group_name) >= 1 &&
+      length(var.node_resource_group_name) <= 80 &&
+      !endswith(var.node_resource_group_name, "."),
+      false,
+    )
+    error_message = "Node resource group name must contain 1-80 characters and must not end with a period."
+  }
+}
+
 variable "location" {
   description = "Azure region for the AKS cluster"
   type        = string
@@ -383,7 +399,7 @@ variable "log_analytics_workspace_id" {
 }
 
 variable "container_registry_id" {
-  description = "Optional Azure Container Registry resource ID to grant the kubelet identity AcrPull access"
+  description = "Azure Container Registry resource ID used when the AcrPull role assignment is enabled"
   type        = string
   default     = null
 
@@ -391,6 +407,12 @@ variable "container_registry_id" {
     condition     = var.container_registry_id == null || can(regex("(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.ContainerRegistry/registries/[^/]+$", var.container_registry_id))
     error_message = "Container Registry ID must be a complete Azure resource ID."
   }
+}
+
+variable "acr_pull_role_assignment_enabled" {
+  description = "Create an AcrPull role assignment for the AKS kubelet identity. Set explicitly when the registry ID is unknown until apply."
+  type        = bool
+  default     = false
 }
 
 variable "tags" {

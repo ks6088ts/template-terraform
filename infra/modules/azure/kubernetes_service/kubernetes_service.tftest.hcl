@@ -30,6 +30,8 @@ run "default_cluster" {
   assert {
     condition = alltrue([
       azurerm_kubernetes_cluster.this.name == "aks-test1234",
+      azurerm_kubernetes_cluster.this.node_resource_group == "rg-aks-test1234-nodes",
+      length(azurerm_kubernetes_cluster.this.node_resource_group) <= 80,
       azurerm_kubernetes_cluster.this.sku_tier == "Free",
       var.kubernetes_version == null,
       azurerm_kubernetes_cluster.this.oidc_issuer_enabled,
@@ -87,6 +89,7 @@ run "default_cluster" {
 
   assert {
     condition = alltrue([
+      !var.acr_pull_role_assignment_enabled,
       length(azurerm_role_assignment.acr_pull) == 0,
       length(azurerm_kubernetes_cluster.this.oms_agent) == 0,
     ])
@@ -100,6 +103,7 @@ run "optional_entra_and_monitoring" {
   variables {
     name                       = "test1234"
     resource_group_name        = "rg-test"
+    node_resource_group_name   = "rg-aks-custom-nodes"
     location                   = "japaneast"
     log_analytics_workspace_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.OperationalInsights/workspaces/law-test1234"
     api_server_authorized_ip_ranges = [
@@ -126,6 +130,7 @@ run "optional_entra_and_monitoring" {
   assert {
     condition = alltrue([
       azurerm_kubernetes_cluster.this.local_account_disabled,
+      azurerm_kubernetes_cluster.this.node_resource_group == "rg-aks-custom-nodes",
       azurerm_kubernetes_cluster.this.azure_active_directory_role_based_access_control[0].azure_rbac_enabled,
       toset(azurerm_kubernetes_cluster.this.azure_active_directory_role_based_access_control[0].admin_group_object_ids) == toset(["00000000-0000-0000-0000-000000000007"]),
       azurerm_kubernetes_cluster.this.oms_agent[0].msi_auth_for_monitoring_enabled,
@@ -135,6 +140,7 @@ run "optional_entra_and_monitoring" {
       azurerm_kubernetes_cluster.this.maintenance_window_auto_upgrade[0].start_time == "03:00",
       azurerm_kubernetes_cluster.this.maintenance_window_node_os[0].frequency == "Weekly",
       azurerm_kubernetes_cluster.this.maintenance_window_node_os[0].start_time == "07:00",
+      !var.acr_pull_role_assignment_enabled,
       length(azurerm_role_assignment.acr_pull) == 0,
     ])
     error_message = "Optional Microsoft Entra and managed-identity Container Insights integration must be configured without local credentials."
