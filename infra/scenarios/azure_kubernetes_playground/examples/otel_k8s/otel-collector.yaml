@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: otel-stack
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: otel-collector
@@ -17,9 +18,19 @@ spec:
         app.kubernetes.io/name: otel-collector
         app.kubernetes.io/part-of: otel-stack
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        runAsGroup: 10001
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:latest
+          image: otel/opentelemetry-collector-contrib:0.159.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: otlp-grpc
               containerPort: 4317
@@ -30,17 +41,34 @@ spec:
             - name: prometheus
               containerPort: 8889
               protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
           volumeMounts:
             - name: config
               mountPath: /etc/otelcol-contrib/config.yaml
               subPath: config.yaml
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
           readinessProbe:
             httpGet:
               path: /
-              port: 13133
+              port: health
             initialDelaySeconds: 5
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
             requests:
               cpu: 100m
@@ -52,6 +80,8 @@ spec:
         - name: config
           configMap:
             name: otel-collector-config
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -77,4 +107,8 @@ spec:
     - name: prometheus
       port: 8889
       targetPort: 8889
+      protocol: TCP
+    - name: health
+      port: 13133
+      targetPort: 13133
       protocol: TCP

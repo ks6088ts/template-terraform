@@ -27,7 +27,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.ja.md) | Microsoft Foundry ワークロードの実行に必要な Azure インフラストラクチャをデプロイします。 |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.ja.md) | Azure ハブアンドスポークアーキテクチャ用のスポークネットワークとして、VNet、Bastion、Storage のプライベートエンドポイント、VM をデプロイします。 |
 | [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.ja.md) | Azure Container Apps 上に azure_inclusive_ai_labs API と VOICEVOX を使用した音声合成サービスをデプロイします。 |
-| [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.ja.md) | 閉域構成を使用せず、コストを抑えた Azure Container Registry と Azure Kubernetes Service の環境をデプロイします。 |
+| [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.ja.md) | system/user pool、Cilium を data plane とする Azure CNI Overlay、Workload Identity、ACR、任意の Container Insights を備えた AKS Standard 学習環境をデプロイします。 |
 | [azure_postgresql](./infra/scenarios/azure_postgresql/README.ja.md) | Azure Database for PostgreSQL Flexible Server をデプロイします。管理者パスワードは自動生成され、接続情報を出力から取得できます。 |
 
 ### AWS

@@ -123,6 +123,7 @@ jobs:
           # FIXME: data.azuread_service_principal requires Microsoft Graph permissions that are not available under our current test setup, so skipping for now
           # - azure_github_oidc
           - azure_inclusive_ai_labs
+          - azure_kubernetes_playground
           - azure_microsoft_foundry
           - azure_spoke_network
           - azure_terraform_backend

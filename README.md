@@ -27,7 +27,7 @@ provider authentication, and remote state guidance.
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Deploys the Azure infrastructure required to run Microsoft Foundry workloads. |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.md) | Deploys a spoke network for an Azure hub-and-spoke architecture with a VNet, Bastion, private Storage endpoint, and VM. |
 | [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.md) | Deploys the azure_inclusive_ai_labs API and its VOICEVOX-powered speech synthesis services on Azure Container Apps. |
-| [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.md) | Deploys a cost-conscious Azure Container Registry and Azure Kubernetes Service environment without private networking. |
+| [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.md) | Deploys an AKS Standard learning environment with separate system/user pools, Azure CNI Overlay powered by Cilium, Workload Identity, ACR, and optional Container Insights. |
 | [azure_postgresql](./infra/scenarios/azure_postgresql/README.md) | Deploys Azure Database for PostgreSQL Flexible Server with a generated administrator password and connection outputs. |
 
 ### AWS

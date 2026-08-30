@@ -13,26 +13,19 @@ output "fqdn" {
   value       = azurerm_kubernetes_cluster.this.fqdn
 }
 
-output "kube_config_raw" {
-  description = "Raw kubeconfig for the AKS cluster"
-  value       = azurerm_kubernetes_cluster.this.kube_config_raw
-  sensitive   = true
+output "current_kubernetes_version" {
+  description = "Current Kubernetes version running on the AKS cluster"
+  value       = azurerm_kubernetes_cluster.this.current_kubernetes_version
 }
 
-output "kube_config" {
-  description = "Kubeconfig attributes for the AKS cluster"
-  value = {
-    host                   = azurerm_kubernetes_cluster.this.kube_config[0].host
-    client_certificate     = azurerm_kubernetes_cluster.this.kube_config[0].client_certificate
-    client_key             = azurerm_kubernetes_cluster.this.kube_config[0].client_key
-    cluster_ca_certificate = azurerm_kubernetes_cluster.this.kube_config[0].cluster_ca_certificate
-  }
-  sensitive = true
+output "oidc_issuer_url" {
+  description = "OIDC issuer URL associated with the AKS cluster"
+  value       = azurerm_kubernetes_cluster.this.oidc_issuer_url
 }
 
 output "kubelet_identity_object_id" {
   description = "Object ID of the kubelet managed identity"
-  value       = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
+  value       = try(azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id, null)
 }
 
 output "identity_principal_id" {
@@ -43,4 +36,29 @@ output "identity_principal_id" {
 output "node_resource_group" {
   description = "Name of the resource group containing AKS nodes"
   value       = azurerm_kubernetes_cluster.this.node_resource_group
+}
+
+output "node_resource_group_id" {
+  description = "ID of the resource group containing AKS nodes"
+  value       = azurerm_kubernetes_cluster.this.node_resource_group_id
+}
+
+output "user_node_pools" {
+  description = "User node pool IDs, names, and current node image versions"
+  value = {
+    for name, pool in azurerm_kubernetes_cluster_node_pool.user : name => {
+      id                 = pool.id
+      name               = pool.name
+      node_image_version = pool.node_image_version
+    }
+  }
+}
+
+output "oms_agent_identity" {
+  description = "Managed identity used by Container Insights, or null when the add-on is disabled"
+  value = try({
+    client_id                 = azurerm_kubernetes_cluster.this.oms_agent[0].oms_agent_identity[0].client_id
+    object_id                 = azurerm_kubernetes_cluster.this.oms_agent[0].oms_agent_identity[0].object_id
+    user_assigned_identity_id = azurerm_kubernetes_cluster.this.oms_agent[0].oms_agent_identity[0].user_assigned_identity_id
+  }, null)
 }

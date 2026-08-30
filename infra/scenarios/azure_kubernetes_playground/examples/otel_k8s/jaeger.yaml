@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: otel-stack
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: jaeger
@@ -17,9 +18,19 @@ spec:
         app.kubernetes.io/name: jaeger
         app.kubernetes.io/part-of: otel-stack
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        runAsGroup: 10001
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
       containers:
         - name: jaeger
-          image: jaegertracing/all-in-one:latest
+          image: jaegertracing/jaeger:2.20.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: ui
               containerPort: 16686
@@ -27,12 +38,33 @@ spec:
             - name: otlp-grpc
               containerPort: 4317
               protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
-              path: /
-              port: 16686
+              path: /status
+              port: health
             initialDelaySeconds: 5
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
             requests:
               cpu: 100m
@@ -40,6 +72,9 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -61,4 +96,12 @@ spec:
     - name: otlp-grpc
       port: 4317
       targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+    - name: health
+      port: 13133
+      targetPort: 13133
       protocol: TCP

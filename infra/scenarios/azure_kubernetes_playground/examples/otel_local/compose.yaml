@@ -1,13 +1,19 @@
+name: azure-kubernetes-playground-otel
+
 services:
   # --- Backends ---
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/jaeger:2.20.0
     ports:
       - "16686:16686" # Jaeger UI
+      - "13134:13133" # Jaeger health (/status)
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.14.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
     ports:
       - "9090:9090"
     volumes:
@@ -16,12 +22,13 @@ services:
 
   # --- OpenTelemetry Collector ---
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.159.0
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
+      - "13133:13133" # Collector health
     depends_on:
       - jaeger
       - prometheus
@@ -29,7 +36,7 @@ services:
 
   # --- Telemetry generators (application substitute) ---
   telemetrygen-traces:
-    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0
     command:
       - traces
       - --otlp-endpoint=otel-collector:4317
@@ -40,7 +47,7 @@ services:
       - otel-collector
 
   telemetrygen-metrics:
-    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.159.0
     command:
       - metrics
       - --otlp-endpoint=otel-collector:4317

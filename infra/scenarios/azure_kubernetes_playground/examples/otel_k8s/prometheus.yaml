@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: otel-stack
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: prometheus
@@ -17,11 +18,22 @@ spec:
         app.kubernetes.io/name: prometheus
         app.kubernetes.io/part-of: otel-stack
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 65534
+        runAsNonRoot: true
+        runAsGroup: 65534
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
       containers:
         - name: prometheus
-          image: prom/prometheus:latest
+          image: prom/prometheus:v3.14.0
+          imagePullPolicy: IfNotPresent
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
             - "--web.enable-remote-write-receiver"
           ports:
             - name: web
@@ -32,12 +44,26 @@ spec:
               mountPath: /etc/prometheus/prometheus.yml
               subPath: prometheus.yml
               readOnly: true
+            - name: data
+              mountPath: /prometheus
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
           readinessProbe:
             httpGet:
               path: /-/ready
               port: 9090
             initialDelaySeconds: 5
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: web
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
             requests:
               cpu: 100m
@@ -49,6 +75,8 @@ spec:
         - name: config
           configMap:
             name: prometheus-config
+        - name: data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
