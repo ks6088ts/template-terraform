@@ -153,6 +153,8 @@ The script checks `/health` and sends an MCP `tools/list` request to `/mcp`. If
 Microsoft Entra authentication is enabled, it obtains an Azure CLI access token
 for the configured application ID URI automatically.
 
+For failure diagnosis and recovery steps, see [Troubleshooting](troubleshooting.md).
+
 ## Script reference
 
 | Script | Purpose |
