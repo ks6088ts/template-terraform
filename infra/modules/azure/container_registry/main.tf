@@ -1,12 +1,14 @@
 resource "azurerm_container_registry" "this" {
-  name                          = "cr${replace(var.name, "-", "")}"
-  resource_group_name           = var.resource_group_name
-  location                      = var.location
-  sku                           = var.sku
-  admin_enabled                 = var.admin_enabled
-  anonymous_pull_enabled        = var.anonymous_pull_enabled
-  public_network_access_enabled = var.public_network_access_enabled
-  tags                          = var.tags
+  name                                         = "cr${replace(var.name, "-", "")}"
+  resource_group_name                          = var.resource_group_name
+  location                                     = var.location
+  sku                                          = var.sku
+  admin_enabled                                = var.admin_enabled
+  anonymous_pull_enabled                       = var.anonymous_pull_enabled
+  public_network_access_enabled                = var.public_network_access_enabled
+  azuread_authentication_as_arm_policy_enabled = var.azuread_authentication_as_arm_policy_enabled
+  role_assignment_mode                         = var.role_assignment_mode
+  tags                                         = var.tags
 
   lifecycle {
     precondition {

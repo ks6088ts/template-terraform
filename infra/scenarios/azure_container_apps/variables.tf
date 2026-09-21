@@ -32,20 +32,26 @@ variable "container_image" {
   }
 }
 
-variable "enable_public_acr" {
-  description = "Whether to deploy an Azure Container Registry with anonymous pull access"
-  type        = bool
-  default     = false
-}
-
 variable "acr_sku" {
-  description = "SKU for the public Azure Container Registry (Standard or Premium)"
+  description = "SKU for the private Azure Container Registry"
   type        = string
-  default     = "Standard"
+  default     = "Basic"
 
   validation {
-    condition     = contains(["Standard", "Premium"], var.acr_sku)
-    error_message = "ACR SKU must be one of: Standard, Premium."
+    condition     = contains(["Basic", "Standard", "Premium"], var.acr_sku)
+    error_message = "ACR SKU must be one of: Basic, Standard, Premium."
+  }
+}
+
+variable "acr_push_principal_id" {
+  description = "Object ID of the principal granted AcrPush; defaults to the principal running Terraform"
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.acr_push_principal_id == null ? true : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.acr_push_principal_id))
+    error_message = "acr_push_principal_id must be null or a valid UUID."
   }
 }
 

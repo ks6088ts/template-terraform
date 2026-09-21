@@ -32,6 +32,14 @@ resource "azurerm_container_app" "this" {
     }
   }
 
+  dynamic "registry" {
+    for_each = var.registries
+    content {
+      server   = registry.value.server
+      identity = registry.value.identity
+    }
+  }
+
   template {
     container {
       name    = "app-${var.name}"
@@ -63,6 +71,15 @@ resource "azurerm_container_app" "this" {
         percentage      = 100
         latest_revision = true
       }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        for registry in var.registries : contains(var.identity_ids, registry.identity)
+      ])
+      error_message = "Every registry identity must also be included in identity_ids."
     }
   }
 }
