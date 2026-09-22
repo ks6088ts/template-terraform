@@ -147,11 +147,14 @@ combined runner.
 
 ```bash
 ./scripts/verify_deployment.sh
+./scripts/verify_deployment.sh --verbose
 ```
 
 The script checks `/health` and sends an MCP `tools/list` request to `/mcp`. If
 Microsoft Entra authentication is enabled, it obtains an Azure CLI access token
-for the configured application ID URI automatically.
+for the configured application ID URI automatically. Use `-v` or `--verbose` to
+show each request, its HTTP status, the MCP response format, and the returned tool
+names. Verbose mode does not print the bearer token.
 
 For failure diagnosis and recovery steps, see [Troubleshooting](troubleshooting.md).
 
@@ -163,7 +166,7 @@ For failure diagnosis and recovery steps, see [Troubleshooting](troubleshooting.
 | `build_image.sh` | Build `src/` locally and tag it with the ACR login server |
 | `push_image.sh` | Authenticate to ACR and push the local image |
 | `deploy_image.sh` | Resolve the digest, persist deployment variables, and apply Terraform |
-| `verify_deployment.sh` | Verify the health and MCP endpoints |
+| `verify_deployment.sh` | Verify the health and MCP endpoints, with optional verbose output |
 
 ## Develop locally
 

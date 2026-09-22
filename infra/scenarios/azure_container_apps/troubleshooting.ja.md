@@ -60,6 +60,13 @@ built-in environment variables から次のホスト名を許可します。
 
 ### 421 の発生箇所を確認する
 
+最初に verbose 検証を実行します。bearer token を表示せずに、要求先、HTTP status、
+応答形式、MCP tool 名を確認できます。
+
+```bash
+./scripts/verify_deployment.sh --verbose
+```
+
 `curl --fail` はエラー本文を確認しにくいため、診断時は status と本文を分けて取得します。
 
 ```bash

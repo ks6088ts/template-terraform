@@ -60,6 +60,13 @@ validation. Therefore, `/health` can return 200 while only `/mcp` returns 421.
 
 ### Locate the 421 response
 
+Start with verbose verification. It shows the request targets, HTTP status,
+response format, and MCP tool names without printing the bearer token.
+
+```bash
+./scripts/verify_deployment.sh --verbose
+```
+
 Because `curl --fail` makes the error body difficult to inspect, collect the
 status and body separately during diagnosis.
 

@@ -147,11 +147,14 @@ Docker で push します。
 
 ```bash
 ./scripts/verify_deployment.sh
+./scripts/verify_deployment.sh --verbose
 ```
 
 `/health` を確認し、`/mcp` へ MCP `tools/list` 要求を送信します。Microsoft Entra
 認証が有効な場合は、構成済みのアプリケーション ID URI を対象とする Azure CLI の
-アクセストークンを自動的に取得します。
+アクセストークンを自動的に取得します。`-v` または `--verbose` を指定すると、各要求、
+HTTP status、MCP 応答形式、返された tool 名を表示します。verbose モードでも bearer
+token は表示しません。
 
 問題の診断と復旧手順は、[トラブルシューティング](troubleshooting.ja.md)を参照してください。
 
@@ -163,7 +166,7 @@ Docker で push します。
 | `build_image.sh` | `src/` をローカルでビルドし、ACR ログインサーバーを含むタグを付与 |
 | `push_image.sh` | ACR に認証してローカルイメージを push |
 | `deploy_image.sh` | digest の解決、デプロイ変数の保存、Terraform apply |
-| `verify_deployment.sh` | health と MCP エンドポイントの確認 |
+| `verify_deployment.sh` | health と MCP エンドポイントの確認。verbose 出力に対応 |
 
 ## ローカル開発
 
