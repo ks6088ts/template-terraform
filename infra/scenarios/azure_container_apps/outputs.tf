@@ -4,18 +4,23 @@ output "resource_group_name" {
 }
 
 output "acr_id" {
-  description = "ID of the Azure Container Registry (null when disabled)"
-  value       = var.enable_public_acr ? module.container_registry[0].id : null
+  description = "ID of the Azure Container Registry"
+  value       = module.container_registry.id
 }
 
 output "acr_name" {
-  description = "Name of the Azure Container Registry (null when disabled)"
-  value       = var.enable_public_acr ? module.container_registry[0].name : null
+  description = "Name of the Azure Container Registry"
+  value       = module.container_registry.name
 }
 
 output "acr_login_server" {
-  description = "Login server URL of the Azure Container Registry (null when disabled)"
-  value       = var.enable_public_acr ? module.container_registry[0].login_server : null
+  description = "Login server URL of the Azure Container Registry"
+  value       = module.container_registry.login_server
+}
+
+output "acr_push_principal_id" {
+  description = "Object ID of the principal granted AcrPush"
+  value       = local.acr_push_principal_id
 }
 
 output "container_app_environment_id" {
@@ -49,8 +54,18 @@ output "container_app_url" {
 }
 
 output "container_app_identity_principal_id" {
-  description = "Principal ID of the Container App's system assigned managed identity"
-  value       = module.container_apps.identity_principal_id
+  description = "Principal ID of the user assigned managed identity used to pull images"
+  value       = azurerm_user_assigned_identity.container_app_acr_pull.principal_id
+}
+
+output "container_app_identity_id" {
+  description = "Resource ID of the user assigned managed identity used to pull images"
+  value       = azurerm_user_assigned_identity.container_app_acr_pull.id
+}
+
+output "container_app_identity_client_id" {
+  description = "Client ID of the user assigned managed identity used to pull images"
+  value       = azurerm_user_assigned_identity.container_app_acr_pull.client_id
 }
 
 output "application_insights_id" {

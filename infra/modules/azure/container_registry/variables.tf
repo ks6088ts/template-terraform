@@ -42,6 +42,23 @@ variable "public_network_access_enabled" {
   default     = true
 }
 
+variable "azuread_authentication_as_arm_policy_enabled" {
+  description = "Use Azure Resource Manager audience tokens to authenticate to the registry"
+  type        = bool
+  default     = true
+}
+
+variable "role_assignment_mode" {
+  description = "Role assignment mode for the container registry"
+  type        = string
+  default     = "LegacyRegistryPermissions"
+
+  validation {
+    condition     = contains(["LegacyRegistryPermissions", "AbacRepositoryPermissions"], var.role_assignment_mode)
+    error_message = "Role assignment mode must be one of: LegacyRegistryPermissions, AbacRepositoryPermissions."
+  }
+}
+
 variable "tags" {
   description = "Tags to apply to the container registry"
   type        = map(string)

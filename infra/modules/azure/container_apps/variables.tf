@@ -100,6 +100,22 @@ variable "identity_ids" {
   default     = []
 }
 
+variable "registries" {
+  description = "Container registries authenticated with user assigned managed identities"
+  type = list(object({
+    server   = string
+    identity = string
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for registry in var.registries : length(trimspace(registry.server)) > 0 && length(trimspace(registry.identity)) > 0
+    ])
+    error_message = "Each registry must provide a non-empty server and user assigned managed identity resource ID."
+  }
+}
+
 variable "env_vars" {
   description = "Environment variables to inject into the container. Use 'value' for plain values or 'secret_name' to reference a secret defined in 'secrets'."
   type = list(object({

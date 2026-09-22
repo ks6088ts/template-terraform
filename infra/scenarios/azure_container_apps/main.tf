@@ -10,8 +10,9 @@ module "random_string" {
 }
 
 locals {
-  resource_suffix = module.random_string.result
-  resource_name   = "${trim(substr(var.name, 0, 19), "-")}-${local.resource_suffix}"
+  resource_suffix       = module.random_string.result
+  resource_name         = "${trim(substr(var.name, 0, 19), "-")}-${local.resource_suffix}"
+  acr_push_principal_id = coalesce(var.acr_push_principal_id, data.azurerm_client_config.current.object_id)
 }
 
 # =============================================================================
@@ -92,18 +93,47 @@ module "resource_group" {
 # Container Registry
 # =============================================================================
 
+data "azurerm_client_config" "current" {}
+
+moved {
+  from = module.container_registry[0]
+  to   = module.container_registry
+}
+
 module "container_registry" {
-  count  = var.enable_public_acr ? 1 : 0
   source = "../../modules/azure/container_registry"
 
-  name                          = local.resource_name
-  resource_group_name           = module.resource_group.name
-  location                      = module.resource_group.location
-  sku                           = var.acr_sku
-  admin_enabled                 = false
-  anonymous_pull_enabled        = true
-  public_network_access_enabled = true
-  tags                          = var.tags
+  name                                         = local.resource_name
+  resource_group_name                          = module.resource_group.name
+  location                                     = module.resource_group.location
+  sku                                          = var.acr_sku
+  admin_enabled                                = false
+  anonymous_pull_enabled                       = false
+  public_network_access_enabled                = true
+  azuread_authentication_as_arm_policy_enabled = true
+  role_assignment_mode                         = "LegacyRegistryPermissions"
+  tags                                         = var.tags
+}
+
+resource "azurerm_user_assigned_identity" "container_app_acr_pull" {
+  name                = "id-${local.resource_name}"
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  tags                = var.tags
+}
+
+resource "azurerm_role_assignment" "container_app_acr_pull" {
+  scope                            = module.container_registry.id
+  role_definition_name             = "AcrPull"
+  principal_id                     = azurerm_user_assigned_identity.container_app_acr_pull.principal_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
+}
+
+resource "azurerm_role_assignment" "acr_push" {
+  scope                = module.container_registry.id
+  role_definition_name = "AcrPush"
+  principal_id         = local.acr_push_principal_id
 }
 
 # =============================================================================
@@ -181,8 +211,15 @@ module "container_apps" {
   env_vars                   = concat(local.application_insights_env_vars, var.env_vars)
   secrets                    = concat(local.application_insights_secrets, var.secrets)
   authentication             = local.authentication
+  identity_type              = "UserAssigned"
+  identity_ids               = [azurerm_user_assigned_identity.container_app_acr_pull.id]
+  registries = [{
+    server   = module.container_registry.login_server
+    identity = azurerm_user_assigned_identity.container_app_acr_pull.id
+  }]
 
   depends_on = [
+    azurerm_role_assignment.container_app_acr_pull,
     azuread_application_pre_authorized.azure_cli,
     azuread_service_principal.container_app,
   ]
