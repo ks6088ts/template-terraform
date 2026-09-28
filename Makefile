@@ -42,21 +42,25 @@ info-azure: ## show information about Azure
 
 .PHONY: install-deps-dev
 install-deps-dev: ## install dependencies for development
-	@command -v terraform >/dev/null 2>&1 || echo "Please install Terraform: https://developer.hashicorp.com/terraform/install"
-	@command -v az >/dev/null 2>&1 || echo "Please install Azure CLI: https://docs.microsoft.com/cli/azure/install-azure-cli"
-	@command -v gh >/dev/null 2>&1 || echo "Please install GitHub CLI: https://cli.github.com/"
-	@command -v tflint >/dev/null 2>&1 || echo "Please install tflint: https://github.com/terraform-linters/tflint#installation"
-	@command -v trivy >/dev/null 2>&1 || echo "Please install Trivy: https://aquasecurity.github.io/trivy/v0.57/getting-started/installation/"
-	@command -v infracost >/dev/null 2>&1 || echo "Please install Infracost: https://www.infracost.io/docs/"
-	@command -v actionlint >/dev/null 2>&1 || echo "Please install actionlint: https://github.com/rhysd/actionlint/blob/main/docs/install.md"
+	@missing=0; \
+	for tool in terraform az gh tflint trivy infracost actionlint; do \
+		if ! command -v "$$tool" >/dev/null 2>&1; then \
+			echo "$$tool is not installed."; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ "$$missing" -ne 0 ]; then \
+		echo "Install the missing development tools and try again."; \
+		exit 1; \
+	fi
 
 .PHONY: clean
 clean:
-	cd $(SCENARIO_DIR) && rm -rf .terraform* terraform.*
+	cd $(SCENARIO_DIR) && rm -rf .terraform
 
 .PHONY: init
 init:
-	$(TERRAFORM) init
+	$(TERRAFORM) init -lockfile=readonly
 
 .PHONY: lint
 lint:
@@ -65,31 +69,22 @@ lint:
 
 .PHONY: tflint
 tflint:
-	@if [ -x "$(shell command -v tflint)" ]; then \
-		echo "Running tflint..."; \
-		tflint --init; \
-		tflint --recursive; \
-	else \
-		echo "tflint is not installed. Skipping..."; \
-	fi
+	@command -v tflint >/dev/null 2>&1 || { echo "tflint is not installed."; exit 1; }
+	@echo "Running tflint..."
+	@tflint --init
+	@tflint --recursive
 
 .PHONY: trivy
 trivy:
-	@if [ -x "$(shell command -v trivy)" ]; then \
-		echo "Running trivy..."; \
-		trivy config .; \
-	else \
-		echo "trivy is not installed. Skipping..."; \
-	fi
+	@command -v trivy >/dev/null 2>&1 || { echo "trivy is not installed."; exit 1; }
+	@echo "Running trivy..."
+	@trivy config .
 
 .PHONY: actionlint
 actionlint:
-	@if [ -x "$(shell command -v actionlint)" ]; then \
-		echo "Running actionlint..."; \
-		actionlint; \
-	else \
-		echo "actionlint is not installed. Skipping..."; \
-	fi
+	@command -v actionlint >/dev/null 2>&1 || { echo "actionlint is not installed."; exit 1; }
+	@echo "Running actionlint..."
+	@actionlint
 
 .PHONY: fix
 fix: ## fix formatting
@@ -113,7 +108,7 @@ test: init ## test codes
 	$(TERRAFORM) test
 
 .PHONY: _ci-test-base
-_ci-test-base: install-deps-dev clean init lint test plan
+_ci-test-base: clean init lint test plan
 
 .PHONY: ci-test
 ci-test: tflint trivy actionlint ## ci test
