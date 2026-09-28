@@ -85,6 +85,12 @@ variable "model_deployments" {
       capacity = 1000
     },
     {
+      name     = "gpt-5.5"
+      model    = "gpt-5.5"
+      version  = "2026-04-24"
+      capacity = 1000
+    },
+    {
       name     = "gpt-5.6-sol"
       model    = "gpt-5.6-sol"
       version  = "2026-07-09"
