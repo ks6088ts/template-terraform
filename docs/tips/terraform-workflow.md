@@ -15,7 +15,7 @@ commands available on your machine from the repository root:
 make install-deps-dev
 ```
 
-The command reports missing tools. It does not install them.
+The command reports missing tools and fails when any required tool is unavailable.
 
 ## Run a scenario with GNU Make
 
@@ -49,10 +49,9 @@ The Makefile derives `ARM_SUBSCRIPTION_ID` from the current Azure CLI session an
 exports it to Terraform commands.
 
 > [!CAUTION]
-> `make clean SCENARIO="$SCENARIO"` removes `.terraform*` and `terraform.*`
-> files in the scenario directory. This includes local state and may include
-> local variable files. Back up anything that must be retained before running
-> it.
+> `make clean SCENARIO="$SCENARIO"` removes only the `.terraform/` cache in the
+> scenario directory. The tracked dependency lock file, local state, and variable
+> files are preserved.
 
 ## Run a scenario with the Terraform CLI
 
@@ -61,7 +60,7 @@ Run direct Terraform commands from the scenario directory:
 ```bash
 cd infra/scenarios/<scenario>
 
-terraform init
+terraform init -lockfile=readonly
 terraform fmt -check
 terraform validate
 terraform plan
@@ -112,3 +111,8 @@ display names remain stable.
 Terraform uses local state unless the root module declares another backend. Use
 local state for isolated evaluation and repository tests. For shared or durable
 state, follow the [Azure Blob Storage backend guide](azure-blob-backend.md).
+
+Provider constraints and the tracked lock files are updated together. The Google
+provider remains on the latest 7.x release (`7.46.1`) because Google provider 8
+contains breaking changes; the OIDC scenario should be reviewed separately
+before that major version is adopted.

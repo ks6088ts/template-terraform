@@ -6,11 +6,14 @@
   "features": {
     "ghcr.io/devcontainers/features/azure-cli:latest": {},
     "ghcr.io/devcontainers/features/github-cli:latest": {},
-    "ghcr.io/devcontainers/features/terraform:latest": {},
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "version": "1.16.4",
+      "tflint": "0.64.0"
+    },
     "ghcr.io/dhoeric/features/trivy:1": {},
     // Community-maintained feature; the version is pinned for reproducible builds.
     "ghcr.io/devcontainers-extra/features/infracost:1": {
-      "version": "2.16.2"
+      "version": "2.16.3"
     }
   },
   "customizations": {

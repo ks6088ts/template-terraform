@@ -15,10 +15,10 @@ permissions:
   contents: read
 
 env:
-  TERRAFORM_VERSION: 1.13.4
-  TFLINT_VERSION: v0.60.0
-  TRIVY_VERSION: v0.69.3
-  ACTIONLINT_VERSION: 1.7.11
+  TERRAFORM_VERSION: 1.16.4
+  TFLINT_VERSION: v0.64.0
+  TRIVY_VERSION: v0.74.0
+  ACTIONLINT_VERSION: 1.7.12
 
 jobs:
   # Lint and security scan (no auth required)

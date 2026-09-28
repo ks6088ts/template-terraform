@@ -15,7 +15,7 @@ ms.topic: how-to
 make install-deps-dev
 ```
 
-このコマンドは不足しているツールを報告します。ツールのインストールは行いません。
+このコマンドは不足しているツールを報告し、必要なツールがない場合は失敗します。
 
 ## GNU Make を使用したシナリオの実行
 
@@ -49,9 +49,8 @@ Makefile は現在の Azure CLI セッションから `ARM_SUBSCRIPTION_ID` を�
 エクスポートします。
 
 > [!CAUTION]
-> `make clean SCENARIO="$SCENARIO"` は、シナリオディレクトリ内の `.terraform*` ファイルと
-> `terraform.*` ファイルを削除します。これにはローカルステートが含まれ、ローカル変数ファイルも
-> 含まれる場合があります。実行前に、保持する必要があるものをすべてバックアップしてください。
+> `make clean SCENARIO="$SCENARIO"` は、シナリオディレクトリ内の `.terraform/` キャッシュのみを
+> 削除します。追跡対象の依存関係ロックファイル、ローカルステート、変数ファイルは保持されます。
 
 ## Terraform CLI を使用したシナリオの実行
 
@@ -60,7 +59,7 @@ Makefile は現在の Azure CLI セッションから `ARM_SUBSCRIPTION_ID` を�
 ```bash
 cd infra/scenarios/<scenario>
 
-terraform init
+terraform init -lockfile=readonly
 terraform fmt -check
 terraform validate
 terraform plan
@@ -107,3 +106,7 @@ Azure Preflight Validation は有効にしません。
 ルートモジュールで別のバックエンドを宣言していない限り、Terraform はローカルステートを使用します。
 分離された評価やリポジトリのテストにはローカルステートを使用します。共有または永続的なステートには、
 [Azure Blob Storage バックエンドガイド](azure-blob-backend.ja.md)に従ってください。
+
+プロバイダーの制約と追跡対象のロックファイルは同時に更新します。Google プロバイダー 8 には
+破壊的変更があるため、最新の 7 系（`7.46.1`）に留めています。メジャーバージョンを採用する前に、
+OIDC シナリオへの影響を個別に確認してください。

@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  INFRACOST_VERSION: 2.16.2
+  INFRACOST_VERSION: 2.16.3
 
 concurrency:
   group: infracost-${{ github.event.pull_request.number || github.ref }}
