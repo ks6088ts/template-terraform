@@ -138,3 +138,19 @@ run "reject_invalid_capacity" {
 
   expect_failures = [var.embedding_model]
 }
+
+run "reject_duplicate_deployments" {
+  command = plan
+
+  variables {
+    chat_model = {
+      name     = "text-embedding-3-small"
+      model    = "gpt-5.4-mini"
+      version  = "2026-03-17"
+      sku_name = "GlobalStandard"
+      capacity = 100
+    }
+  }
+
+  expect_failures = [var.chat_model]
+}

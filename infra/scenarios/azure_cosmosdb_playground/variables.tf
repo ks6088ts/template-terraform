@@ -84,7 +84,7 @@ variable "chat_model" {
   }
 
   validation {
-    condition     = var.chat_model.capacity > 0 && length(var.chat_model.name) > 0 && length(var.chat_model.model) > 0 && length(var.chat_model.version) > 0 && length(var.chat_model.sku_name) > 0
-    error_message = "Chat model requires a name, model, version, SKU, and positive capacity."
+    condition     = var.chat_model.capacity > 0 && length(var.chat_model.name) > 0 && var.chat_model.name != var.embedding_model.name && length(var.chat_model.model) > 0 && length(var.chat_model.version) > 0 && length(var.chat_model.sku_name) > 0
+    error_message = "Chat model requires a distinct deployment name, model, version, SKU, and positive capacity."
   }
 }

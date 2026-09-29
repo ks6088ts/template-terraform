@@ -118,6 +118,7 @@ jobs:
         scenario:
           - azure_apim_playground
           - azure_container_apps
+          - azure_cosmosdb_playground
           - azure_datastore
           - azure_functions_flex_consumption
           # FIXME: data.azuread_service_principal requires Microsoft Graph permissions that are not available under our current test setup, so skipping for now
