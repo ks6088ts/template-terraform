@@ -22,6 +22,7 @@ provider authentication, and remote state guidance.
 | [azure_github_oidc](./infra/scenarios/azure_github_oidc/README.md) | Creates a service principal and role assignments for connecting GitHub Actions to Azure through OIDC. |
 | [azure_apim_playground](./infra/scenarios/azure_apim_playground/README.md) | Deploys a runnable API Management core with opt-in resilience, AI gateway policies, Content Safety, observability, and cost showback. |
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Deploys an externally accessible Azure Container App from a Docker Hub image. |
+| [azure_cosmosdb_playground](./infra/scenarios/azure_cosmosdb_playground/README.md) | Explores Cosmos DB NoSQL CRUD, TTL, change feed, vector/full-text/hybrid search, and Foundry-backed RAG. |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.md) | Deploys Azure data stores, including Cosmos DB, Storage, Key Vault, PostgreSQL, and Monitor, with public access for testing. |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.md) | Deploys a minimal serverless Azure Functions environment on the Flex Consumption plan. |
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Deploys the Azure infrastructure required to run Microsoft Foundry workloads. |

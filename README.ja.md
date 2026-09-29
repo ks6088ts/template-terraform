@@ -22,6 +22,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | [azure_github_oidc](./infra/scenarios/azure_github_oidc/README.ja.md) | GitHub Actions から Azure に OIDC で接続するためのサービスプリンシパルを作成し、必要な権限を割り当てます。 |
 | [azure_apim_playground](./infra/scenarios/azure_apim_playground/README.ja.md) | 実行可能な API Management core と、opt-in の resilience、AI gateway policy、Content Safety、可観測性、cost showback をデプロイします。 |
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.ja.md) | Docker Hub イメージを使用し、外部アクセス可能な Azure Container App をデプロイします。 |
+| [azure_cosmosdb_playground](./infra/scenarios/azure_cosmosdb_playground/README.ja.md) | Cosmos DB NoSQL の CRUD、TTL、変更フィード、ベクトル・全文・ハイブリッド検索、Foundry を使った RAG を体験します。 |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.ja.md) | Cosmos DB、Storage、Key Vault、PostgreSQL、Monitor などの Azure データストアを、テスト用のパブリックアクセスを許可してデプロイします。 |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.ja.md) | Azure Functions の Flex Consumption プランを使用し、最小構成のサーバーレス実行環境をデプロイします。 |
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.ja.md) | Microsoft Foundry ワークロードの実行に必要な Azure インフラストラクチャをデプロイします。 |
