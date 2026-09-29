@@ -89,7 +89,7 @@ resource "azurerm_function_app_flex_consumption" "this" {
   }
 
   site_config {
-    # Application Insights is optional - skip if not provided
+    application_insights_connection_string = var.application_insights_connection_string
   }
 
   app_settings = merge(
@@ -102,7 +102,11 @@ resource "azurerm_function_app_flex_consumption" "this" {
       "AzureWebJobsStorage__queueServiceUri" = azurerm_storage_account.this.primary_queue_endpoint
       "AzureWebJobsStorage__tableServiceUri" = azurerm_storage_account.this.primary_table_endpoint
     },
-    var.app_settings
+    var.app_settings,
+    {
+      "STORAGE_ACCOUNT_BLOB_ENDPOINT" = azurerm_storage_account.this.primary_blob_endpoint
+      "STORAGE_CONTAINER_NAME"        = azurerm_storage_container.deployment.name
+    }
   )
 
   depends_on = [

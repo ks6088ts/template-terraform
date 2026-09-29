@@ -1,372 +1,170 @@
 ---
-description: Azure Functions Flex Consumption プランを最小構成でデプロイするシナリオ
+description: Entra 認証、ID ベースの Storage アクセス、監視を備えた Python Azure Functions Flex Consumption のハンズオン
 ---
 
-# Azure Functions Flex Consumption シナリオ
+# Azure Functions Flex Consumption（Python）
 
-Azure Functions の Flex Consumption プランをデプロイします。サーバーレス関数の実行環境を最小構成で構築します。
-
-## 概要
-
-このシナリオでは、以下のリソースを作成します。
-
-* **リソースグループ**: すべてのリソースを格納するコンテナー
-* **ストレージアカウント**: Functions の実行に必要なストレージ（デプロイパッケージ用コンテナーを含む）
-* **サービスプラン（Flex Consumption）**: FC1 SKU の Flex Consumption プラン
-* **Function App**: Flex Consumption で動作するシステム割り当てマネージド ID 付き Function App
-* **RBAC ロール割り当て**: Storage に対するマネージド ID の権限設定
-* 組み込み認証用の Microsoft Entra アプリ登録とサービスプリンシパル
-
-## 前提条件
-
-[プロバイダー認証](../../../docs/tips/provider-authentication.ja.md)、
-[標準 Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)、およびオプションの
-[Azure Blob リモートステート](../../../docs/tips/azure-blob-backend.ja.md)については、共通ガイダンスを参照してください。
-
-リポジトリの Makefile を使用する場合は、`SCENARIO=azure_functions_flex_consumption` を指定します。
-
-Terraform を実行する ID には、Microsoft Entra のアプリ登録を作成および管理する権限が必要です。
-Azure CLI を事前承認済みクライアントとして設定するには、Application Administrator または
-Global Administrator のディレクトリロールが必要になる場合があります。
-
-このシナリオは、Microsoft Azure CLI のパブリッククライアントに発行された
-トークンを許可します。`az login` で対話ユーザーとしてサインインしてください。
-サービスプリンシパルでのログインには別のクライアントアプリケーション ID が
-使用されるため、この例の対象外です。
+Linux FC1 Flex Consumption の Function App を構築し、Python サンプルを明示的に公開して、2 種類の HTTP 認証、マネージド ID での Storage アクセス、タイマー、テレメトリを検証します。Terraform が構築するのは**インフラのみ**です。apply だけでは関数コードは公開されません。
 
 ## アーキテクチャ
 
 ```mermaid
-flowchart TB
-  CLI["ローカル Azure CLI<br/>対話ユーザー"]
-  KeyClient["Function Key クライアント"]
-  Entra["Microsoft Entra ID<br/>API アプリ登録"]
-
-    subgraph Azure["Azure リソースグループ"]
-        subgraph FlexConsumption["Flex Consumption プラン"]
-      EasyAuth["組み込み認証<br/>Bearer トークン検証"]
-      FA["Function App<br/>/api/hello<br/>/api/hello-key"]
-        end
-        ST["ストレージアカウント<br/>- デプロイパッケージ<br/>- Blob/Queue/Table"]
-    end
-
-  CLI -->|アクセストークンを要求| Entra
-  CLI -->|Bearer トークン| EasyAuth
-  Entra -.->|issuer と audience を検証| EasyAuth
-  EasyAuth -->|/api/hello| FA
-  KeyClient -->|x-functions-key| FA
-    FA -.->|マネージド ID| ST
+flowchart LR
+  User["対話型 Azure CLI ユーザー"] -->|API URI 用アクセストークン取得| Entra["Microsoft Entra ID<br/>API アプリとサービスプリンシパル<br/>Azure CLI を事前承認"]
+  User -->|ユーザーアクセストークン| Auth
+  Entra -.->|issuer、audience、client を検証| Auth
+  Key["Function Key クライアント"] -->|/api/hello-key は組み込み認証の対象外<br/>Functions ホストが x-functions-key を検証| App
+  subgraph RG["Azure リソースグループ"]
+    Auth["App Service 組み込み認証<br/>トークンなしは 401"]
+    Plan["Linux FC1 プラン"] --> App["Python Function App<br/>/api/hello<br/>/api/hello-key<br/>/api/storage-check<br/>タイマー"]
+    Auth -->|/api/hello と /api/storage-check| App
+    App -->|システム割り当て ID<br/>Blob Owner、Queue/Table Contributor| Storage["Storage Account<br/>プライベートなデプロイコンテナー<br/>ホスト用 Blob/Queue/Table"]
+    App -->|接続文字列: テレメトリ| AI["Application Insights"]
+    AI --> LA["Log Analytics ワークスペース"]
+  end
+  Operator["Terraform 実行 ID"] -->|Storage Blob Data Contributor| Storage
+  Publisher["scripts/publish_code.sh<br/>Functions Core Tools"] -->|One Deploy| App
 ```
 
-## 機能
+組み込み認証は Python ランタイムに到達する前に `/api/hello` と `/api/storage-check` を保護します。`/api/hello-key` は認証方式の比較のため対象外とし、Functions ホストが `function` 認証レベルを強制します。Python タイマーは `TIMER_SCHEDULE` アプリ設定に従います。Storage プローブは `STORAGE_ACCOUNT_BLOB_ENDPOINT`（Blob サービスの URI）と `STORAGE_CONTAINER_NAME`（デプロイコンテナー）のアプリ設定を使用し、`ManagedIdentityCredential` でコンテナーの属性を読み取ります。Blob の内容は公開しません。Application Insights の接続文字列はテレメトリ専用です。Storage には接続文字列ではなくマネージド ID でアクセスします。
 
-* **Flex Consumption プラン**: 従量課金制でコスト効率の良いサーバーレス実行環境
-* **Microsoft Entra 組み込み認証**: 未認証リクエストを関数ランタイムへ到達する前に拒否
-* **キーなし HTTP 呼び出し**: Function キーの代わりに Azure CLI ユーザートークンを使用
-* **Function Key 呼び出し**: `/api/hello-key` を組み込み認証の対象外にし、
-  Functions ホストが Function Key を独立して検証
-* **システム割り当てマネージド ID**: 接続文字列を使わず、Storage への送信アクセスを認証
-* **RBAC ベースのアクセス**: Storage への最小権限アクセス
-* **ゾーン冗長**: オプションでゾーン冗長を有効化可能
-* **Application Insights 不要**: 監視なしの最小構成
+## 前提条件
 
-## 使用方法
+* Azure Public のサブスクリプションと Microsoft Entra テナント。**Linux Flex Consumption** と選択する Python ランタイムに対応したリージョン（既定値は `japaneast`、Python `3.13`）を使用します。[リージョン対応状況](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#regional-subscription-quotas)とサブスクリプションのクォータを確認してください。
+* `mock_provider` を使うプランのみのテストには Terraform **1.7+**（シナリオの [`versions.tf`](versions.tf) ではデプロイ用に **1.6+** を許可）、Azure CLI **2.x** (`az`)、Azure Functions Core Tools **4.x** (`func`)、ローカル作業用 Python **3.13**、`curl`、`jq`、スクリプト実行用 `bash`。プロバイダーの制約は `versions.tf`、ロック済みバージョンは [`.terraform.lock.hcl`](.terraform.lock.hcl) を参照してください。Core Tools は[公式手順](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-run-local#install-the-azure-functions-core-tools)で導入し、`terraform version`、`az version`、`func --version`、`python3 --version`、`jq --version` で確認します。
+* `az login` で対話的にサインインし、`az account set --subscription <subscription-id>` で対象を選択して `az account show` で確認します。Terraform CLI を直接使う場合は以下の `ARM_SUBSCRIPTION_ID` を設定します。Terraform 実行 ID には、リソースグループ、プラン、ストレージ、監視リソース、ロール割り当てを作成する権限（対象スコープの `Microsoft.Authorization/roleAssignments/write`、例: Owner または Contributor と Role Based Access Control Administrator）、および [`providers.tf`](providers.tf) に列挙された未登録リソースプロバイダーを登録する権限が必要です。Entra アプリ登録、サービスプリンシパル作成、Azure CLI の事前承認にはディレクトリ権限が必要です。テナントのポリシーによっては Application Administrator または Global Administrator が必要です。公開担当者には Function App へのデプロイ権限が必要です。[プロバイダー認証ガイド](../../../docs/tips/provider-authentication.ja.md)も参照してください。
+* Storage は `shared_access_key_enabled = false` です。Terraform 実行 ID にはシナリオのストレージアカウントに対する Storage Blob Data Contributor、Function App には Storage Blob Data Owner、Storage Queue Data Contributor、Storage Table Data Contributor が付与されます。RBAC の反映には数分かかることがあります。使用する場合、ステート用バックエンドは**別の**ストレージアカウントにします。バックエンド固有のデータプレーン権限を含め、[Azure Blob バックエンドガイド](../../../docs/tips/azure-blob-backend.ja.md)を参照してください。
 
-[標準 Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)に従い、
-`SCENARIO=azure_functions_flex_consumption` を指定します。
+この例で許可するのは、Azure CLI の**対話型パブリッククライアント**向けのアクセストークンです。サービスプリンシパルで Azure CLI にログインしても Entra 保護エンドポイントの呼び出しには使えません。
 
-### デプロイの確認
+## 構築とコード公開
 
-```shell
-terraform output function_app_url
+リポジトリのルートから、単独の評価にはローカルステートを使用し、共有環境では先にリモートバックエンドを構成します。このシナリオはバックエンド自体を作成しません。既存ステートの移動時はバックアップを取り、`terraform init -migrate-state` を使用します。既存ステートへの接続を失う目的で `-reconfigure` を使用しないでください。機密情報を含み得るステートやプランを安全に管理し、コミットしないでください。destroy 対象のリソースグループ内にバックエンドを置かないでください。
+
+### デプロイせずに構成を確認
+
+デプロイ用ステートに初期化済みの作業ディレクトリとは**別の新しいチェックアウト**から、ローカルのプランのみのモックテストを実行します。`-backend=false` は設定済みのリモートバックエンドの初期化を防ぎます。既存ステートの移行や削除は行いません。以下の確認ではコードを公開せず、Azure リソースも作成しません。
+
+```bash
+SCENARIO=azure_functions_flex_consumption
+cd "infra/scenarios/$SCENARIO"
+terraform fmt -check
+terraform init -backend=false
+terraform validate
+terraform test
 ```
 
-## 変数
+[`azure_functions_flex_consumption.tftest.hcl`](azure_functions_flex_consumption.tftest.hcl) のすべての run はモックプロバイダーと `command = plan` を使用します。ここでの `terraform test` にはデプロイ済み環境は不要で、実環境のインフラステートも作成しません。初期化済みのローカル/リモートステートを参照する `terraform plan` は実際の Azure 構成を読み、Azure 認証を必要とする場合があります。また、デプロイ後の検証スクリプトは適用済み Terraform 出力と公開済み Function App が必要です。
+
+### インフラの適用
+
+```bash
+SCENARIO=azure_functions_flex_consumption
+cd "infra/scenarios/$SCENARIO"
+export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+terraform init
+umask 077
+terraform plan -out=.terraform/flex-plan.tfplan
+terraform apply .terraform/flex-plan.tfplan
+rm -f .terraform/flex-plan.tfplan
+terraform output -raw function_app_name
+```
+
+選択したサブスクリプションを確認し、特に Python 3.11 から 3.13 へ変更するときは、**保存した**プランに予期しないリソースの置換がないか確認します。確認済みのプランだけを適用してください。`.terraform/` は gitignore 対象で `terraform init` が作成するため、ルートに無視対象外の `tfplan` ファイルを残しません。プランには機密情報が含まれ得ます。厳重に保管し、apply の失敗や中断時にも削除してください。追跡対象の `.terraform.lock.hcl` には AzureRM **5.7.0** を含むプロバイダーバージョンが固定されています。制約に一致すれば `terraform init` はロックファイルを再利用し、新規チェックアウトで `-lockfile=readonly` を強制しません。必要な機密情報ではない出力のみを個別に取得してください。検証スクリプトは JSON 出力を内部で解析しますが、出力全体は表示しません。ステートや全出力を画面に表示・公開しないでください。リモートステートを使用する場合は上記ガイドに従い `terraform init` **前に**バックエンドを設定し、以降も同じバックエンドを使用します。成果物を保存しないプランのみの確認は `terraform plan` を実行して適用せずに停止します。Makefile の手順（`SCENARIO=azure_functions_flex_consumption`）は[共通ワークフロー](../../../docs/tips/terraform-workflow.ja.md)を参照してください。
+
+apply 後、このシナリオディレクトリから Python コードを**別途公開**します。
+
+```bash
+bash scripts/publish_code.sh
+```
+
+このスクリプトは Functions Core Tools を使って Python サンプルを公開します（Flex の One Deploy）。`src/` から `function_app.py`、`requirements.txt`、`host.json` だけをステージングします。追跡対象の `src/local.settings.json` は `src/.funcignore` で除外され、公開用の許可リストにも含まれません。この追跡対象ファイルに実際の認証情報を追加しないでください。ホストの起動を待ってから検証してください。Python コード変更後も再公開が必要です。Terraform はソースをデプロイしません。Flex への公開を `zip_deploy_file` や従来の App Service zip デプロイで代用しないでください。
+
+## 検証
+
+`infra/scenarios/azure_functions_flex_consumption` から、同じ初期化済みステートと対話型 Azure CLI ログインを使用して個別または順番に実行します。
+
+```bash
+bash scripts/00_validate_prerequisites.sh
+bash scripts/01_test_entra_http.sh
+bash scripts/02_test_function_key.sh
+bash scripts/03_test_storage_identity.sh
+bash scripts/04_test_timer.sh
+bash scripts/05_test_http_telemetry.sh
+```
+
+6 件を一度に確認する場合は、代わりに `bash scripts/run_all.sh` を実行します。`00_validate_prerequisites.sh` は `az`、`curl`、`terraform`、`jq`、必要な Terraform 出力、および Azure CLI の**現在の既定サブスクリプション**が `subscription_id` と一致することを確認します。Core Tools やローカル Python は確認しません。残りのスクリプトを実行する前に Python コードを公開してください。`run_all.sh` はコードを公開せず、各検証を順番に実行します。アサーション失敗時、スクリプトはゼロ以外で終了します。タイマー実行やテレメトリ取り込みには待ち時間が必要な場合があります。Storage エンドポイントの JSON 応答（既定では `{"status":"ok","container":"deploymentpackage"}`）は **Function App の**マネージド ID でデプロイコンテナーにアクセスできることを示します。503 はプローブ失敗を意味します（テレメトリと RBAC の反映を調べてください）。検証スクリプトの標準出力には応答 JSON ではなく結果概要が表示されます。
+
+| 検証 | 認証情報と期待結果 |
+| --- | --- |
+| `/api/hello`、トークンなし | 組み込み認証による HTTP **401** |
+| `/api/hello?name=Azure`、`function_app_authentication_identifier_uri` 用の Azure CLI アクセストークン | Function Key なしで HTTP **200**、本文 `Hello, Azure!` |
+| `/api/hello`、`{"name":"World"}` の POST とアクセストークン | HTTP **200**、本文 `Hello, World!` |
+| `/api/hello-key`、Function Key なし（アクセストークンのみを含む） | Functions ホストによる HTTP **401** |
+| `/api/hello-key?name=Azure`、`x-functions-key` | HTTP **200**、本文 `Hello, Azure!` |
+| `/api/storage-check`、トークンなし / 有効なアクセストークンあり | HTTP **401** / HTTP **200** と `status: "ok"` とコンテナー名の JSON |
+| タイマー | 既定値 `0 * * * * *` は毎分 0 秒（既定で UTC）。スクリプトはデプロイ済みの `%TIMER_SCHEDULE%` バインディング、Terraform 出力と一致するアプリ設定、過去 24 時間の対象アプリの `flex-timer-check: completed` トレースを検証します。初回実行とテレメトリの取り込みを待ってください。クエリは最大 1 分間再試行します。 |
+| HTTP テレメトリ | スクリプトは認証付き `/api/hello?name=Telemetry` を呼び出し（HTTP **200**、`Hello, Telemetry!`）、**この呼び出し以降**の成功した `/api/hello` のテレメトリをワークスペース連携 Application Insights で確認します。取り込みを最大 1 分間再試行します。 |
+
+Entra 検証スクリプトは Terraform 出力の**正確な** URI を対象にトークンを取得します。トークンを出力せずに audience を確認する方法:
+
+```bash
+terraform output -raw function_app_authentication_identifier_uri
+bash scripts/01_test_entra_http.sh
+```
+
+トークンが期限切れなら `az account get-access-token` で更新します。認証方式の比較のため Function Key エンドポイントは組み込み認証を通りません。Function Key は共有シークレットであり呼び出し元を識別しません。
+
+## 変数と出力
 
 <!-- markdownlint-disable MD013 MD060 -->
 
-| 名前                     | 説明                                      | 型            | 既定値            | 必須   |
-|--------------------------|-------------------------------------------|---------------|-------------------|--------|
-| `name`                   | リソースのベース名                        | `string`      | `"azurefuncflex"` | いいえ |
-| `location`               | リソースを配置する Azure リージョン       | `string`      | `"japaneast"`     | いいえ |
-| `azure_cli_client_id` | 対話型 Azure CLI ユーザーとして組み込み認証エンドポイントを呼ぶクライアント ID | `string` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | いいえ |
-| `tags`                   | リソースに適用するタグ                    | `map(string)` | 既定値を参照      | いいえ |
-| `runtime_name`           | アプリのランタイム                        | `string`      | `"python"`        | いいえ |
-| `runtime_version`        | アプリのランタイムバージョン              | `string`      | `"3.11"`          | いいえ |
-| `maximum_instance_count` | インスタンスの最大数（40～1000）          | `number`      | `100`             | いいえ |
-| `instance_memory_in_mb`  | インスタンスメモリ（512、2048、4096）     | `number`      | `2048`            | いいえ |
-| `zone_redundant`         | アプリでゾーン冗長を有効にするかどうか    | `bool`        | `false`           | いいえ |
-| `app_settings`           | 追加のアプリ設定                          | `map(string)` | `{}`              | いいえ |
+| 変数 | 既定値 | 用途 |
+| --- | --- | --- |
+| `name` | `"azurefuncflex"` | リソース名のベース（ランダムなサフィックスをステートに保持） |
+| `location` | `"japaneast"` | Azure リージョン。Flex とランタイムの対応を確認 |
+| `azure_cli_client_id` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | 許可する対話型 Azure CLI パブリッククライアント |
+| `runtime_name` / `runtime_version` | `"python"` / `"3.13"` | インフラのランタイム。付属サンプルは Python のみ |
+| `timer_schedule` | `"0 * * * * *"` | 6 フィールド NCRONTAB（秒、分、時、日、月、曜日） |
+| `maximum_instance_count` / `instance_memory_in_mb` | `100` / `2048` | Flex の最大スケール / メモリ（512、2048、4096 MiB） |
+| `zone_redundant` | `false` | 対応リージョンで任意にゾーン冗長を有効化 |
+| `tags` / `app_settings` | [`variables.tf`](variables.tf)を参照 / `{}` | タグ / 追加のアプリ設定。タイマーや ID 用の設定を意図せず上書きしないこと |
+
+| 出力 | 内容 |
+| --- | --- |
+| `subscription_id`, `resource_group_name` | 対象サブスクリプションとリソースグループ |
+| `function_app_name`, `function_app_id`, `function_app_url`, `function_app_default_hostname`, `function_app_principal_id` | Function App の識別子と HTTPS エンドポイント |
+| `function_app_authentication_client_id`, `function_app_authentication_identifier_uri`, `function_app_authentication_tenant_id` | Entra API アプリ、トークンの audience、テナント |
+| `storage_account_name`, `storage_account_id`, `deployment_container_name` | ID 保護された Storage と非公開デプロイコンテナー |
+| `log_analytics_workspace_customer_id`, `log_analytics_workspace_id`, `log_analytics_workspace_name` | ワークスペース ID、Azure リソース ID、名前 |
+| `application_insights_app_id`, `application_insights_id`, `application_insights_name` | Application Insights のアプリ ID、Azure リソース ID、名前 |
+| `service_plan_id`, `service_plan_name`, `timer_schedule` | FC1 プランと設定されたタイマースケジュール |
 
 <!-- markdownlint-enable MD013 MD060 -->
 
-### Azure CLI クライアント ID
+### `azure_cli_client_id` を固定する理由
 
-既定値 `04b07795-8ddb-461a-bbee-02f9e1bf7b46` は、Microsoft が公開している
-Azure CLI のアプリケーション ID です。テナント、サブスクリプション、端末、
-Function App ごとに生成される値ではありません。Azure CLI は対話ユーザー認証で
-このパブリッククライアント ID を使用し、組み込み認証はアクセストークンの
-`azp` または `appid` クレームと照合します。
+既定値 `04b07795-8ddb-461a-bbee-02f9e1bf7b46` は Microsoft が公開する Azure CLI のアプリケーション ID です。テナント、サブスクリプション、端末、Function App ごとに生成される値では**ありません**。Azure CLI は対話型ユーザー認証にこのパブリッククライアント ID を使用し、組み込み認証はアクセストークンの `azp` または `appid` クレームを許可されたアプリと照合します。
 
-呼び出し元のパブリッククライアントが異なるアプリケーション ID を使う場合のみ、
-`azure_cli_client_id` を変更してください。端末の現在のログイン方法によって
-Terraform plan が変わらないよう、自動検出は行いません。サービスプリンシパル対応には
-アプリケーション権限とアプリロールの設計が必要であり、この変数の変更だけでは
-対応できません。
+別のパブリッククライアントから呼ぶ場合にのみ `azure_cli_client_id` を変更してください。自動検出を行うと端末のログイン方法によって Terraform plan が変わります。サービスプリンシパルへの対応にはアプリケーション権限とアプリロールの設計も必要で、ID の変更だけでは不十分です。この ID はテナント固有ではありませんが、設定した issuer は `login.microsoftonline.com`（Azure Public）です。Sovereign Cloud では対応する authority とプロバイダー環境も必要です。
 
-> [!NOTE]
-> クライアント ID 自体はテナント固有ではありません。ただし、このシナリオの
-> issuer は `login.microsoftonline.com` を使うため Azure Public 向けです。
-> Sovereign Cloud へ移す場合は、対応する authority host と Terraform
-> プロバイダー環境も変更する必要があります。`azure_cli_client_id` の変更だけでは
-> 対応できません。
+### 既存の Python 3.11 デプロイからの移行
 
-### ランタイムの選択肢
+この **Python 専用**サンプルの既定値は `3.11` から `3.13` に変わりました。対象リージョンでの 3.13 対応と Python 依存関係の互換性を確認してください。既定値の変更のみで既存ステートが消えることはありませんが、Terraform は構成に応じてリソースを更新または置換する可能性があります。同じステート/バックエンドを維持し、`terraform plan` で提案される変更を確認してから適用します。ランタイム変更を延期する場合は既存の変数ファイルに `runtime_version = "3.11"` を明示します。移行する場合は確認済みの 3.13 プランを適用し、`bash scripts/publish_code.sh` で再公開してから検証します。ステート削除や空のバックエンドへの再初期化は移行手順ではありません。
 
-| runtime_name      | サポートされる runtime_version |
-|-------------------|--------------------------------|
-| `dotnet-isolated` | `7.0`, `8.0`, `9.0`            |
-| `python`          | `3.10`, `3.11`, `3.12`         |
-| `java`            | `11`, `17`, `21`               |
-| `node`            | `18`, `20`, `22`               |
-| `powershell`      | `7.4`                          |
+## トラブルシューティング、費用、削除
 
-## 出力
+* **アクセストークン付きで 401:** `function_app_authentication_tenant_id` のテナントに Azure CLI の対話型ユーザーでログインし、正確な識別子 URI を対象に新しいトークンを取得します。組み込み認証の背後にある Python の `/api/hello` トリガーは `anonymous` です。アクセストークンだけでは `/api/hello-key` の Function Key を代替できません。
+* **apply / 公開後に 403 または 503:** Keyless Storage と Terraform 実行 ID 用 RBAC の反映に数分かかる場合があります。待ってから再試行し、Azure ロール割り当てと Application Insights の例外を確認します。Storage の共有キーは無効です。
+* **apply 後に関数がない:** `scripts/publish_code.sh` でコードを公開します。`terraform apply` はアプリのインフラ構築のみです。
+* **タイマー / HTTP テレメトリがない:** タイマーの既定値は毎時ではなく毎分です。`timer_schedule`、公開状況、選択したサブスクリプション、ワークスペースと App Insights の出力を確認し、取り込みを待ちます。
+* Flex の実行、Storage、Application Insights / Log Analytics の取り込みと保持には、低負荷でも費用が発生し得ます。[Flex の課金](https://learn.microsoft.com/ja-jp/azure/azure-functions/flex-consumption-plan#billing)と[Azure Monitor の価格](https://azure.microsoft.com/ja-jp/pricing/details/monitor/)を確認してください。削除時は**同じ初期化済みステート**から `terraform plan -destroy` を確認し、`terraform destroy` を実行します。リソースグループとシナリオの Entra アプリが削除されます。稼働中の別シナリオが使用するバックエンドは削除せず、削除結果とステート/バックアップの扱いを確認します。
 
-<!-- markdownlint-disable MD013 MD060 -->
+## 一次資料
 
-| 名前                            | 説明                                           |
-|---------------------------------|------------------------------------------------|
-| `resource_group_name`           | リソースグループ名                             |
-| `function_app_id`               | Function App の ID                             |
-| `function_app_name`             | Function App 名                                |
-| `function_app_default_hostname` | Function App の既定ホスト名                    |
-| `function_app_url`              | Function App にアクセスするための完全な URL    |
-| `function_app_principal_id`     | Function App のマネージド ID のプリンシパル ID |
-| `function_app_authentication_client_id` | Microsoft Entra 認証アプリケーションのクライアント ID |
-| `function_app_authentication_identifier_uri` | アクセストークンのリソースとして使う Application ID URI |
-| `function_app_authentication_tenant_id` | 認証に使う Microsoft Entra テナント ID |
-| `service_plan_id`               | サービスプランの ID                            |
-| `service_plan_name`             | サービスプラン名                               |
-| `storage_account_id`            | ストレージアカウントの ID                      |
-| `storage_account_name`          | ストレージアカウント名                         |
-
-<!-- markdownlint-enable MD013 MD060 -->
-
-## 例
-
-### Python 関数アプリ
-
-```hcl
-# terraform.tfvars
-name            = "mypythonfunc"
-runtime_name    = "python"
-runtime_version = "3.11"
-```
-
-### .NET 関数アプリ
-
-```hcl
-# terraform.tfvars
-name            = "mydotnetfunc"
-runtime_name    = "dotnet-isolated"
-runtime_version = "8.0"
-```
-
-### カスタム設定を使用する Node.js 関数アプリ
-
-```hcl
-# terraform.tfvars
-name                   = "mynodefunc"
-runtime_name           = "node"
-runtime_version        = "20"
-maximum_instance_count = 200
-instance_memory_in_mb  = 4096
-zone_redundant         = true
-```
-
-## 関数コードのデプロイ
-
-Terraform でインフラストラクチャをデプロイした後、以下のいずれかの方法で関数コードをデプロイします。
-
-> **注記**: Azure Functions Flex Consumption プランでは、Terraform の `zip_deploy_file` は正常に動作しないため、コードを別途デプロイする必要があります。Flex Consumption は「One Deploy」という独自のデプロイメカニズムを使用しています。
-
-### Azure Functions Core Tools を使用する方法（推奨）
-
-```shell
-FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
-
-# src ディレクトリに移動
-cd src
-
-# Function App にデプロイ
-func azure functionapp publish $FUNCTION_APP_NAME
-```
-
-### Azure CLI を使用する方法
-
-```shell
-# src ディレクトリを zip 化
-cd src && zip -r ../function_app.zip . && cd ..
-
-# Azure CLI でデプロイ
-az functionapp deployment source config-zip \
-  --resource-group $(terraform output -raw resource_group_name) \
-  --name $(terraform output -raw function_app_name) \
-  --src function_app.zip
-```
-
-### デプロイの確認
-
-```shell
-# Function App のログをストリーミング
-az webapp log tail \
-  --name $(terraform output -raw function_app_name) \
-  --resource-group $(terraform output -raw resource_group_name)
-```
-
-## 関数の動作確認
-
-### Microsoft Entra 組み込み認証のテスト
-
-```shell
-# Function App URL とトークンの audience を取得
-FUNCTION_APP_URL=$(terraform output -raw function_app_url)
-FUNCTION_APP_AUDIENCE=$(terraform output -raw function_app_authentication_identifier_uri)
-
-# Azure CLI でサインイン中のユーザー用アクセストークンを取得
-ACCESS_TOKEN=$(az account get-access-token \
-  --resource "$FUNCTION_APP_AUDIENCE" \
-  --query accessToken \
-  --output tsv)
-
-# トークンなしのリクエストが HTTP 401 を返すことを確認
-curl -i "${FUNCTION_APP_URL}/api/hello"
-
-# Function キーなしで HTTP トリガー関数を呼び出し
-curl \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  "${FUNCTION_APP_URL}/api/hello?name=Azure"
-
-# POST リクエストで呼び出し
-curl -X POST \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "World"}' \
-  "${FUNCTION_APP_URL}/api/hello"
-```
-
-> [!NOTE]
-> アクセストークンには有効期限があります。401 が返るようになった場合は、
-> `az account get-access-token` を再実行してください。
-
-### Function Key 認証のテスト
-
-`/api/hello-key` は組み込み認証の対象外です。組み込み認証ではなく、
-Functions ホストが `function` 認証レベルを強制します。
-
-```shell
-FUNCTION_APP_URL=$(terraform output -raw function_app_url)
-FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
-RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)
-
-FUNCTION_KEY=$(az functionapp function keys list \
-  --name "$FUNCTION_APP_NAME" \
-  --resource-group "$RESOURCE_GROUP_NAME" \
-  --function-name hello_world_http_with_function_key \
-  --query default \
-  --output tsv)
-
-# Function Key なしのリクエストが HTTP 401 を返すことを確認
-curl -i "${FUNCTION_APP_URL}/api/hello-key"
-
-# Bearer トークンだけでは Function Key エンドポイントを呼び出せない
-curl -i \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  "${FUNCTION_APP_URL}/api/hello-key"
-
-# Function Key でエンドポイントを呼び出し
-curl \
-  -H "x-functions-key: ${FUNCTION_KEY}" \
-  "${FUNCTION_APP_URL}/api/hello-key?name=Azure"
-```
-
-<!-- markdownlint-disable MD013 MD060 -->
-
-| エンドポイント | 認証情報 | 期待結果 |
-|----------------|----------|----------|
-| `/api/hello` | なし | 組み込み認証が `401 Unauthorized` を返す |
-| `/api/hello` | Azure CLI Bearer トークン | `200 OK` |
-| `/api/hello-key` | なし、または Bearer トークンのみ | Functions ホストが `401 Unauthorized` を返す |
-| `/api/hello-key` | Function Key | `200 OK` |
-
-<!-- markdownlint-enable MD013 MD060 -->
-
-> [!WARNING]
-> 認証方式を比較するため、Function Key エンドポイントは組み込み認証の対象外です。
-> Function Key は共有シークレットであり、呼び出し元の ID を識別しません。
-
-### タイマートリガー関数の確認
-
-タイマートリガー関数は 1 時間ごと（毎時 0 分）に自動実行されます。ログで実行を確認できます。
-
-```shell
-# ログをストリーミングして "hello world" の出力を確認
-az webapp log tail \
-  --name $(terraform output -raw function_app_name) \
-  --resource-group $(terraform output -raw resource_group_name)
-```
-
-## 既知の問題とトラブルシューティング
-
-### Terraform によるコードデプロイの制限
-
-Azure Functions Flex Consumption プランでは、Terraform の `zip_deploy_file` 属性を使用したコードデプロイは**サポートされていません**（404 Not Found エラーが発生します）。これは、Flex Consumption が従来の App Service とは異なる「One Deploy」メカニズムを使用しているためです。
-
-**対処法**: インフラストラクチャのデプロイ後、Azure Functions Core Tools（`func`）または Azure CLI を使用してコードをデプロイしてください。上記の「関数コードのデプロイ」セクションを参照してください。
-
-### 403 エラー: "This request is not authorized to perform this operation using this permission."
-
-初回デプロイ時に 403 エラーが発生することがあります。
-
-**原因**: このモジュールでは、ストレージアカウントのセキュリティを強化するために `shared_access_key_enabled = false` を設定し、RBAC（Role-Based Access Control）による認証を使用しています。**Azure の RBAC ロール割り当ては伝播に最大数分かかる**ことがあります。
-
-**対処法**: エラーが発生した場合は、1～2 分待ってから `terraform apply` を再度実行してください。
-
-```shell
-# 初回でエラーが発生した場合は、しばらく待ってから再実行
-terraform apply -auto-approve
-```
-
-### Bearer トークンを指定しても 401 が返る
-
-Azure CLI が `function_app_authentication_tenant_id` の出力と同じテナントへ
-サインインしていることを確認します。また、
-`function_app_authentication_identifier_uri` の出力を正確に指定して
-トークンを取得してください。Terraform の変更を適用した後、関数コードも
-再デプロイします。組み込み認証がプラットフォーム境界で認証するため、
-デプロイされた HTTP トリガーは Functions の認証レベルに `anonymous` を
-使う必要があります。
-
-## 参考資料
-
-<!-- markdownlint-disable MD013 -->
-
-### Microsoft と Azure の一次情報
-
-* [Azure App Service と Azure Functions での認証と承認](https://learn.microsoft.com/ja-jp/azure/app-service/overview-authentication-authorization)。プラットフォームの認証境界と未認証リクエストの処理を説明しています。
-* [Microsoft Entra 認証を構成する](https://learn.microsoft.com/ja-jp/azure/app-service/configure-authentication-provider-aad)。許可する audience と、`allowedApplications` がアクセストークンの `appid` または `azp` クレームを評価することを定義しています。
-* [Microsoft.Web `authsettingsV2` リファレンス](https://learn.microsoft.com/azure/templates/microsoft.web/sites/config-authsettingsv2)。`requireAuthentication`、`unauthenticatedClientAction`、`excludedPaths`、issuer、audience、許可アプリケーションを定義しています。
-* [Azure Functions HTTP トリガー](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-bindings-http-webhook-trigger#authorization-level)。`anonymous` と `function` の認証レベルを定義しています。
-* [Azure Functions のアクセスキーを操作する](https://learn.microsoft.com/ja-jp/azure/azure-functions/function-keys-how-to#call-endpoints-with-access-keys)。`code` と `x-functions-key` を使った呼び出しを説明しています。
-* [Microsoft ファーストパーティーアプリケーション ID](https://learn.microsoft.com/power-platform/admin/apps-to-allow)。Microsoft Azure CLI の ID として `04b07795-8ddb-461a-bbee-02f9e1bf7b46` を掲載しています。
-* [Azure CLI 認証のソースコード](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli-core/azure/cli/core/auth/constants.py)。公式実装で同じ値を `AZURE_CLI_CLIENT_ID` として定義しています。
-* [`az account get-access-token`](https://learn.microsoft.com/ja-jp/cli/azure/account?view=azure-cli-latest#az-account-get-access-token)。リソース用アクセストークンの取得方法を説明しています。
-
-### Terraform プロバイダーの一次情報
-
-* [`azurerm_function_app_flex_consumption` 5.0.1](https://registry.terraform.io/providers/hashicorp/azurerm/5.0.1/docs/resources/function_app_flex_consumption)。このシナリオで使う `auth_settings_v2` と `active_directory_v2` を定義しています。
-* [`azuread_application` 3.7.0](https://registry.terraform.io/providers/hashicorp/azuread/3.7.0/docs/resources/application)。API アプリケーションと委任された `user_impersonation` スコープを定義しています。
-* [`azuread_application_pre_authorized` 3.7.0](https://registry.terraform.io/providers/hashicorp/azuread/3.7.0/docs/resources/application_pre_authorized)。Azure CLI クライアントアプリケーションの事前承認を定義しています。
-
-<!-- markdownlint-enable MD013 -->
+* [Flex Consumption の概要と対応ランタイム](https://learn.microsoft.com/ja-jp/azure/azure-functions/flex-consumption-plan)、[Flex へのデプロイ](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#deploy-to-flex-consumption)、[Python 開発者ガイド](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-reference-python)、[タイマーの NCRONTAB](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-bindings-timer#ncrontab-expressions)。
+* [App Service 認証](https://learn.microsoft.com/ja-jp/azure/app-service/overview-authentication-authorization)、[Entra プロバイダーの許可アプリ](https://learn.microsoft.com/ja-jp/azure/app-service/configure-authentication-provider-aad)、[authsettingsV2](https://learn.microsoft.com/azure/templates/microsoft.web/sites/config-authsettingsv2)、[HTTP の認証レベル](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-bindings-http-webhook-trigger#authorization-level)、[Function Key](https://learn.microsoft.com/ja-jp/azure/azure-functions/function-keys-how-to#call-endpoints-with-access-keys)。
+* [ID ベースのホスト用 Storage](https://learn.microsoft.com/azure/azure-functions/functions-reference?tabs=blob#connecting-to-host-storage-with-an-identity)、[マネージド ID と Blob SDK](https://learn.microsoft.com/azure/storage/blobs/storage-quickstart-blobs-python)、[ワークスペース連携 Application Insights](https://learn.microsoft.com/azure/azure-monitor/app/create-workspace-resource)、[Azure CLI のトークン取得](https://learn.microsoft.com/ja-jp/cli/azure/account#az-account-get-access-token)。
+* [Azure CLI の公開アプリ ID](https://learn.microsoft.com/power-platform/admin/apps-to-allow)、[Azure CLI のソースコード](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli-core/azure/cli/core/auth/constants.py)、[AzureRM プロバイダーの Flex リソース、バージョン 5.7.0](https://registry.terraform.io/providers/hashicorp/azurerm/5.7.0/docs/resources/function_app_flex_consumption)、[AzureAD アプリ事前承認](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/application_pre_authorized)。
+* 一次資料の課題/実装議論: [Flex zip デプロイの issue #29630](https://github.com/hashicorp/terraform-provider-azurerm/issues/29630)、[AzureRM Flex の ID ベース Storage 回避策（PR #29099）](https://github.com/hashicorp/terraform-provider-azurerm/pull/29099)。従来の `zip_deploy_file` が Flex で利用できるとは限りません。
+* [Azure-Samples Flex Consumption Terraform AzureRM の例、固定リビジョン `46c638a8f1053f6863f478e736290ba0646504fa`](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples/tree/46c638a8f1053f6863f478e736290ba0646504fa/IaC/terraformazurerm)。どちらも AzureRM で Flex Function App、デプロイコンテナー、Application Insights、Log Analytics ワークスペースを構築します。このシナリオではさらに AzureAD と組み込み認証を設定し、Entra トークンと Function Key を比較し、マネージド ID による Storage アクセスとテレメトリを検証し、Python コードを `scripts/publish_code.sh` で明示的に公開します。参照先サンプルのランタイム対応バージョン一覧は固定リビジョン時点のもので、このシナリオの Python 3.13 の既定値は掲載されていません。

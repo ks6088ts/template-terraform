@@ -23,6 +23,7 @@ locals {
 # =============================================================================
 
 data "azuread_client_config" "current" {}
+data "azurerm_client_config" "current" {}
 
 resource "random_uuid" "user_impersonation_scope" {}
 
@@ -81,6 +82,29 @@ module "resource_group" {
 }
 
 # =============================================================================
+# Monitoring
+# =============================================================================
+
+module "log_analytics" {
+  source = "../../modules/azure/log_analytics"
+
+  name                = local.resource_name
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  tags                = var.tags
+}
+
+module "application_insights" {
+  source = "../../modules/azure/application_insights"
+
+  name                = local.resource_name
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  workspace_id        = module.log_analytics.id
+  tags                = var.tags
+}
+
+# =============================================================================
 # Azure Functions Flex Consumption
 # =============================================================================
 
@@ -94,8 +118,9 @@ module "functions_flex_consumption" {
   storage_account_name = "st${local.resource_suffix}"
 
   # Runtime configuration
-  runtime_name    = var.runtime_name
-  runtime_version = var.runtime_version
+  runtime_name                           = var.runtime_name
+  runtime_version                        = var.runtime_version
+  application_insights_connection_string = module.application_insights.connection_string
 
   # Scaling configuration
   maximum_instance_count = var.maximum_instance_count
@@ -103,7 +128,9 @@ module "functions_flex_consumption" {
   zone_redundant         = var.zone_redundant
 
   # Additional app settings
-  app_settings = var.app_settings
+  app_settings = merge(var.app_settings, {
+    TIMER_SCHEDULE = var.timer_schedule
+  })
 
   authentication = {
     client_id            = azuread_application.function_app.client_id

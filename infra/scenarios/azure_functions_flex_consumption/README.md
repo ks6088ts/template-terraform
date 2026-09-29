@@ -1,373 +1,170 @@
 ---
-description: Scenario for deploying Azure Functions on a Flex Consumption plan with a minimal configuration
+description: Hands-on Python Azure Functions Flex Consumption with Entra authentication, identity-based Storage, and monitoring
 ---
 
-# Azure Functions Flex Consumption Scenario
+# Azure Functions Flex Consumption (Python)
 
-This scenario deploys an Azure Functions Flex Consumption plan. It creates a minimal serverless function execution environment.
-
-## Overview
-
-This scenario creates the following resources:
-
-* **Resource Group**: Container for all resources
-* **Storage Account**: Storage required to run Functions, including a container for deployment packages
-* **Service Plan (Flex Consumption)**: Flex Consumption plan with the FC1 SKU
-* **Function App**: Function App running on Flex Consumption with a system-assigned managed identity
-* **RBAC Role Assignments**: Managed identity permissions for Storage
-* Microsoft Entra application registration and service principal for built-in authentication
-
-## Prerequisites
-
-See the shared guidance for [provider authentication](../../../docs/tips/provider-authentication.md),
-the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md), and the optional
-[Azure Blob remote state](../../../docs/tips/azure-blob-backend.md).
-
-When using the repository Makefile, specify `SCENARIO=azure_functions_flex_consumption`.
-
-The identity that runs Terraform must be allowed to create and manage Microsoft
-Entra application registrations. Configuring Azure CLI as a pre-authorized
-client can require the Application Administrator or Global Administrator
-directory role.
-
-This scenario allows tokens issued to the Microsoft Azure CLI public client.
-Use an interactive user sign-in with `az login`; a service principal login uses
-a different client application ID and isn't covered by this example.
+Deploy a Linux FC1 Flex Consumption Function App, explicitly publish the Python sample, then verify two HTTP authorization paths, managed-identity Storage access, a timer, and telemetry. Terraform provisions infrastructure **only**; a successful apply does not publish functions.
 
 ## Architecture
 
 ```mermaid
-flowchart TB
-  CLI["Local Azure CLI<br/>Interactive user"]
-  KeyClient["Function Key client"]
-  Entra["Microsoft Entra ID<br/>API app registration"]
-
-    subgraph Azure["Azure Resource Group"]
-        subgraph FlexConsumption["Flex Consumption Plan"]
-      EasyAuth["Easy Auth<br/>Bearer token validation"]
-      FA["Function App<br/>/api/hello<br/>/api/hello-key"]
-        end
-        ST["Storage Account<br/>- Deployment Package<br/>- Blob/Queue/Table"]
-    end
-
-  CLI -->|Request access token| Entra
-  CLI -->|Bearer token| EasyAuth
-  Entra -.->|Validate issuer and audience| EasyAuth
-  EasyAuth -->|/api/hello| FA
-  KeyClient -->|x-functions-key| FA
-    FA -.->|Managed Identity| ST
+flowchart LR
+  User["Interactive Azure CLI user"] -->|Access token for API URI| Entra["Microsoft Entra ID<br/>API app + service principal<br/>Azure CLI pre-authorized"]
+  User -->|User access token| Auth
+  Entra -.->|Issuer, audience, client validation| Auth
+  Key["Function-key client"] -->|/api/hello-key bypasses Easy Auth<br/>Functions host validates x-functions-key| App
+  subgraph RG["Azure resource group"]
+    Auth["App Service Easy Auth<br/>401 without token"]
+    Plan["Linux FC1 plan"] --> App["Python Function App<br/>/api/hello<br/>/api/hello-key<br/>/api/storage-check<br/>timer"]
+    Auth -->|/api/hello and /api/storage-check| App
+    App -->|System-assigned identity<br/>Blob Owner; Queue/Table Contributor| Storage["Storage Account<br/>private deployment container<br/>host Blob/Queue/Table"]
+    App -->|Connection string: telemetry| AI["Application Insights"]
+    AI --> LA["Log Analytics workspace"]
+  end
+  Operator["Terraform identity"] -->|Storage Blob Data Contributor| Storage
+  Publisher["scripts/publish_code.sh<br/>Functions Core Tools"] -->|One Deploy| App
 ```
 
-## Features
+Easy Auth protects `/api/hello` and `/api/storage-check` before the Python runtime. `/api/hello-key` is excluded from Easy Auth deliberately: the Functions host enforces its `function` authorization level instead. The Python timer runs according to the `TIMER_SCHEDULE` app setting. The Storage probe reads the deployment container via `ManagedIdentityCredential`, using the `STORAGE_ACCOUNT_BLOB_ENDPOINT` (Blob service URI) and `STORAGE_CONTAINER_NAME` (deployment container) app settings; it does not expose blobs. The Application Insights connection string carries telemetry only; Storage access uses managed identity, not that connection string.
 
-* **Flex Consumption Plan**: Cost-effective, consumption-based serverless execution environment
-* **Microsoft Entra Built-in Authentication**: Rejects unauthenticated requests
-  before they reach the function runtime
-* **Keyless HTTP Invocation**: Accepts Azure CLI user tokens instead of
-  Function keys
-* **Function Key Invocation**: Exposes `/api/hello-key` outside Easy Auth so
-  the Functions host can validate a Function key independently
-* **System Assigned Managed Identity**: Authenticates outbound Storage access
-  without connection strings
-* **RBAC-based Access**: Least-privilege access to Storage
-* **Zone Redundancy**: Optional zone redundancy
-* **No Application Insights**: Minimal configuration without monitoring
+## Prerequisites
 
-## How to use
+* Azure subscription and Microsoft Entra tenant in Azure Public; use a region that supports **Linux Flex Consumption** and the selected Python runtime (default `japaneast`, Python `3.13`). Check [regional support](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#regional-subscription-quotas) and subscription quota before applying.
+* Terraform **1.7+** for the `mock_provider` plan-only tests (the scenario's [`versions.tf`](versions.tf) accepts **1.6+** for deployment), Azure CLI **2.x** (`az`), Azure Functions Core Tools **4.x** (`func`), Python **3.13** for local work, `curl`, and `jq`; `bash` runs the scripts. Provider constraints are in `versions.tf` and pinned selections in [`.terraform.lock.hcl`](.terraform.lock.hcl). Install Core Tools using the [official instructions](https://learn.microsoft.com/azure/azure-functions/functions-run-local#install-the-azure-functions-core-tools). Verify with `terraform version`, `az version`, `func --version`, `python3 --version`, `jq --version`.
+* Sign in interactively with `az login`, select the intended subscription with `az account set --subscription <subscription-id>`, and confirm `az account show`. Direct Terraform CLI invocation needs `ARM_SUBSCRIPTION_ID` set below. The identity running Terraform needs permission to create the resource group, plan, storage, monitoring resources, and role assignments (`Microsoft.Authorization/roleAssignments/write`, e.g. Owner or Contributor **plus** Role Based Access Control Administrator at the target scope), and to register the resource providers listed in [`providers.tf`](providers.tf) if not already registered. Entra app registration, service principal creation, and Azure CLI pre-authorization need directory permissions; Application Administrator or Global Administrator may be required by tenant policy. The publisher needs permission to deploy to the Function App. Check the [provider authentication guide](../../../docs/tips/provider-authentication.md).
+* Storage uses `shared_access_key_enabled = false`: the Terraform executor is granted Storage Blob Data Contributor on the scenario storage account and the Function App receives Storage Blob Data Owner, Storage Queue Data Contributor, and Storage Table Data Contributor. RBAC propagation can take several minutes. The state backend, if used, is a **separate** storage account: follow the [Azure Blob backend guide](../../../docs/tips/azure-blob-backend.md), including its separate data-plane role.
 
-Follow the [standard Terraform workflow](../../../docs/tips/terraform-workflow.md) and specify
-`SCENARIO=azure_functions_flex_consumption`.
+This example accepts access tokens for the Azure CLI **interactive public client**; service-principal CLI login is not supported for invoking the Entra-protected endpoint.
 
-### Verify the deployment
+## Deploy and publish
 
-```shell
-terraform output function_app_url
+From the repository root, choose local state for an isolated evaluation or configure the remote backend first. This scenario does **not** create a backend. For existing state, back it up and use `terraform init -migrate-state` when moving backends; never use `-reconfigure` to discard the connection to existing state. Protect state and plan files (they can contain secrets); do not commit them. Avoid a backend stored in the same resource group that you will destroy.
+
+### Check configuration without deployment
+
+From a **separate clean checkout** (not the working directory initialized against deployment state), run the local plan-only mock tests. `-backend=false` prevents initialization of a configured remote backend; it does not migrate or delete existing state. These checks do not publish code or create Azure resources:
+
+```bash
+SCENARIO=azure_functions_flex_consumption
+cd "infra/scenarios/$SCENARIO"
+terraform fmt -check
+terraform init -backend=false
+terraform validate
+terraform test
 ```
 
-## Variables
+[`azure_functions_flex_consumption.tftest.hcl`](azure_functions_flex_consumption.tftest.hcl) uses mocked providers and `command = plan` for every run. `terraform test` here does not require an applied deployment or produce live infrastructure state. It is different from `terraform plan` against an initialized local/remote state, which reads real Azure configuration and may require Azure credentials, and from the post-deployment scripts, which require applied Terraform outputs and a published Function App.
+
+### Apply infrastructure
+
+```bash
+SCENARIO=azure_functions_flex_consumption
+cd "infra/scenarios/$SCENARIO"
+export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+terraform init
+umask 077
+terraform plan -out=.terraform/flex-plan.tfplan
+terraform apply .terraform/flex-plan.tfplan
+rm -f .terraform/flex-plan.tfplan
+terraform output -raw function_app_name
+```
+
+Confirm the selected subscription and check the **saved** plan for unexpected replacements, especially when moving Python 3.11 to 3.13; apply only that reviewed plan. `.terraform/` is gitignored and is created by `terraform init`, so the plan never appears as an unignored root-level `tfplan`. The plan can contain secrets: keep it private and remove it even if apply fails or is cancelled. The tracked `.terraform.lock.hcl` pins provider versions, including AzureRM **5.7.0**; `terraform init` reuses it when constraints match, without imposing `-lockfile=readonly` on a fresh checkout. Query only the non-secret output you need; the verification scripts parse JSON outputs internally without displaying the complete output set. Do not print or publish the full state or all outputs. For remote state, configure the backend as described above *before* `terraform init` and retain the same backend across operations. For a plan-only evaluation without a saved artifact, run `terraform plan` and stop before apply. See the [standard workflow](../../../docs/tips/terraform-workflow.md) for Makefile usage (`SCENARIO=azure_functions_flex_consumption`).
+
+After apply, **publish the Python code separately** from this scenario directory:
+
+```bash
+bash scripts/publish_code.sh
+```
+
+The script publishes the Python sample using Functions Core Tools (Flex One Deploy). It stages only `function_app.py`, `requirements.txt`, and `host.json` from `src/` before publishing. The tracked `src/local.settings.json` is excluded by `src/.funcignore` and is not in the staged allowlist; never add real credentials to this tracked file. Wait for the host to become ready before running verification. Re-publish after changing the Python code; Terraform does not deploy source. Do not substitute `zip_deploy_file` or a generic App Service zip deployment for the Flex publishing workflow.
+
+## Verify
+
+From `infra/scenarios/azure_functions_flex_consumption` with the same initialized state and interactive Azure CLI login, run individually or in order:
+
+```bash
+bash scripts/00_validate_prerequisites.sh
+bash scripts/01_test_entra_http.sh
+bash scripts/02_test_function_key.sh
+bash scripts/03_test_storage_identity.sh
+bash scripts/04_test_timer.sh
+bash scripts/05_test_http_telemetry.sh
+```
+
+Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_validate_prerequisites.sh` checks `az`, `curl`, `terraform`, `jq`, required Terraform outputs, and that the **active default** Azure CLI subscription matches `subscription_id`; it does not check Core Tools or local Python. Publish the Python code before running the remaining scripts. `run_all.sh` runs the checks in sequence without publishing code. Test scripts exit nonzero when an assertion fails; telemetry and timer checks may need a wait for execution/ingestion. The Storage endpoint's JSON response (`{"status":"ok","container":"deploymentpackage"}` by default) confirms the **Function App's** managed identity can reach its deployment container; a 503 indicates the probe failed (inspect telemetry and role propagation). Verification scripts report a summary, not the response JSON, on stdout.
+
+| Check | Credential and expected result |
+| --- | --- |
+| `/api/hello` without token | HTTP **401** from Easy Auth |
+| `/api/hello?name=Azure` with an Azure CLI access token for `function_app_authentication_identifier_uri` | HTTP **200**, body `Hello, Azure!`; no Function key |
+| `/api/hello` POST with `{"name":"World"}` and bearer token | HTTP **200**, body `Hello, World!` |
+| `/api/hello-key` without a Function key (even with a bearer token) | HTTP **401** from Functions host |
+| `/api/hello-key?name=Azure` with `x-functions-key` | HTTP **200**, body `Hello, Azure!` |
+| `/api/storage-check` without token / with valid bearer token | HTTP **401** / HTTP **200** with JSON `status: "ok"` and container name |
+| Timer | Default `0 * * * * *`: every minute at second zero (UTC by default). The script checks the deployed `%TIMER_SCHEDULE%` binding, the app setting against the Terraform output, and an app-scoped `flex-timer-check: completed` trace from the last 24 hours. Wait for the first run and telemetry ingestion; the query retries for up to 1 minute. |
+| HTTP telemetry | The script sends an authenticated `/api/hello?name=Telemetry` request (HTTP **200**, `Hello, Telemetry!`), then checks for successful `/api/hello` request telemetry **since that probe** in workspace-backed Application Insights, retrying for up to 1 minute. |
+
+The Entra verification script acquires a token for the **exact** Terraform output URI. You can inspect the audience without printing a token:
+
+```bash
+terraform output -raw function_app_authentication_identifier_uri
+bash scripts/01_test_entra_http.sh
+```
+
+Refresh expired tokens with `az account get-access-token`. The key endpoint intentionally bypasses Easy Auth for comparison; Function keys are shared secrets and do not identify a caller.
+
+## Variables and outputs
 
 <!-- markdownlint-disable MD013 MD060 -->
 
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|----------|
-| `name` | Specifies the base name for resources | `string` | `"azurefuncflex"` | no |
-| `location` | Azure region for resources | `string` | `"japaneast"` | no |
-| `azure_cli_client_id` | Client ID allowed to call the Easy Auth endpoint as an interactive Azure CLI user | `string` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | no |
-| `tags` | Tags to apply to resources | `map(string)` | See default | no |
-| `runtime_name` | The runtime for your app | `string` | `"python"` | no |
-| `runtime_version` | The runtime version for your app | `string` | `"3.11"` | no |
-| `maximum_instance_count` | The maximum instance count (40-1000) | `number` | `100` | no |
-| `instance_memory_in_mb` | Instance memory: 512, 2048, or 4096 | `number` | `2048` | no |
-| `zone_redundant` | Whether the app is zone redundant | `bool` | `false` | no |
-| `app_settings` | Additional app settings | `map(string)` | `{}` | no |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `name` | `"azurefuncflex"` | Resource base name (a stable random suffix is held in state) |
+| `location` | `"japaneast"` | Azure region; confirm Flex/runtime availability |
+| `azure_cli_client_id` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | Allowed interactive Azure CLI public client |
+| `runtime_name` / `runtime_version` | `"python"` / `"3.13"` | Infrastructure runtime; included sample is Python only |
+| `timer_schedule` | `"0 * * * * *"` | Six-field NCRONTAB schedule (second, minute, hour, day, month, weekday) |
+| `maximum_instance_count` / `instance_memory_in_mb` | `100` / `2048` | Flex scale limit / memory (512, 2048, or 4096 MiB) |
+| `zone_redundant` | `false` | Optional plan zone balancing, subject to region support |
+| `tags` / `app_settings` | See [`variables.tf`](variables.tf) / `{}` | Resource tags / additional app settings; do not override the timer or identity settings unintentionally |
+
+| Output | Meaning |
+| --- | --- |
+| `subscription_id`, `resource_group_name` | Target subscription and resource group |
+| `function_app_name`, `function_app_id`, `function_app_url`, `function_app_default_hostname`, `function_app_principal_id` | App identity and HTTPS endpoint |
+| `function_app_authentication_client_id`, `function_app_authentication_identifier_uri`, `function_app_authentication_tenant_id` | Entra API registration, access-token audience, and tenant |
+| `storage_account_name`, `storage_account_id`, `deployment_container_name` | Identity-protected storage and private deployment container |
+| `log_analytics_workspace_customer_id`, `log_analytics_workspace_id`, `log_analytics_workspace_name` | Workspace identifier, Azure resource ID, and name |
+| `application_insights_app_id`, `application_insights_id`, `application_insights_name` | Application Insights application ID, Azure resource ID, and name |
+| `service_plan_id`, `service_plan_name`, `timer_schedule` | FC1 plan and configured timer schedule |
 
 <!-- markdownlint-enable MD013 MD060 -->
 
-### Azure CLI client ID
+### Why `azure_cli_client_id` is fixed
 
-The default `04b07795-8ddb-461a-bbee-02f9e1bf7b46` is the Microsoft-published
-application ID for Azure CLI. It isn't generated per tenant, subscription,
-machine, or Function App. Azure CLI uses this public client ID for interactive
-user authentication, and Easy Auth compares it with the access token's `azp`
-or `appid` claim.
+The default `04b07795-8ddb-461a-bbee-02f9e1bf7b46` is the Microsoft-published Azure CLI application ID. It is **not** generated per tenant, subscription, workstation, or Function App. Azure CLI uses this public client ID for interactive user authentication; Easy Auth compares the access token's `azp` or `appid` claim with the configured allowed application.
 
-Set `azure_cli_client_id` only when the calling public client has a different
-application ID. Automatic discovery isn't used because it would make a
-Terraform plan depend on the workstation's current login method. Supporting a
-service principal requires an application permission and app-role design; it
-isn't achieved by changing this variable alone.
+Change `azure_cli_client_id` only for a different calling public client. Automatic discovery would make plans depend on the workstation's current login method. Supporting a service principal also requires an application permission and app-role design; changing the ID alone is insufficient. The ID is not tenant-specific, but the configured issuer is `login.microsoftonline.com` (Azure Public); sovereign clouds also need the appropriate authority and provider environment.
 
-> [!NOTE]
-> The client ID itself isn't tenant-specific. This scenario still targets Azure
-> Public because its issuer uses `login.microsoftonline.com`. Moving to a
-> sovereign cloud also requires the corresponding authority host and Terraform
-> provider environment; changing `azure_cli_client_id` alone isn't sufficient.
+### Migrating an existing Python 3.11 deployment
 
-### Runtime Options
+The default changed from Python `3.11` to `3.13` for this **Python-only** sample. Check that your target region supports 3.13 and that Python dependencies are compatible. Existing state is not recreated solely by changing a default, but Terraform can update or replace resources based on your configuration: retain the same state/backend, run `terraform plan` and review all proposed changes before applying. If you need to defer the runtime change, set `runtime_version = "3.11"` explicitly in your existing variable file; otherwise apply the reviewed 3.13 plan and run `bash scripts/publish_code.sh` again, followed by the verification scripts. Do not delete state or reinitialize into an empty backend to migrate.
 
-| runtime_name | Supported runtime_version |
-|--------------|---------------------------|
-| `dotnet-isolated` | `7.0`, `8.0`, `9.0` |
-| `python` | `3.10`, `3.11`, `3.12` |
-| `java` | `11`, `17`, `21` |
-| `node` | `18`, `20`, `22` |
-| `powershell` | `7.4` |
+## Troubleshooting, cost, and teardown
 
-## Outputs
+* **401 with bearer token:** Confirm interactive Azure CLI login in `function_app_authentication_tenant_id`, request a fresh token for the exact identifier URI, and check that the Python `/api/hello` trigger is anonymous behind Easy Auth. A bearer token does not replace a Function key at `/api/hello-key`.
+* **403 or 503 after apply/publish:** RBAC for keyless Storage and the Terraform executor may need several minutes to propagate. Wait and retry; inspect Azure role assignments and Application Insights exceptions. Storage shared-key access is disabled.
+* **No functions after apply:** Publish via `scripts/publish_code.sh`. `terraform apply` only provisions the app.
+* **No timer/HTTP telemetry yet:** Timer defaults to once per minute, not once per hour. Verify `timer_schedule`, publish status, selected subscription, workspace and App Insights outputs; allow time for telemetry ingestion.
+* Flex execution, Storage, Application Insights/Log Analytics ingestion and retention can incur charges even at low traffic. Check [Flex billing](https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan#billing) and [Azure Monitor pricing](https://azure.microsoft.com/pricing/details/monitor/). To remove scenario-managed resources from the **same initialized state**, review and run `terraform plan -destroy` then `terraform destroy`; this removes the resource group and scenario Entra app. Do not destroy a separate backend that still stores live state. Verify removal and keep or dispose of state/backups per policy.
 
-<!-- markdownlint-disable MD013 MD060 -->
+## Primary sources
 
-| Name | Description |
-|------|-------------|
-| `resource_group_name` | Name of the resource group |
-| `function_app_id` | ID of the Function App |
-| `function_app_name` | Name of the Function App |
-| `function_app_default_hostname` | Default hostname of the Function App |
-| `function_app_url` | Full URL to access the Function App |
-| `function_app_principal_id` | Principal ID of the Function App's Managed Identity |
-| `function_app_authentication_client_id` | Client ID of the Microsoft Entra authentication application |
-| `function_app_authentication_identifier_uri` | Application ID URI used as the access token resource |
-| `function_app_authentication_tenant_id` | Microsoft Entra tenant ID used for authentication |
-| `service_plan_id` | ID of the Service Plan |
-| `service_plan_name` | Name of the Service Plan |
-| `storage_account_id` | ID of the Storage Account |
-| `storage_account_name` | Name of the Storage Account |
-
-<!-- markdownlint-enable MD013 MD060 -->
-
-## Examples
-
-### Python Function App
-
-```hcl
-# terraform.tfvars
-name            = "mypythonfunc"
-runtime_name    = "python"
-runtime_version = "3.11"
-```
-
-### .NET Function App
-
-```hcl
-# terraform.tfvars
-name            = "mydotnetfunc"
-runtime_name    = "dotnet-isolated"
-runtime_version = "8.0"
-```
-
-### Node.js Function App with custom settings
-
-```hcl
-# terraform.tfvars
-name                   = "mynodefunc"
-runtime_name           = "node"
-runtime_version        = "20"
-maximum_instance_count = 200
-instance_memory_in_mb  = 4096
-zone_redundant         = true
-```
-
-## Deploy Function Code
-
-After deploying the infrastructure with Terraform, deploy the function code using one of the following methods.
-
-> **Note**: Terraform's `zip_deploy_file` does not work correctly with the Azure Functions Flex Consumption plan, so you must deploy the code separately. Flex Consumption uses a dedicated deployment mechanism called "One Deploy."
-
-### Use Azure Functions Core Tools (recommended)
-
-```shell
-FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
-
-# Move to the src directory
-cd src
-
-# Deploy to the Function App
-func azure functionapp publish $FUNCTION_APP_NAME
-```
-
-### Use Azure CLI
-
-```shell
-# Create a zip archive of the src directory
-cd src && zip -r ../function_app.zip . && cd ..
-
-# Deploy with Azure CLI
-az functionapp deployment source config-zip \
-  --resource-group $(terraform output -raw resource_group_name) \
-  --name $(terraform output -raw function_app_name) \
-  --src function_app.zip
-```
-
-### Verify the deployment
-
-```shell
-# Stream the Function App logs
-az webapp log tail \
-  --name $(terraform output -raw function_app_name) \
-  --resource-group $(terraform output -raw resource_group_name)
-```
-
-## Verify Function Behavior
-
-### Test Microsoft Entra built-in authentication
-
-```shell
-# Get the Function App URL and token audience
-FUNCTION_APP_URL=$(terraform output -raw function_app_url)
-FUNCTION_APP_AUDIENCE=$(terraform output -raw function_app_authentication_identifier_uri)
-
-# Get an access token for the signed-in Azure CLI user
-ACCESS_TOKEN=$(az account get-access-token \
-  --resource "$FUNCTION_APP_AUDIENCE" \
-  --query accessToken \
-  --output tsv)
-
-# Verify that a request without a token returns HTTP 401
-curl -i "${FUNCTION_APP_URL}/api/hello"
-
-# Call the HTTP trigger function without a Function key
-curl \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  "${FUNCTION_APP_URL}/api/hello?name=Azure"
-
-# Call the function with a POST request
-curl -X POST \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "World"}' \
-  "${FUNCTION_APP_URL}/api/hello"
-```
-
-> [!NOTE]
-> Access tokens expire. Run `az account get-access-token` again when a request
-> starts returning 401.
-
-### Test Function Key authentication
-
-The `/api/hello-key` path is excluded from Easy Auth. The Functions host, not
-Easy Auth, enforces its `function` authorization level.
-
-```shell
-FUNCTION_APP_URL=$(terraform output -raw function_app_url)
-FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
-RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)
-
-FUNCTION_KEY=$(az functionapp function keys list \
-  --name "$FUNCTION_APP_NAME" \
-  --resource-group "$RESOURCE_GROUP_NAME" \
-  --function-name hello_world_http_with_function_key \
-  --query default \
-  --output tsv)
-
-# Verify that a request without a Function key returns HTTP 401
-curl -i "${FUNCTION_APP_URL}/api/hello-key"
-
-# A Bearer token alone doesn't satisfy the Function Key endpoint
-curl -i \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  "${FUNCTION_APP_URL}/api/hello-key"
-
-# Call the endpoint with a Function key
-curl \
-  -H "x-functions-key: ${FUNCTION_KEY}" \
-  "${FUNCTION_APP_URL}/api/hello-key?name=Azure"
-```
-
-<!-- markdownlint-disable MD013 MD060 -->
-
-| Endpoint | Credential | Expected result |
-|----------|------------|-----------------|
-| `/api/hello` | None | `401 Unauthorized` from Easy Auth |
-| `/api/hello` | Azure CLI Bearer token | `200 OK` |
-| `/api/hello-key` | None or Bearer token only | `401 Unauthorized` from the Functions host |
-| `/api/hello-key` | Function key | `200 OK` |
-
-<!-- markdownlint-enable MD013 MD060 -->
-
-> [!WARNING]
-> The Function Key endpoint is excluded from Easy Auth for comparison. Function
-> keys are shared secrets and don't identify the caller.
-
-### Verify the timer trigger function
-
-The timer trigger function runs automatically every hour at the top of the hour. You can verify its execution in the logs.
-
-```shell
-# Stream the logs and check for "hello world" output
-az webapp log tail \
-  --name $(terraform output -raw function_app_name) \
-  --resource-group $(terraform output -raw resource_group_name)
-```
-
-## Known Issues and Troubleshooting
-
-### Terraform code deployment limitation
-
-The Azure Functions Flex Consumption plan **does not support** code deployment through Terraform's `zip_deploy_file` attribute. Attempts return a 404 Not Found error. This limitation exists because Flex Consumption uses the "One Deploy" mechanism instead of the mechanism used by traditional App Service plans.
-
-**Workaround**: After deploying the infrastructure, deploy the code with Azure Functions Core Tools (`func`) or Azure CLI. See the "Deploy Function Code" section above.
-
-### 403 error: "This request is not authorized to perform this operation using this permission."
-
-A 403 error can occur during the initial deployment.
-
-**Cause**: This module sets `shared_access_key_enabled = false` to improve Storage Account security and uses RBAC (Role-Based Access Control) authentication. **Azure RBAC role assignments can take several minutes to propagate.**
-
-**Workaround**: If the error occurs, wait one or two minutes, then run `terraform apply` again.
-
-```shell
-# If the first attempt fails, wait briefly and run it again
-terraform apply -auto-approve
-```
-
-### 401 response with a Bearer token
-
-Confirm that Azure CLI is signed in to the tenant emitted by
-`function_app_authentication_tenant_id`. Request the token for the exact
-`function_app_authentication_identifier_uri` output, and redeploy the function
-code after applying the Terraform changes. The deployed HTTP trigger must use
-the `anonymous` Functions authorization level because Easy Auth performs
-authentication at the platform boundary.
-
-## References
-
-<!-- markdownlint-disable MD013 -->
-
-### Microsoft and Azure primary sources
-
-* [Authentication and authorization in Azure App Service and Azure Functions](https://learn.microsoft.com/azure/app-service/overview-authentication-authorization). Describes the platform authentication boundary and unauthenticated request handling.
-* [Configure Microsoft Entra authentication](https://learn.microsoft.com/azure/app-service/configure-authentication-provider-aad). Defines allowed audiences and states that `allowedApplications` evaluates the access token's `appid` or `azp` claim.
-* [Microsoft.Web `authsettingsV2` reference](https://learn.microsoft.com/azure/templates/microsoft.web/sites/config-authsettingsv2). Defines `requireAuthentication`, `unauthenticatedClientAction`, `excludedPaths`, issuer, audience, and allowed applications.
-* [Azure Functions HTTP trigger](https://learn.microsoft.com/azure/azure-functions/functions-bindings-http-webhook-trigger#authorization-level). Defines `anonymous` and `function` authorization levels.
-* [Work with access keys in Azure Functions](https://learn.microsoft.com/azure/azure-functions/function-keys-how-to#call-endpoints-with-access-keys). Documents `code` and `x-functions-key` invocation.
-* [Microsoft first-party application IDs](https://learn.microsoft.com/power-platform/admin/apps-to-allow). Lists Microsoft Azure CLI as `04b07795-8ddb-461a-bbee-02f9e1bf7b46`.
-* [Azure CLI authentication source](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli-core/azure/cli/core/auth/constants.py). Defines the same value as `AZURE_CLI_CLIENT_ID` in the official implementation.
-* [`az account get-access-token`](https://learn.microsoft.com/cli/azure/account?view=azure-cli-latest#az-account-get-access-token). Documents access-token acquisition for a resource.
-
-### Terraform provider sources
-
-* [`azurerm_function_app_flex_consumption` 5.0.1](https://registry.terraform.io/providers/hashicorp/azurerm/5.0.1/docs/resources/function_app_flex_consumption). Defines `auth_settings_v2` and `active_directory_v2` used by this scenario.
-* [`azuread_application` 3.7.0](https://registry.terraform.io/providers/hashicorp/azuread/3.7.0/docs/resources/application). Defines the API application and delegated `user_impersonation` scope.
-* [`azuread_application_pre_authorized` 3.7.0](https://registry.terraform.io/providers/hashicorp/azuread/3.7.0/docs/resources/application_pre_authorized). Defines pre-authorization of the Azure CLI client application.
-
-<!-- markdownlint-enable MD013 -->
+* [Flex Consumption overview and supported runtimes](https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan), [deploy to Flex](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#deploy-to-flex-consumption), [Python developer guide](https://learn.microsoft.com/azure/azure-functions/functions-reference-python), [timer NCRONTAB](https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#ncrontab-expressions).
+* [App Service authentication](https://learn.microsoft.com/azure/app-service/overview-authentication-authorization), [Entra provider allowed applications](https://learn.microsoft.com/azure/app-service/configure-authentication-provider-aad), [authsettingsV2](https://learn.microsoft.com/azure/templates/microsoft.web/sites/config-authsettingsv2), [HTTP authorization levels](https://learn.microsoft.com/azure/azure-functions/functions-bindings-http-webhook-trigger#authorization-level), [Function keys](https://learn.microsoft.com/azure/azure-functions/function-keys-how-to#call-endpoints-with-access-keys).
+* [Identity-based host storage](https://learn.microsoft.com/azure/azure-functions/functions-reference?tabs=blob#connecting-to-host-storage-with-an-identity), [managed identity and Blob SDK](https://learn.microsoft.com/azure/storage/blobs/storage-quickstart-blobs-python), [workspace-based Application Insights](https://learn.microsoft.com/azure/azure-monitor/app/create-workspace-resource), [Azure CLI token command](https://learn.microsoft.com/cli/azure/account#az-account-get-access-token).
+* [Azure CLI public application ID](https://learn.microsoft.com/power-platform/admin/apps-to-allow), [Azure CLI source](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli-core/azure/cli/core/auth/constants.py); [AzureRM provider Flex resource, version 5.7.0](https://registry.terraform.io/providers/hashicorp/azurerm/5.7.0/docs/resources/function_app_flex_consumption), [AzureAD pre-authorized application](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/application_pre_authorized).
+* Primary-source issue/implementation discussions: [Flex zip deployment issue #29630](https://github.com/hashicorp/terraform-provider-azurerm/issues/29630) and [AzureRM Flex identity-based Storage workaround (PR #29099)](https://github.com/hashicorp/terraform-provider-azurerm/pull/29099). Do not assume traditional `zip_deploy_file` behavior applies to Flex.
+* [Azure-Samples Flex Consumption Terraform AzureRM example, pinned revision `46c638a8f1053f6863f478e736290ba0646504fa`](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples/tree/46c638a8f1053f6863f478e736290ba0646504fa/IaC/terraformazurerm). Both examples use AzureRM to provision a Flex Function App, deployment container, Application Insights and Log Analytics workspace. This scenario additionally configures AzureAD and Easy Auth, compares Entra tokens with Function keys, verifies managed-identity Storage access and telemetry, and explicitly publishes its Python code with `scripts/publish_code.sh`. The sample's runtime version list reflects its pinned revision and does not list this scenario's Python 3.13 default.
