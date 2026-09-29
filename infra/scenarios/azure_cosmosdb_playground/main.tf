@@ -68,9 +68,9 @@ resource "azapi_resource" "documents" {
         }
         vectorEmbeddingPolicy = {
           vectorEmbeddings = [{
-            path         = "/embedding"
-            dataType     = "float32"
-            dimensions   = var.vector_dimensions
+            path             = "/embedding"
+            dataType         = "float32"
+            dimensions       = var.vector_dimensions
             distanceFunction = "cosine"
           }]
         }
