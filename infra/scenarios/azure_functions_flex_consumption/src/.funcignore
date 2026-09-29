@@ -1,0 +1,6 @@
+local.settings.json
+.venv/
+__pycache__/
+*.pyc
+.env
+tests/
