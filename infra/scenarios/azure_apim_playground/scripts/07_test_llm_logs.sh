@@ -16,10 +16,16 @@ validate_positive_integer LOG_QUERY_INTERVAL_SECONDS "$LOG_QUERY_INTERVAL_SECOND
 
 LLM_LOG_QUERY='union isfuzzy=true ApiManagementGatewayLlmLog
 | where TimeGenerated > ago(24h)
-| summarize Records = count()'
+| join kind=leftouter (
+    ApiManagementGatewayLogs
+    | where TimeGenerated > ago(24h)
+    | project CorrelationId, ApimSubscriptionId
+  ) on CorrelationId
+| summarize Records = count(), CorrelatedRecords = countif(isnotempty(ApimSubscriptionId))'
 
 ATTEMPT=1
 RECORD_COUNT=0
+CORRELATED_RECORD_COUNT=0
 while [ "$ATTEMPT" -le "$LOG_QUERY_ATTEMPTS" ]; do
   log "Querying API Management LLM logs (${ATTEMPT}/${LOG_QUERY_ATTEMPTS})."
   if QUERY_RESULT=$(az monitor log-analytics query \
@@ -27,6 +33,7 @@ while [ "$ATTEMPT" -le "$LOG_QUERY_ATTEMPTS" ]; do
     --analytics-query "$LLM_LOG_QUERY" \
     --output json); then
     RECORD_COUNT=$(printf '%s' "$QUERY_RESULT" | jq -r '.[0].Records // 0')
+    CORRELATED_RECORD_COUNT=$(printf '%s' "$QUERY_RESULT" | jq -r '.[0].CorrelatedRecords // 0')
   else
     die "Log Analytics query for API Management LLM logs failed."
   fi
@@ -43,5 +50,7 @@ done
 
 [ "$RECORD_COUNT" -gt 0 ] \
   || die "No ApiManagementGatewayLlmLog records were found after ${LOG_QUERY_ATTEMPTS} queries. Run an AI gateway request and allow for ingestion delay."
+[ "$CORRELATED_RECORD_COUNT" -gt 0 ] \
+  || die "LLM log records were found, but none correlated with ApiManagementGatewayLogs by CorrelationId."
 
-log "Azure Monitor contains ${RECORD_COUNT} recent API Management LLM log records."
+log "Azure Monitor contains ${RECORD_COUNT} recent API Management LLM log records; ${CORRELATED_RECORD_COUNT} correlate with gateway subscriptions."

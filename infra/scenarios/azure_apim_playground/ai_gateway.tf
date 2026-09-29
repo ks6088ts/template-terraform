@@ -116,14 +116,20 @@ resource "azurerm_api_management_api_policy" "ai" {
   api_management_name = module.api_management.name
   resource_group_name = module.resource_group.name
   xml_content = templatefile("${path.module}/policies/ai-api.xml.tftpl", {
-    backend_id            = azurerm_api_management_backend.ai[0].name
-    content_safety_policy = local.content_safety_policy
-    token_limit_policy    = local.llm_token_limit_policy
-    token_metric_policy   = local.llm_token_metric_policy
-    response_fragment_id  = azurerm_api_management_policy_fragment.response_headers.name
+    backend_id                = azurerm_api_management_backend.ai[0].name
+    content_safety_policy     = local.content_safety_policy
+    token_limit_policy        = local.llm_token_limit_policy
+    token_metric_policy       = local.llm_token_metric_policy
+    response_fragment_id      = azurerm_api_management_policy_fragment.response_headers.name
+    caller_attribution_policy = local.caller_attribution_policy
+    stream_usage_policy       = local.stream_usage_policy
+    caller_metric_policy      = local.caller_metric_policy
+    caller_context_policy     = local.caller_context_policy
   })
 
   depends_on = [
+    azurerm_api_management_policy_fragment.caller_attribution,
+    azurerm_api_management_policy_fragment.stream_usage,
     azurerm_role_assignment.apim_ai_user,
     azurerm_role_assignment.apim_content_safety_user,
     azapi_resource.content_safety_backend,

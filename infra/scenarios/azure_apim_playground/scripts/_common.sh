@@ -85,6 +85,7 @@ load_terraform_outputs() {
   APPLICATION_INSIGHTS_APP_ID=$(terraform_output_value application_insights_app_id)
   LLM_LOGGING_ENABLED=$(terraform_output_value llm_logging_enabled)
   LLM_TOKEN_METRICS_ENABLED=$(terraform_output_value llm_token_metrics_enabled)
+  COST_SHOWBACK_ENABLED=$(terraform_output_value cost_showback_enabled)
 
   CONTENT_SAFETY_ENDPOINT=${CONTENT_SAFETY_ENDPOINT%/}
   AI_GATEWAY_URL=${AI_GATEWAY_URL%/}

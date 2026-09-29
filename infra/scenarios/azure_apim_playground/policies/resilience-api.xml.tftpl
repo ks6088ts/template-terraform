@@ -3,6 +3,8 @@
     <base />
     <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
     <set-query-parameter name="subscription-key" exists-action="delete" />
+    ${caller_attribution_policy}
+    ${caller_metric_policy}
   </inbound>
   <backend>
     <base />

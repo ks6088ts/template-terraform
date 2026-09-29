@@ -311,6 +311,89 @@ variable "llm_token_metrics" {
   }
 }
 
+variable "cost_showback" {
+  description = "Optional APIM caller attribution, cost showback workbook, Cost Management export, and request-threshold alerts"
+  type = object({
+    business_units                  = optional(map(string), {})
+    workbook_enabled                = optional(bool, true)
+    base_monthly_cost               = optional(number, 150)
+    per_1000_requests_cost          = optional(number, 0.003)
+    prompt_per_1000_tokens_cost     = optional(number, 0.00025)
+    completion_per_1000_tokens_cost = optional(number, 0.002)
+    entra_id = optional(object({
+      tenant_id = string
+      audiences = set(string)
+    }))
+    cost_export = optional(object({
+      start_date               = string
+      recurrence               = optional(string, "Daily")
+      root_folder_path         = optional(string, "apim-costing")
+      storage_replication_type = optional(string, "LRS")
+    }))
+    request_alerts = optional(object({
+      email_address        = string
+      request_threshold    = optional(number, 1000)
+      evaluation_frequency = optional(string, "PT5M")
+      window_duration      = optional(string, "PT1H")
+    }))
+  })
+  default = null
+
+  validation {
+    condition = var.cost_showback == null || alltrue([
+      var.cost_showback.base_monthly_cost >= 0,
+      var.cost_showback.per_1000_requests_cost >= 0,
+      var.cost_showback.prompt_per_1000_tokens_cost >= 0,
+      var.cost_showback.completion_per_1000_tokens_cost >= 0,
+    ])
+    error_message = "cost_showback pricing values must be non-negative."
+  }
+
+  validation {
+    condition     = var.cost_showback == null || var.cost_showback.entra_id == null || can(regex("^[0-9a-fA-F-]{36}$", var.cost_showback.entra_id.tenant_id))
+    error_message = "cost_showback.entra_id.tenant_id must be a tenant GUID."
+  }
+
+  validation {
+    condition = var.cost_showback == null || try(
+      length(var.cost_showback.entra_id.audiences) > 0 && alltrue([
+        for audience in var.cost_showback.entra_id.audiences :
+        can(regex("^[A-Za-z0-9:/._-]+$", audience))
+      ]),
+      true,
+    )
+    error_message = "cost_showback.entra_id.audiences must contain at least one URI-safe audience value."
+  }
+
+  validation {
+    condition = var.cost_showback == null || alltrue([
+      for id, display_name in var.cost_showback.business_units :
+      can(regex("^[A-Za-z0-9._-]+$", id)) && length(display_name) > 0
+    ])
+    error_message = "cost_showback.business_units keys may contain letters, numbers, periods, underscores, and hyphens, and display names must not be empty."
+  }
+
+  validation {
+    condition     = var.cost_showback == null || try(contains(["Daily", "Weekly", "Monthly"], var.cost_showback.cost_export.recurrence), true)
+    error_message = "cost_showback.cost_export.recurrence must be Daily, Weekly, or Monthly."
+  }
+
+  validation {
+    condition     = var.cost_showback == null || try(contains(["LRS", "GRS", "ZRS"], var.cost_showback.cost_export.storage_replication_type), true)
+    error_message = "cost_showback.cost_export.storage_replication_type must be LRS, GRS, or ZRS."
+  }
+
+  validation {
+    condition     = var.cost_showback == null || var.cost_showback.cost_export == null || can(formatdate("YYYY-MM-DD'T'hh:mm:ssZ", var.cost_showback.cost_export.start_date))
+    error_message = "cost_showback.cost_export.start_date must be an RFC 3339 timestamp."
+  }
+
+  validation {
+    condition     = var.cost_showback == null || try(var.cost_showback.request_alerts.request_threshold > 0, true)
+    error_message = "cost_showback.request_alerts.request_threshold must be greater than zero."
+  }
+}
+
 variable "operator_principal_id" {
   description = "Object ID of the principal that runs data-plane setup scripts; defaults to the Terraform client principal"
   type        = string

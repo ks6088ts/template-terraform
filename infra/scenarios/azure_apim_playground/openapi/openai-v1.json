@@ -18,6 +18,30 @@
                 "$ref": "#/components/schemas/ChatCompletionRequest"
               }
             }
+    },
+    "/responses": {
+            "post": {
+              "operationId": "create-response",
+              "summary": "Create a model response",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ResponseRequest"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Model response"
+                },
+                "429": {
+                  "description": "Token rate limit exceeded"
+                }
+              }
+            }
           }
         },
         "responses": {
@@ -94,6 +118,38 @@
             "type": "array",
             "items": {
               "type": "object",
+              "additionalProperties": true
+            },
+            "ResponseRequest": {
+              "type": "object",
+              "required": ["model", "input"],
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "input": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  ]
+                },
+                "stream": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "store": {
+                  "type": "boolean",
+                  "default": true
+                }
+              },
               "additionalProperties": true
             }
           },

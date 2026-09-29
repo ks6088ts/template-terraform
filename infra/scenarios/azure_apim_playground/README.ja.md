@@ -25,6 +25,8 @@ flowchart LR
         APIM -. managed identity .-> Safety["Azure AI Content Safety"]
         APIM -. telemetry .-> AppInsights["Application Insights"]
         APIM -. gateway / LLM logs .-> LogAnalytics["Log Analytics"]
+        LogAnalytics -. query .-> Workbook["Cost showback workbook"]
+        APIM -. optional cost export .-> Storage["Cost export storage"]
 ```
 
 ## 実行可能な機能
@@ -39,12 +41,13 @@ opt-in layer では次の機能を追加します。
 | Layer | Terraform resource と動作 | データプレーン検証 |
 | --- | --- | --- |
 | Backend resilience | 2 つの Container Apps、weighted pool、任意の cookie affinity、deterministic 503 backend、circuit breaker、priority failover | weighted pool で両 backend を観測し、failover で secondary へ到達 |
-| AI gateway | 新規 Foundry account/model または既存 OpenAI v1 endpoint、APIM managed identity、RBAC、keyless backend authentication | APIM 経由で chat completion を取得 |
+| AI gateway | 新規 Foundry account/model または既存 OpenAI v1 endpoint、APIM managed identity、RBAC、keyless backend authentication | Chat Completions / Responses API の sync / streaming を検証 |
 | Token governance | `llm-token-limit` の rate/quota policy | 反復 request で HTTP 429 を確認 |
 | Content Safety | 新規または既存 Content Safety account、RBAC、managed-identity backend、`llm-content-safety` | script で作成した blocklist の語を HTTP 403 で拒否 |
 | Standard telemetry | Log Analytics、workspace-based Application Insights、managed-identity logger、APIM diagnostics、HTTP body 0 byte | Terraform test で control plane を検証 |
 | LLM logs | Azure Monitor の AI gateway usage logs。prompt/completion 本文は既定で無効 | KQL で `ApiManagementGatewayLlmLog` を確認 |
 | Token metrics | preview の `llm-emit-token-metric`、diagnostic metrics、dimension 付き custom metrics | KQL で直近の `AppMetrics` を確認 |
+| Cost showback | Caller attribution、business-unit subscription、Azure Monitor Workbook、任意の Cost Management export と request-threshold alert | LLM/gateway log の相関と `AppMetrics` の caller metric を確認 |
 
 ## 前提条件
 
@@ -53,6 +56,8 @@ opt-in layer では次の機能を追加します。
 - Telemetry query 用の Azure CLI `log-analytics` extension（`az extension add --name log-analytics --yes`）
 - データプレーン検証用の `curl` と `jq`
 - 選択した Azure resource と role assignment を作成できる権限
+- Cost Management export を有効にする場合は subscription scope の `Cost Management Contributor`
+- Request alert を有効にする場合は通知先 email と action group/rule 作成権限
 - Foundry を新規作成する場合は、対象 region での model availability と quota
 
 共通ガイダンスの[プロバイダー認証](../../../docs/tips/provider-authentication.ja.md)、
@@ -71,6 +76,7 @@ opt-in layer では次の機能を追加します。
 | 選択: Load balancing | `profiles/consumption_load_balancing.tfvars` | 3:1 weighted backend pool | 30～45 分 + 作成時間 |
 | 選択: Resilience | `profiles/full_developer.tfvars` | Affinity、circuit breaker、priority failover、標準監視 | 45～60 分 + 作成時間 |
 | 選択: AI gateway | `profiles/new_foundry.tfvars` または local copy | AI、token limit、Content Safety、LLM logs、token metrics | 60～90 分 + 作成時間 |
+| 選択: Cost showback | `profiles/cost_showback.tfvars` | Caller attribution、business-unit subscription、Workbook | 45～60 分 + 作成時間 |
 
 > [!IMPORTANT]
 > 既存 deployment の `location` または `sku_name` の変更は、変更元と変更先の APIM tier にかかわらず
@@ -128,6 +134,7 @@ partial state が残る場合があります。deployment 済みの profile と�
 | --- | --- | --- |
 | `profiles/consumption_load_balancing.tfvars` | `Consumption_0` の core と 3:1 weighted pool | Circuit breaker は含まない |
 | `profiles/full_developer.tfvars` | Weighted pool、affinity、circuit breaker、standard observability | 課金対象の Developer APIM と monitoring resource を作成 |
+| `profiles/cost_showback.tfvars` | Caller attribution、4 つの sample business unit、cost Workbook | Cost export と email alert は明示設定するまで無効 |
 | `profiles/new_foundry.tfvars` | Foundry と Content Safety を新規作成する full resilience / AI path | apply 前に model lifecycle、quota、capacity を確認 |
 | `profiles/existing_ai.tfvars` | 既存 AI と Content Safety resource を使用する full AI path | すべての `replace-me` を先に置換 |
 
@@ -571,11 +578,11 @@ Log Analytics を polling します。
 
 | 検証 | Script | 成功条件 | 主な注意点 |
 | --- | --- | --- | --- |
-| AI gateway | `04_test_ai_gateway.sh` | Completion を返す HTTP 200 | Client は APIM key、backend は managed identity で認証 |
+| AI gateway | `04_test_ai_gateway.sh` | Chat/Responses の sync/streaming が HTTP 200 | Client は APIM key、backend は managed identity。Chat streaming usage は不足時に APIM が補完 |
 | Token limit | `05_test_token_limit.sh` | Rate limit の HTTP 429 | Quota 超過は HTTP 403。token count は model と推定方式に依存 |
 | Content Safety | `06_test_content_safety.sh` | Blocklist 語を HTTP 403 で拒否 | Blocklist/item の伝播待ちがある |
-| LLM logs | `07_test_llm_logs.sh` | `ApiManagementGatewayLlmLog` を 1 件以上取得 | Prompt/completion 本文は既定で無効。ingestion delay がある |
-| Token metrics | `08_test_custom_metrics.sh` | `AppMetrics` を 1 件以上取得 | Custom dimension は最大 5。high cardinality を避ける |
+| LLM logs | `07_test_llm_logs.sh` | `CorrelationId` で gateway log と相関できる LLM log を取得 | Prompt/completion 本文は既定で無効。ingestion delay がある |
+| Caller/token metrics | `08_test_custom_metrics.sh` | 期待する `AppMetrics` を取得 | Token dimension は最大 5。caller ID の cardinality に注意 |
 
 個別 test を再実行する例:
 
@@ -599,6 +606,32 @@ LOG_QUERY_ATTEMPTS=20 \
 LOG_QUERY_INTERVAL_SECONDS=15 \
 ./scripts/08_test_custom_metrics.sh
 ```
+
+### Lab 5: Cost allocation と showback をデプロイする
+
+tracked profile は caller attribution、sample business-unit subscription、Azure Monitor Workbook を
+有効にします。Cost Management export と email alert は有効にしません。
+
+```bash
+PROFILE="profiles/cost_showback.tfvars"
+terraform plan -var-file="$PROFILE"
+terraform apply -parallelism=1 -var-file="$PROFILE"
+
+terraform output cost_workbook_id
+terraform output business_unit_subscription_ids
+./scripts/run_all.sh
+```
+
+既定の caller attribution が信頼するのは APIM subscription ID だけです。Tenant と許可 audience を
+`cost_showback.entra_id` に設定すると `validate-azure-ad-token` が有効になり、検証に成功した bearer
+token の `appid` / `azp` だけを使用します。Bearer token がない request は APIM subscription ID を
+引き続き使用します。
+
+Cost export または request-threshold alert を試す場合は profile を git-ignored local file へコピーし、
+`cost_showback.cost_export` に安定した RFC 3339 start date、`cost_showback.request_alerts` に通知先 email
+を設定します。Alert は Log Analytics の rolling window 内 request 数を監視するもので、Azure Cost
+Management budget ではありません。Workbook の request/token cost は showback 用の推定値です。
+請求の system of record には Cost Management と Azure OpenAI/Foundry usage export を使用してください。
 
 ### Cleanup
 
@@ -700,11 +733,11 @@ step が失敗するとその時点で停止し、すべて成功した場合だ
 | `01_test_core.sh` | Subscription key 付きで Hello API と mock API を呼び、policy 生成 JSON、OpenAPI example、marker header を検証する。その後 Hello API を反復して subscription rate limit を発生させる | 2 つの API が HTTP 200 と期待 payload を返し、反復 request が HTTP 429 に到達すれば成功。rate-limit window を消費する |
 | `02_test_weighted_routing.sh` | Weighted endpoint を既定 24 回呼び、response の backend 名を primary / secondary ごとに集計する | 両 backend を 1 回以上観測すれば成功。sample が少ないと確率的に片方だけになる場合がある |
 | `03_test_failover.sh` | Failure endpoint を反復し、primary の HTTP 503 と circuit breaker 作動後の secondary response を観測する。attempt 間には 1 秒待機する | Attempt 上限までに secondary を示す HTTP 200 を取得すれば成功。意図的に primary failure を発生させる |
-| `04_test_ai_gateway.sh` | APIM subscription key を client credential として OpenAI-compatible chat completion を呼ぶ。APIM から backend へは managed identity を使用する | HTTP 200 と空でない completion text を取得すれば成功。Model quota と token cost を消費する |
+| `04_test_ai_gateway.sh` | APIM subscription key で Chat Completions / Responses API の sync/streaming を呼ぶ。Backend へは managed identity を使用する | HTTP 200、completion/SSE、streaming usage を確認できれば成功。Model quota と token cost を消費する |
 | `05_test_token_limit.sh` | Token を消費する prompt を AI gateway へ反復送信し、`x-llm-tokens-consumed` header を可能な場合は記録する | Attempt 上限までに token rate limit の HTTP 429 を取得すれば成功。rate-limit window が更新されるまで後続 AI request に影響する場合がある |
 | `06_test_content_safety.sh` | Azure access token で blocklist と item を作成または更新し、伝播を待ってから blocked prompt と safe control prompt を送信する | Blocked prompt を HTTP 403 で拒否し、safe control prompt を HTTP 200 で許可すれば成功。作成した test item は `09_cleanup.sh` で削除する |
-| `07_test_llm_logs.sh` | 過去 24 時間の `ApiManagementGatewayLlmLog` を Log Analytics へ KQL query し、見つからない場合は既定 10 秒間隔で最大 12 回 polling する | 1 件以上の record を取得すれば成功。Query error は即時表示して停止する。事前に AI gateway request と telemetry ingestion が必要 |
-| `08_test_custom_metrics.sh` | 過去 24 時間の `AppMetrics` を Log Analytics へ query し、token metric record と最大 20 個の metric name を取得する | 1 件以上の record を取得すれば成功。Query error は即時表示して停止する。事前に AI gateway request と telemetry ingestion が必要 |
+| `07_test_llm_logs.sh` | 直近の `ApiManagementGatewayLlmLog` と `ApiManagementGatewayLogs` を `CorrelationId` で join する | Subscription と相関できる record を 1 件以上取得すれば成功。事前の AI traffic と ingestion が必要 |
+| `08_test_custom_metrics.sh` | 直近の `AppMetrics` を query する。Cost showback では `caller-requests`、それ以外は有効な token metric を確認する | 期待する custom metric を取得すれば成功。事前の API traffic と ingestion が必要 |
 | `09_cleanup.sh` | `CONFIRM_CLEANUP=delete-apim-playground-data` の完全一致を確認し、script の test text と一致する Content Safety blocklist item を削除する | Item が削除済み、または blocklist が存在しない場合も成功。内部 ID を安定させるため blocklist container と Terraform 管理 resource は削除しない |
 | `run_all.sh` | Feature flag に応じて上記 test を順番に実行し、無効な layer を `Skip` として表示する | 有効な test がすべて成功すれば成功。`CLEANUP_AFTER_RUN=true` では成功時の最後だけでなく、途中失敗時にも `09_cleanup.sh` を実行する |
 
@@ -742,6 +775,10 @@ core rate limit を除く feature object の既定値はすべて `null` です�
 | `observability` | Log Analytics、Application Insights、logger、diagnostics を有効化 |
 | `observability.llm_logging` | Usage logs を有効化。prompt/completion 本文は明示指定しない限り無効 |
 | `llm_token_metrics` | Experimental custom metrics と最大 5 個の公式 dimension。AI と observability が必要 |
+| `cost_showback` | Caller attribution と pricing parameter を有効化。observability が必要 |
+| `cost_showback.entra_id` | 任意の tenant と audience allowlist。`appid` / `azp` の使用前に bearer token を検証 |
+| `cost_showback.cost_export` | 明示的な安定 start date と secure storage を持つ任意の Cost Management export |
+| `cost_showback.request_alerts` | 任意の email action group と business-unit ごとの request-threshold rule |
 | `operator_principal_id` | Content Safety data を管理する principal。既定は Terraform caller |
 
 script から利用する machine-readable contract は `terraform output -json` です。subscription
@@ -750,7 +787,8 @@ key は sensitive として扱われます。CI log に出力したり output sn
 ## IaC の境界
 
 Terraform は API、product、subscription、policy、backend、pool、identity、RBAC、diagnostics、
-Foundry deployment、Content Safety account、monitoring resource を所有します。`scripts/`
+Foundry deployment、Content Safety account、monitoring、Workbook、Cost Management export、alert
+resource を所有します。`scripts/`
 directory が実行するデータプレーン操作は次のものだけです。
 
 - Gateway endpoint の呼び出し
@@ -773,6 +811,10 @@ APIM、Foundry、RBAC、monitoring のコントロールプレーンを script �
 - Token metrics は experimental です。公式の
     [Azure-Samples/AI-Gateway Application Insights module](https://github.com/Azure-Samples/AI-Gateway/blob/main/modules/monitor/v1/appinsights.bicep)
     と同じく、まだ公開 schema にない `CustomMetricsOptedInType = "WithDimensions"` を AzAPI で送信します。
+- Workbook の cost/token 値は情報提供用の推定値で、遅延や failed/throttled request の欠落があり得ます。
+    Billing ledger として使用しないでください。
+- Caller attribution は未検証 JWT claim を無視します。`appid` / `azp` を使う場合は
+    `cost_showback.entra_id` を設定し、それ以外は APIM subscription ID を使用します。
 - 新規作成する Foundry、Content Safety、Application Insights は local key authentication を
     無効化します。APIM は system-assigned identity と対象 scope の role assignment を使用します。
 - tracked Foundry profile は `DataZoneStandard` を使用します。保存データは `eastus2` に残り、
@@ -802,6 +844,7 @@ APIM、Foundry、RBAC、monitoring のコントロールプレーンを script �
 
 ## 一次資料
 
+- [Azure-Samples/Apim-Samples の costing / showback sample](https://github.com/Azure-Samples/Apim-Samples/tree/main/samples/costing)
 - [API Management backend、pool、circuit breaker](https://learn.microsoft.com/azure/api-management/backends)
 - [AI gateway capabilities](https://learn.microsoft.com/azure/api-management/genai-gateway-capabilities)
 - [`llm-token-limit` policy](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy)
@@ -809,6 +852,7 @@ APIM、Foundry、RBAC、monitoring のコントロールプレーンを script �
 - [Azure AI Content Safety blocklist](https://learn.microsoft.com/azure/ai-services/content-safety/quickstart-blocklist)
 - [Application Insights integration](https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights)
 - [LLM logs と `ApiManagementGatewayLlmLog`](https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs)
+- [Azure OpenAI streaming usage](https://learn.microsoft.com/azure/ai-services/openai/how-to/streaming)
 - [`llm-emit-token-metric` policy](https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy)
 - [Azure OpenAI quota と capacity](https://learn.microsoft.com/azure/foundry/openai/how-to/quota)
 - [AzureRM backend](https://developer.hashicorp.com/terraform/language/backend/azurerm)

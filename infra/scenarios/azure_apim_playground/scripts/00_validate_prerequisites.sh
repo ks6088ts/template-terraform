@@ -30,7 +30,7 @@ if [ "$OBSERVABILITY_ENABLED" = "true" ]; then
   require_value application_insights_app_id "$APPLICATION_INSIGHTS_APP_ID"
 fi
 
-if [ "$LLM_LOGGING_ENABLED" = "true" ] || [ "$LLM_TOKEN_METRICS_ENABLED" = "true" ]; then
+if [ "$LLM_LOGGING_ENABLED" = "true" ] || [ "$LLM_TOKEN_METRICS_ENABLED" = "true" ] || [ "$COST_SHOWBACK_ENABLED" = "true" ]; then
   require_az_extension log-analytics
 fi
 
@@ -45,3 +45,4 @@ log "Content Safety: ${CONTENT_SAFETY_ENABLED}"
 log "Observability: ${OBSERVABILITY_ENABLED}"
 log "LLM logs: ${LLM_LOGGING_ENABLED}"
 log "LLM token metrics: ${LLM_TOKEN_METRICS_ENABLED}"
+log "Cost showback: ${COST_SHOWBACK_ENABLED}"

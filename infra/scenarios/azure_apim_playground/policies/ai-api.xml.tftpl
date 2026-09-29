@@ -5,6 +5,10 @@
     <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
     <set-query-parameter name="api-key" exists-action="delete" />
     <set-query-parameter name="subscription-key" exists-action="delete" />
+    ${caller_attribution_policy}
+    ${stream_usage_policy}
+    ${caller_metric_policy}
+    ${caller_context_policy}
     <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
     ${content_safety_policy}
     ${token_limit_policy}

@@ -42,6 +42,20 @@ mock_provider "azurerm" {
       endpoint = "https://contentsafetytest1234.cognitiveservices.azure.com/"
     }
   }
+
+  mock_resource "azurerm_application_insights" {
+    defaults = {
+      id                = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Insights/components/appi-test1234"
+      app_id            = "00000000-0000-0000-0000-000000000006"
+      connection_string = "InstrumentationKey=00000000-0000-0000-0000-000000000007"
+    }
+  }
+
+  mock_resource "azurerm_storage_account" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Storage/storageAccounts/stapimtest1234"
+    }
+  }
 }
 
 mock_provider "random" {
@@ -157,6 +171,15 @@ run "core_api_is_deployed_by_default" {
       !output.observability_enabled,
       !output.llm_logging_enabled,
       !output.llm_token_metrics_enabled,
+      length(azurerm_api_management_policy_fragment.caller_attribution) == 0,
+      length(azurerm_api_management_policy_fragment.stream_usage) == 0,
+      length(azurerm_api_management_subscription.business_unit) == 0,
+      length(azapi_resource.cost_workbook) == 0,
+      length(azurerm_storage_account.cost_export) == 0,
+      length(azapi_resource.cost_export) == 0,
+      length(azurerm_monitor_action_group.request_threshold) == 0,
+      length(azurerm_monitor_scheduled_query_rules_alert_v2.request_threshold) == 0,
+      !output.cost_showback_enabled,
     ])
     error_message = "Optional backend pool and AI resources must remain disabled by default."
   }
@@ -274,6 +297,10 @@ run "existing_ai_backend_enabled" {
       azurerm_role_assignment.apim_ai_user[0].role_definition_name == "Cognitive Services User",
       azurerm_api_management_backend.ai[0].url == "https://existing.openai.azure.com/openai/v1",
       strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "authentication-managed-identity"),
+      strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "playground-ensure-stream-include-usage"),
+      length(azurerm_api_management_policy_fragment.stream_usage) == 1,
+      strcontains(azurerm_api_management_api.ai[0].import[0].content_value, "\"/responses\""),
+      strcontains(azurerm_api_management_api.ai[0].import[0].content_value, "\"create-response\""),
       !strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "llm-token-limit"),
       output.ai_backend_mode == "existing",
       output.ai_deployment_name == "gpt-test",
@@ -681,6 +708,125 @@ run "llm_token_metrics_requires_ai_backend" {
   variables {
     observability     = {}
     llm_token_metrics = {}
+  }
+
+  expect_failures = [terraform_data.feature_validation]
+}
+
+
+run "cost_showback_enabled" {
+  command = plan
+
+  variables {
+    ai_backend = {
+      existing = {
+        endpoint        = "https://existing.openai.azure.com/openai/v1"
+        resource_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ai/providers/Microsoft.CognitiveServices/accounts/existing-ai"
+        deployment_name = "gpt-test"
+      }
+    }
+    observability = {
+      llm_logging = {}
+    }
+    cost_showback = {
+      business_units = {
+        "bu-engineering" = "Engineering"
+        "bu-finance"     = "Finance"
+      }
+      entra_id = {
+        tenant_id = "00000000-0000-0000-0000-000000000008"
+        audiences = ["api://apim-playground"]
+      }
+      base_monthly_cost               = 200
+      per_1000_requests_cost          = 0.004
+      prompt_per_1000_tokens_cost     = 0.001
+      completion_per_1000_tokens_cost = 0.002
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_api_management_policy_fragment.caller_attribution) == 1,
+      length(azurerm_api_management_policy_fragment.stream_usage) == 1,
+      length(azurerm_api_management_subscription.business_unit) == 2,
+      length(azapi_resource.cost_workbook) == 1,
+      azapi_update_resource.application_insights_custom_metrics[0].body.properties.CustomMetricsOptedInType == "WithDimensions",
+      azapi_resource.application_insights_diagnostic[0].body.properties.metrics,
+      strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "playground-caller-attribution"),
+      strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "validate-azure-ad-token"),
+      strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "api://apim-playground"),
+      strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "playground-ensure-stream-include-usage"),
+      strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "caller-requests"),
+      strcontains(azurerm_api_management_api_policy.ai[0].xml_content, "x-business-unit"),
+      strcontains(azapi_resource.cost_workbook[0].body.properties.serializedData, "200"),
+      !strcontains(azapi_resource.cost_workbook[0].body.properties.serializedData, "__APP_INSIGHTS_NAME__"),
+      !strcontains(azapi_resource.cost_workbook[0].body.properties.serializedData, "__BASE_MONTHLY_COST__"),
+      !strcontains(azapi_resource.cost_workbook[0].body.properties.serializedData, "987654321.123456"),
+      output.cost_showback_enabled,
+    ])
+    error_message = "Cost showback must create caller attribution, streaming usage, business-unit subscriptions, metrics, and the workbook."
+  }
+}
+
+
+run "cost_export_and_request_alerts_enabled" {
+  command = plan
+
+  variables {
+    observability = {}
+    cost_showback = {
+      business_units = {
+        "bu-engineering" = "Engineering"
+      }
+      workbook_enabled = false
+      cost_export = {
+        start_date = "2026-09-01T00:00:00Z"
+      }
+      request_alerts = {
+        email_address     = "apim-alerts@example.com"
+        request_threshold = 500
+      }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      length(azapi_resource.cost_workbook) == 0,
+      length(azurerm_storage_account.cost_export) == 1,
+      length(azapi_resource.cost_export_container) == 1,
+      length(azapi_resource.cost_export) == 1,
+      azapi_resource.cost_export[0].body.properties.schedule.recurrence == "Daily",
+      azapi_resource.cost_export[0].body.properties.schedule.recurrencePeriod.from == "2026-09-01T00:00:00Z",
+      length(azurerm_monitor_action_group.request_threshold) == 1,
+      length(azurerm_monitor_scheduled_query_rules_alert_v2.request_threshold) == 1,
+      strcontains(azurerm_monitor_scheduled_query_rules_alert_v2.request_threshold["bu-engineering"].criteria[0].query, "RequestCount > 500"),
+    ])
+    error_message = "Cost export and request-threshold alerts must remain independent opt-ins under cost showback."
+  }
+}
+
+
+run "cost_showback_requires_observability" {
+  command = plan
+
+  variables {
+    cost_showback = {}
+  }
+
+  expect_failures = [terraform_data.feature_validation]
+}
+
+
+run "request_alerts_require_business_units" {
+  command = plan
+
+  variables {
+    observability = {}
+    cost_showback = {
+      request_alerts = {
+        email_address = "apim-alerts@example.com"
+      }
+    }
   }
 
   expect_failures = [terraform_data.feature_validation]

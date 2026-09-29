@@ -51,6 +51,16 @@ resource "terraform_data" "feature_validation" {
       condition     = !local.token_metrics_enabled || local.observability_enabled
       error_message = "llm_token_metrics requires observability."
     }
+
+    precondition {
+      condition     = !local.cost_showback_enabled || local.observability_enabled
+      error_message = "cost_showback requires observability."
+    }
+
+    precondition {
+      condition     = try(var.cost_showback.request_alerts, null) == null || length(local.business_units) > 0
+      error_message = "cost_showback.request_alerts requires at least one business unit."
+    }
   }
 }
 
@@ -257,8 +267,12 @@ resource "azurerm_api_management_api_policy" "resilience" {
   api_management_name = module.api_management.name
   resource_group_name = module.resource_group.name
   xml_content = templatefile("${path.module}/policies/resilience-api.xml.tftpl", {
-    response_fragment_id = azurerm_api_management_policy_fragment.response_headers.name
+    response_fragment_id      = azurerm_api_management_policy_fragment.response_headers.name
+    caller_attribution_policy = local.caller_attribution_policy
+    caller_metric_policy      = local.caller_metric_policy
   })
+
+  depends_on = [azurerm_api_management_policy_fragment.caller_attribution]
 }
 
 resource "azurerm_api_management_api_operation_policy" "weighted" {
