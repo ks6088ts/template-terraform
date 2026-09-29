@@ -34,7 +34,7 @@ Resource names share `<name>-<random-suffix>` as their collision-resistant base.
 ## Before you begin
 
 - Terraform **>= 1.11**, Azure CLI, `curl`, `jq`, and a POSIX shell. Sign in with an identity allowed to create resource groups, Cosmos DB and Foundry accounts, model deployments, and Azure/Cosmos data-plane role assignments. The same identity must run the scripts, or set `operator_principal_id` to the script operator's Entra object ID before applying.
-- An Azure subscription with Microsoft.DocumentDB and Microsoft.CognitiveServices registered, serverless Cosmos DB and vector/full-text search available in the selected region, and quota for **both** requested model versions, SKUs, and capacities. Defaults are `eastus2`, `text-embedding-3-small` version `1` (`GlobalStandard`, capacity `30`), and `gpt-5.4-mini` version `2026-03-17` (`GlobalStandard`, capacity `100`). Availability and quotas change: check the [Foundry model catalog and deployment types](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) and your subscription before provisioning. Override the complete `embedding_model` or `chat_model` object with `-var`/a `.tfvars` file if necessary; retain `text-embedding-3-small` and set `vector_dimensions` to a supported value from **1 to 505** for the flat index and embedding requests.
+- An Azure subscription with Microsoft.DocumentDB and Microsoft.CognitiveServices registered, serverless Cosmos DB and vector/full-text search available in the selected region, and quota for **both** requested model versions, SKUs, and capacities. Defaults are `japaneast`, `text-embedding-3-small` version `1` (`GlobalStandard`, capacity `30`), and `gpt-5.4-mini` version `2026-03-17` (`GlobalStandard`, capacity `100`). Availability and quotas change: check the [Foundry model catalog and deployment types](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) and your subscription before provisioning. Override the complete `embedding_model` or `chat_model` object with `-var`/a `.tfvars` file if necessary; retain `text-embedding-3-small` and set `vector_dimensions` to a supported value from **1 to 505** for the flat index and embedding requests.
 - A disposable subscription/resource group is recommended. Estimate charges using [Cosmos DB pricing](https://azure.microsoft.com/pricing/details/cosmos-db/) and [Azure OpenAI pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/). Serverless Cosmos operations/storage and Foundry model deployments/inference can incur charges even for a short lab; quotas and pricing are subscription/region specific. Set a budget, monitor usage, and destroy promptly.
 
 For general guidance, see [Azure provider authentication](../../../docs/tips/provider-authentication.md) and the [Terraform workflow](../../../docs/tips/terraform-workflow.md).
@@ -51,7 +51,7 @@ az account show --query '{name:name,id:id,tenantId:tenantId}' -o table
 terraform version
 az provider show --namespace Microsoft.DocumentDB --query registrationState -o tsv
 az provider show --namespace Microsoft.CognitiveServices --query registrationState -o tsv
-az cognitiveservices usage list --location eastus2 -o table
+az cognitiveservices usage list --location japaneast -o table
 ```
 
 If a provider is unregistered, ask an authorized subscription administrator to register it (`az provider register --namespace Microsoft.DocumentDB` and `az provider register --namespace Microsoft.CognitiveServices`), and wait until it reports `Registered`. Check model/version availability and **separate embedding/chat quotas** in Foundry for your chosen region; CLI usage alone does not establish model availability. Verify your identity can assign both resource RBAC and Cosmos DB data-plane roles. The Azure CLI identity used by the scripts must match `operator_principal_id` (default: the Terraform caller's object ID); allow a few minutes for new assignments to propagate.
@@ -72,7 +72,7 @@ Review the plan and confirm the apply prompt. `-parallelism=1` serializes provis
 | Input | Default | Purpose |
 | --- | --- | --- |
 | `name` | `azurecosmosdbplayground` | Shared resource base name; an eight-character random suffix is appended |
-| `location` | `eastus2` | Azure region for the resources |
+| `location` | `japaneast` | Azure region for the resources |
 | `tags` | `scenario`, `owner`, `SecurityControl`, and `CostControl` tags | Resource tags following the other Azure scenarios |
 | `operator_principal_id` | Terraform caller's object ID | Entra principal granted data-plane access |
 | `vector_dimensions` | `256` | Flat vector index and embedding request size; scripts read the output (1–505) |

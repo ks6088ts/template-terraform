@@ -34,7 +34,7 @@ Terraform がリソースとオペレーターのロール割り当てを作成�
 ## 前提条件
 
 - Terraform **>= 1.11**、Azure CLI、`curl`、`jq`、POSIX シェル。リソースグループ、Cosmos DB、Foundry、モデルデプロイ、および Azure/Cosmos データプレーンのロール割り当てを作成できる ID でログインしてください。同じ ID でスクリプトを実行するか、適用前にスクリプト実行者の Entra オブジェクト ID を `operator_principal_id` に指定します。
-- Microsoft.DocumentDB と Microsoft.CognitiveServices が登録済みで、選択したリージョンで Cosmos DB サーバーレス・ベクトル/全文検索と **両方** のモデルの指定バージョン、SKU、容量のクォータを利用できるサブスクリプション。既定値は `eastus2`、`text-embedding-3-small` バージョン `1`（`GlobalStandard`、容量 `30`）、`gpt-5.4-mini` バージョン `2026-03-17`（`GlobalStandard`、容量 `100`）です。提供状況とクォータは変わるため、作成前に [Foundry のモデルとデプロイ方式](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) とサブスクリプションを確認してください。必要なら `-var` や `.tfvars` で `embedding_model` / `chat_model` のオブジェクト全体を上書きします。スクリプトを使う場合は `text-embedding-3-small` を維持し、`vector_dimensions` をフラットインデックスと埋め込みリクエストに対応した **1～505** の値に設定してください。
+- Microsoft.DocumentDB と Microsoft.CognitiveServices が登録済みで、選択したリージョンで Cosmos DB サーバーレス・ベクトル/全文検索と **両方** のモデルの指定バージョン、SKU、容量のクォータを利用できるサブスクリプション。既定値は `japaneast`、`text-embedding-3-small` バージョン `1`（`GlobalStandard`、容量 `30`）、`gpt-5.4-mini` バージョン `2026-03-17`（`GlobalStandard`、容量 `100`）です。提供状況とクォータは変わるため、作成前に [Foundry のモデルとデプロイ方式](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) とサブスクリプションを確認してください。必要なら `-var` や `.tfvars` で `embedding_model` / `chat_model` のオブジェクト全体を上書きします。スクリプトを使う場合は `text-embedding-3-small` を維持し、`vector_dimensions` をフラットインデックスと埋め込みリクエストに対応した **1～505** の値に設定してください。
 - 使い捨てのサブスクリプション/リソースグループを推奨します。[Cosmos DB の料金](https://azure.microsoft.com/pricing/details/cosmos-db/) と [Azure OpenAI の料金](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/) を事前に確認してください。サーバーレスの操作・ストレージと Foundry のモデルデプロイ・推論には短時間でも費用がかかり得ます。料金とクォータは環境に依存します。予算を設定し、利用状況を確認して早めに破棄してください。
 
 共通手順は [Azure プロバイダーの認証](../../../docs/tips/provider-authentication.ja.md)と[Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)を参照してください。
@@ -51,7 +51,7 @@ az account show --query '{name:name,id:id,tenantId:tenantId}' -o table
 terraform version
 az provider show --namespace Microsoft.DocumentDB --query registrationState -o tsv
 az provider show --namespace Microsoft.CognitiveServices --query registrationState -o tsv
-az cognitiveservices usage list --location eastus2 -o table
+az cognitiveservices usage list --location japaneast -o table
 ```
 
 未登録のプロバイダーは、権限のあるサブスクリプション管理者に登録してもらいます（`az provider register --namespace Microsoft.DocumentDB` と `az provider register --namespace Microsoft.CognitiveServices`）。`Registered` になるまで待ってください。選択リージョンの Foundry でモデル・バージョンの提供状況と**埋め込み・チャットそれぞれのクォータ**を確認します。CLI の使用量表示だけではモデルの提供状況を確認できません。実行者に Azure RBAC と Cosmos DB データプレーンのロールを割り当てる権限が必要です。スクリプトで使用する Azure CLI の ID は `operator_principal_id`（既定では Terraform 実行者のオブジェクト ID）と一致させ、割り当ての反映に数分待ってください。
@@ -72,7 +72,7 @@ terraform output -json
 | 変数 | 既定値 | 用途 |
 | --- | --- | --- |
 | `name` | `azurecosmosdbplayground` | 共通のリソースベース名。8 文字のランダム接尾辞を追加 |
-| `location` | `eastus2` | リソースを配置する Azure リージョン |
+| `location` | `japaneast` | リソースを配置する Azure リージョン |
 | `tags` | `scenario`、`owner`、`SecurityControl`、`CostControl` タグ | 他の Azure シナリオに合わせたリソースタグ |
 | `operator_principal_id` | Terraform 実行者のオブジェクト ID | データプレーンへのアクセスを付与する Entra プリンシパル |
 | `vector_dimensions` | `256` | フラットベクトルインデックスと埋め込みの次元。スクリプトは出力値（1～505）を使用 |

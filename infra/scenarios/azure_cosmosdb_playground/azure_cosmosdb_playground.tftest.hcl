@@ -58,7 +58,7 @@ run "default_playground" {
   assert {
     condition = alltrue([
       module.resource_group.name == "rg-azurecosmosdbplayground-test1234",
-      module.resource_group.location == "eastus2",
+      module.resource_group.location == "japaneast",
       module.cosmosdb.account_name == "cosmos-azurecosmosdbplayground-test1234",
       module.cosmosdb.sql_container_id == null,
       module.microsoft_foundry.account_name == "azurecosmosdbplayground-test1234",

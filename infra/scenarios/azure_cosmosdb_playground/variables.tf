@@ -12,7 +12,7 @@ variable "name" {
 variable "location" {
   description = "Azure region supporting serverless Cosmos DB and the selected Foundry models"
   type        = string
-  default     = "eastus2"
+  default     = "japaneast"
 }
 
 variable "tags" {
