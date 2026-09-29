@@ -1,10 +1,12 @@
 #!/bin/sh
 set -eu
 . "$(CDPATH= cd "$(dirname "$0")" && pwd)/_common.sh"
+parse_options "$@"
 require_tools
 load_outputs
 get_tokens
 id=cosmos-playground-ttl
+verbose "Creating a tagged document with a 30-second TTL."
 doc=$(jq -nc --arg id "$id" --arg tenant "$PLAYGROUND_TENANT" --arg tag "$PLAYGROUND_TAG" \
   '{id:$id,tenantId:$tenant,playgroundTag:$tag,content:"Expires via item-level TTL",ttl:30}')
 put_document "$doc"
@@ -13,6 +15,7 @@ expect_status 200
 printf '%s' "$HTTP_BODY" | jq -e '.ttl == 30' >/dev/null || die "TTL not stored"
 attempt=0
 while [ "$attempt" -lt "$POLL_ATTEMPTS" ]; do
+  verbose "TTL check $((attempt + 1)) of $POLL_ATTEMPTS."
   read_document "$id"
   if [ "$HTTP_STATUS" = 404 ]; then
     log "Item TTL expiry verified."

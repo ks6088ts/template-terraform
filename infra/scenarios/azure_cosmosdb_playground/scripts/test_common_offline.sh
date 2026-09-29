@@ -6,6 +6,15 @@ set -eu
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 equal() { [ "$1" = "$2" ] || fail "$3 (expected $1, got $2)"; }
 
+equal false "$VERBOSE" "verbose default"
+default_verbose_output=$(verbose "hidden")
+equal '' "$default_verbose_output" "default verbose output"
+verbose_output=$(parse_options --verbose; verbose "visible")
+equal '[verbose] visible' "$verbose_output" "explicit verbose output"
+if (parse_options --unknown) >/dev/null 2>&1; then
+  fail "unknown option accepted"
+fi
+
 az() { printf '%s\n' 'offline-token'; }
 curl() {
   if [ "${mock_fail:-false}" = true ]; then

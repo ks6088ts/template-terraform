@@ -99,6 +99,14 @@ sh scripts/08_cleanup.sh
 
 まとめて実行する場合は `sh scripts/run_all.sh` で手順 00–07 を順番に実行します。既定では確認用のタグ付きドキュメントが残ります。`CLEANUP_AFTER_RUN=true sh scripts/run_all.sh` では成功時**または失敗時**に手順 08 を試行します。後から `sh scripts/08_cleanup.sh` を実行することもできます。削除対象は既定の `PLAYGROUND_TENANT=cosmos-playground-demo`、`PLAYGROUND_TAG=cosmos-playground-v1`（変更した場合はラボ実行時の値）に一致するドキュメントだけです。Terraform 管理リソースは削除しません。全手順でこの 2 つの値を揃え、無関係なデータと同じ tenant/tag を使わないでください。
 
+番号付きスクリプトと `run_all.sh` は `--verbose` を受け付けます。明示した場合だけ、`[verbose]` で始まる処理段階、要求種別とパス、HTTP ステータス、ポーリング回数を追加表示します。`run_all.sh` はこのオプションを各手順と cleanup に引き継ぎます。既定の出力は変わりません。トークン、Authorization ヘッダー、要求/応答本文は verbose 出力にも含めません。
+
+```sh
+sh scripts/run_all.sh --verbose
+CLEANUP_AFTER_RUN=true sh scripts/run_all.sh --verbose
+sh scripts/03_test_change_feed.sh --verbose
+```
+
 | スクリプト | 実行内容と期待結果 |
 | --- | --- |
 | `00_validate_prerequisites.sh` | データベース/コンテナーへの接続（HTTP 200）と 2 種類の Entra トークン取得を確認します。トークンは表示しません。 |
@@ -137,5 +145,7 @@ unset TF_OUTPUT_JSON
 | モデルの応答が予想外、またはレート制限 | デプロイと残クォータを確認し、`VECTOR_DIMENSIONS` が Terraform の `vector_dimensions` 出力（既定 256）と一致するか確認します。RAG には chat completions 対応デプロイが必要です。 |
 | 独自に追加したリモートバックエンドで state blob がロックされ、`terraformlockid` が空 | 所有者が不明なまま force-unlock しません。同時実行がないと確認できた読み取り専用の検証に限り `terraform plan -lock=false` を使用できますが、`apply` / `destroy` ではロックを無効にしません。 |
 | ローカルステートを紛失 | 既存リソースへの安易な再適用を避け、ステートの復旧やリソースの突き合わせを行ってから破棄します。 |
+
+`--verbose` は手順 00 と 08 でライブ検証し、既定出力に詳細行が増えないこと、明示時だけ詳細行が出ること、不明なオプションを拒否することを確認しています。
 
 **検証状況（2026-09-30）:** Terraform 1.14.7、Azure CLI 2.85.0 と既存のデプロイ済み環境で、シェル構文・オフライン契約テスト・`terraform fmt -check`・`terraform validate`・プロバイダー登録/クォータ表示・手順 00–08 を確認しました。ライブテストには専用の tenant/tag を使い、最後に一致するサンプルドキュメントが 0 件になることを確認しています。リソースの `apply` / `destroy` は実行していません。読み取り専用 plan ではサービスが返す `/embedding/*` の除外パスにより 1 件の in-place 差分が表示されたため、適用していません。新規作成、破棄、料金計測は今回の検証範囲外です。応用する際は公式の [ARM コンテナーリソース（2026-03-15）](https://learn.microsoft.com/azure/templates/microsoft.documentdb/2026-03-15/databaseaccounts/sqldatabases/containers)、[Cosmos DB REST 認証](https://learn.microsoft.com/rest/api/cosmos-db/access-control-on-cosmosdb-resources)、[REST ドキュメントクエリ](https://learn.microsoft.com/rest/api/cosmos-db/query-documents)、[ベクトル検索](https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search)、[全文・ハイブリッド検索](https://learn.microsoft.com/azure/cosmos-db/gen-ai/full-text-search)、[変更フィード](https://learn.microsoft.com/azure/cosmos-db/nosql/change-feed)、[TTL](https://learn.microsoft.com/azure/cosmos-db/nosql/time-to-live)、[Cosmos DB データプレーン RBAC](https://learn.microsoft.com/azure/cosmos-db/nosql/security/how-to-grant-data-plane-role-based-access)、[Foundry 認証](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry)を参照してください。

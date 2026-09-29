@@ -1,9 +1,11 @@
 #!/bin/sh
 set -eu
 . "$(CDPATH= cd "$(dirname "$0")" && pwd)/_common.sh"
+parse_options "$@"
 require_tools
 load_outputs
 get_tokens
+verbose "Running the vector search lab."
 seed_documents
 embed "How does Cosmos DB store documents?"
 query=$(tagged_query \

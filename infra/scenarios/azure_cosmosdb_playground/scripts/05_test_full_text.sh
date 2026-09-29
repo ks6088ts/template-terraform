@@ -1,9 +1,11 @@
 #!/bin/sh
 set -eu
 . "$(CDPATH= cd "$(dirname "$0")" && pwd)/_common.sh"
+parse_options "$@"
 require_tools
 load_outputs
 get_tokens
+verbose "Running the full-text search lab."
 seed_documents
 query=$(tagged_query \
   'SELECT TOP 3 c.id, c.content FROM c WHERE c.tenantId = @tenant AND c.playgroundTag = @tag AND FullTextContains(c.content, @term) ORDER BY RANK FullTextScore(c.content, @term)' \

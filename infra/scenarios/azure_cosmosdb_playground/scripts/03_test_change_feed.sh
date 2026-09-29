@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 . "$(CDPATH= cd "$(dirname "$0")" && pwd)/_common.sh"
+parse_options "$@"
 require_tools
 load_outputs
 get_tokens
@@ -8,6 +9,7 @@ get_tokens
 feed_etag='*'
 
 read_feed() {
+  verbose "Reading the change feed."
   cosmos_request GET docs docs "$DOCS_PATH" \
     --header 'A-IM: Incremental feed' --header "If-None-Match: $feed_etag"
   expect_status 200 304
@@ -19,11 +21,13 @@ read_feed() {
     fi
   fi
   feed_etag=$HTTP_ETAG
+  verbose "Change feed continuation updated after HTTP $HTTP_STATUS."
 }
 
 drain_feed() {
   n=0
   while [ "$n" -lt "$POLL_ATTEMPTS" ]; do
+    verbose "Change feed drain attempt $((n + 1)) of $POLL_ATTEMPTS."
     read_feed
     [ "$HTTP_STATUS" = 304 ] && return 0
     n=$((n + 1))
@@ -40,6 +44,7 @@ wait_for_event() {
   target_content=$2
   n=0
   while [ "$n" -lt "$POLL_ATTEMPTS" ]; do
+    verbose "Waiting for change feed event $target_id, attempt $((n + 1)) of $POLL_ATTEMPTS."
     read_feed
     if [ "$HTTP_STATUS" = 200 ] && printf '%s' "$HTTP_BODY" | jq -e \
       --arg id "$target_id" --arg content "$target_content" --arg tag "$PLAYGROUND_TAG" \
@@ -56,6 +61,7 @@ assert_no_event() {
   excluded_id=$1
   n=0
   while [ "$n" -lt "$POLL_ATTEMPTS" ]; do
+    verbose "Checking for an unexpected event for $excluded_id, attempt $((n + 1)) of $POLL_ATTEMPTS."
     read_feed
     if [ "$HTTP_STATUS" = 200 ] && printf '%s' "$HTTP_BODY" | jq -e \
       --arg id "$excluded_id" 'any(.Documents[]?; .id == $id)' >/dev/null; then
@@ -68,6 +74,7 @@ assert_no_event() {
 }
 
 # Establish a continuation at the tip, rather than mistaking historical writes for new events.
+verbose "Establishing a change feed continuation at the current tip."
 drain_feed
 id="cosmos-playground-change-feed-$(jq -nr 'now * 1000000 | floor')"
 doc=$(jq -nc --arg id "$id" --arg tenant "$PLAYGROUND_TENANT" --arg tag "$PLAYGROUND_TAG" \
@@ -90,6 +97,7 @@ wait_for_event "$ttl_id" "Change feed TTL insert"
 drain_feed
 n=0
 while [ "$n" -lt "$POLL_ATTEMPTS" ]; do
+  verbose "TTL document check $((n + 1)) of $POLL_ATTEMPTS."
   read_document "$ttl_id"
   [ "$HTTP_STATUS" = 404 ] && break
   n=$((n + 1))

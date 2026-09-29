@@ -8,22 +8,43 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 : "${COSMOS_API_VERSION:=2018-12-31}"
 : "${POLL_ATTEMPTS:=12}"
 : "${POLL_INTERVAL:=5}"
+VERBOSE=false
 
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 log() { printf '%s\n' "$*"; }
+verbose() {
+  [ "$VERBOSE" = true ] || return 0
+  printf '[verbose] %s\n' "$*"
+}
+
+parse_options() {
+  VERBOSE=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --verbose) VERBOSE=true ;;
+      *) die "Unknown option: $1" ;;
+    esac
+    shift
+  done
+}
+
 uri() { jq -nr --arg s "$1" '$s | @uri'; }
 
 require_tools() {
+  verbose "Checking required commands."
   for tool in curl jq az; do
     command -v "$tool" >/dev/null 2>&1 || die "Missing required command: $tool"
   done
+  verbose "Required commands are available."
 }
 
 load_outputs() {
   if [ -n "${TF_OUTPUT_FILE:-}" ]; then
+    verbose "Loading Terraform outputs from TF_OUTPUT_FILE."
     [ -r "$TF_OUTPUT_FILE" ] || die "Cannot read TF_OUTPUT_FILE"
     outputs=$(jq -c . "$TF_OUTPUT_FILE")
   else
+    verbose "Loading Terraform outputs from TF_OUTPUT_JSON or explicit environment variables."
     outputs=${TF_OUTPUT_JSON:-'{}'}
   fi
   printf '%s' "$outputs" | jq -e 'type == "object"' >/dev/null || die "Invalid Terraform output JSON"
@@ -56,18 +77,23 @@ load_outputs() {
   COLL_PATH="$DB_PATH/colls/$(uri "$COSMOS_CONTAINER_NAME")"
   DOCS_PATH="$COLL_PATH/docs"
   PARTITION_KEY=$(jq -nc --arg key "$PLAYGROUND_TENANT" '[$key]')
+  verbose "Terraform outputs loaded and validated."
 }
 
 get_tokens() {
+  verbose "Acquiring a Cosmos DB Microsoft Entra token."
   COSMOS_TOKEN=$(az account get-access-token --resource https://cosmos.azure.com/ --query accessToken -o tsv) || die "Cannot acquire Cosmos AAD token"
   [ -n "$COSMOS_TOKEN" ] || die "Empty Cosmos AAD token"
   COSMOS_AUTH=$(uri "type=aad&ver=1.0&sig=$COSMOS_TOKEN")
+  verbose "Cosmos DB token acquired."
 }
 
 get_foundry_token() {
+  verbose "Acquiring a Foundry Microsoft Entra token."
   FOUNDRY_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com/ --query accessToken -o tsv) || die "Cannot acquire Foundry AAD token"
   [ -n "$FOUNDRY_TOKEN" ] || die "Empty Foundry AAD token"
   FOUNDRY_AUTH=$(printf '%s %s' Bearer "$FOUNDRY_TOKEN")
+  verbose "Foundry token acquired."
 }
 
 request() {
@@ -98,6 +124,7 @@ $cr
   HTTP_ETAG=$(header_value etag)
   HTTP_CONTINUATION=$(header_value x-ms-continuation)
   new_session_token=$(header_value x-ms-session-token)
+  verbose "HTTP response status: $HTTP_STATUS."
   if [ -n "$new_session_token" ]; then
     COSMOS_SESSION_TOKEN=$new_session_token
   fi
@@ -123,6 +150,7 @@ header_value() {
 cosmos_request() {
   method=$1 resource=$2 type=$3 path=$4
   shift 4
+  verbose "Cosmos DB request: $method /$path"
   if [ "$type" = docs ]; then
     set -- --header "x-ms-documentdb-partitionkey: $PARTITION_KEY" "$@"
   fi
@@ -141,6 +169,7 @@ cosmos_request() {
 foundry_request() {
   method=$1 path=$2
   shift 2
+  verbose "Foundry request: $method /$path"
   request --request "$method" \
     --header "Authorization: $FOUNDRY_AUTH" \
     --header "Content-Type: application/json" \
@@ -167,6 +196,7 @@ put_document() {
     '.playgroundTag == $tag and .tenantId == $tenant' >/dev/null || die "Refusing to write an untagged document"
   read_document "$id"
   if [ "$HTTP_STATUS" = 404 ]; then
+    verbose "Creating tagged document: $id"
     cosmos_request POST docs docs "$DOCS_PATH" \
       --header "Content-Type: application/json" --data "$doc"
     expect_status 201
@@ -174,6 +204,7 @@ put_document() {
     printf '%s' "$HTTP_BODY" | jq -e --arg tag "$PLAYGROUND_TAG" --arg tenant "$PLAYGROUND_TENANT" \
       '.playgroundTag == $tag and .tenantId == $tenant' >/dev/null || die "Refusing to replace a document not owned by this playground"
     etag=${HTTP_ETAG:-$(printf '%s' "$HTTP_BODY" | jq -er '._etag')}
+    verbose "Replacing tagged document: $id"
     cosmos_request PUT docs docs "$(document_path "$id")" \
       --header "Content-Type: application/json" --header "If-Match: $etag" --data "$doc"
     expect_status 200
@@ -183,16 +214,21 @@ put_document() {
 delete_document() {
   id=$1
   read_document "$id"
-  [ "$HTTP_STATUS" = 404 ] && return 0
+  if [ "$HTTP_STATUS" = 404 ]; then
+    verbose "Tagged document is already absent: $id"
+    return 0
+  fi
   printf '%s' "$HTTP_BODY" | jq -e --arg tag "$PLAYGROUND_TAG" --arg tenant "$PLAYGROUND_TENANT" \
     '.playgroundTag == $tag and .tenantId == $tenant' >/dev/null || die "Refusing to delete a document not owned by this playground"
   etag=${HTTP_ETAG:-$(printf '%s' "$HTTP_BODY" | jq -er '._etag')}
+  verbose "Deleting tagged document: $id"
   cosmos_request DELETE docs docs "$(document_path "$id")" --header "If-Match: $etag"
   expect_status 204 404
 }
 
 query_documents() {
   payload=$1
+  verbose "Executing a Cosmos DB document query."
   if [ -n "${2:-}" ]; then
     cosmos_request POST docs docs "$DOCS_PATH" \
       --header "Content-Type: application/query+json" \
@@ -213,8 +249,10 @@ query_documents() {
 wait_query_documents() {
   attempts=0
   while [ "$attempts" -lt "$POLL_ATTEMPTS" ]; do
+    verbose "Query attempt $((attempts + 1)) of $POLL_ATTEMPTS."
     query_documents "$1"
     if printf '%s' "$HTTP_BODY" | jq -e '.Documents | length > 0' >/dev/null; then
+      verbose "The query returned indexed documents."
       return 0
     fi
     attempts=$((attempts + 1))
@@ -232,6 +270,7 @@ tagged_query() {
 }
 
 embed() {
+  verbose "Requesting a $VECTOR_DIMENSIONS-dimensional embedding."
   get_foundry_token
   payload=$(jq -nc --arg text "$1" --arg model "$EMBEDDING_DEPLOYMENT_NAME" \
     --argjson dimensions "$VECTOR_DIMENSIONS" '{model:$model,input:$text,dimensions:$dimensions}')
@@ -239,10 +278,12 @@ embed() {
   expect_status 200
   EMBEDDING=$(printf '%s' "$HTTP_BODY" | jq -ec --argjson dimensions "$VECTOR_DIMENSIONS" \
     '.data[0].embedding | select(type == "array" and length == $dimensions)') || die "Unexpected embedding dimensions"
+  verbose "Embedding response dimensions validated."
 }
 
 seed_documents() {
   for index in 1 2 3; do
+    verbose "Preparing tagged knowledge document $index of 3."
     case "$index" in
       1) text="Azure Cosmos DB stores JSON documents with partition keys and low latency." ;;
       2) text="Vector search finds semantically related content using embeddings." ;;

@@ -1,9 +1,11 @@
 #!/bin/sh
 set -eu
 . "$(CDPATH= cd "$(dirname "$0")" && pwd)/_common.sh"
+parse_options "$@"
 require_tools
 load_outputs
 get_tokens
+verbose "Running the retrieval-augmented generation lab."
 seed_documents
 embed "What is the Cosmos DB change feed?"
 query=$(tagged_query \
@@ -14,6 +16,7 @@ wait_query_documents "$query"
 context=$(printf '%s' "$HTTP_BODY" | jq -r '[.Documents[]? | "\(.id): \(.content)"] | join("\n")')
 retrieved_ids=$(printf '%s' "$HTTP_BODY" | jq -c '[.Documents[]?.id]')
 [ -n "$context" ] || die "No retrieval context for RAG"
+verbose "Retrieved context; requesting a grounded chat response."
 get_foundry_token
 payload=$(jq -nc --arg context "$context" --arg model "$CHAT_DEPLOYMENT_NAME" \
   '{model:$model,messages:[{role:"system",content:"Answer only from the supplied context; cite document IDs. If unknown, say so."},{role:"user",content:("Context:\n"+$context+"\n\nQuestion: What is the Cosmos DB change feed?")}],max_completion_tokens:2000}')

@@ -99,6 +99,14 @@ The scripts do not invoke Terraform; generate or refresh `TF_OUTPUT_JSON` yourse
 
 Or run steps 00–07 in order with `sh scripts/run_all.sh`. By default, `run_all.sh` leaves tagged sample documents for inspection; `CLEANUP_AFTER_RUN=true sh scripts/run_all.sh` attempts step 08 after success **or failure**. You can also run `sh scripts/08_cleanup.sh` later; it removes only documents matching the default `PLAYGROUND_TENANT=cosmos-playground-demo` and `PLAYGROUND_TAG=cosmos-playground-v1` (or the values you used for the labs). It does not delete the Terraform resources. Keep those two values consistent across steps; never use a shared tenant/tag for unrelated data.
 
+The numbered scripts and `run_all.sh` accept `--verbose`. Only when explicitly supplied, it adds `[verbose]` progress lines for execution stages, request types and paths, HTTP statuses, and polling attempts. `run_all.sh` propagates the option to every step and cleanup. Default output is unchanged. Verbose output never includes tokens, Authorization headers, or request/response bodies.
+
+```sh
+sh scripts/run_all.sh --verbose
+CLEANUP_AFTER_RUN=true sh scripts/run_all.sh --verbose
+sh scripts/03_test_change_feed.sh --verbose
+```
+
 | Script | Exercise / expected result |
 | --- | --- |
 | `00_validate_prerequisites.sh` | Checks Cosmos database/container (HTTP 200) and acquires both Entra tokens without displaying them. |
@@ -137,5 +145,7 @@ Use the **same** `-var-file`/`-var` flags on the destroy commands if you supplie
 | Unexpected model response or rate limit | Verify deployments and remaining quota, and compare `VECTOR_DIMENSIONS` with the Terraform `vector_dimensions` output (default 256). RAG calls require a chat-completions-compatible deployment. |
 | A custom remote backend reports a locked state blob with an empty `terraformlockid` | Do not force-unlock until ownership is known. `terraform plan -lock=false` is acceptable only for read-only validation after confirming no concurrent writer; never disable locking for `apply` or `destroy`. |
 | Local state lost | Do not blindly reapply into existing resources; recover state or reconcile resources before destroy to avoid leaks. |
+
+`--verbose` was live-validated with steps 00 and 08, including unchanged default output, opt-in detail output, and rejection of unknown options.
 
 **Validation status (2026-09-30):** Using Terraform 1.14.7, Azure CLI 2.85.0, and an existing deployed environment, validation covered shell syntax, offline contract tests, `terraform fmt -check`, `terraform validate`, provider registration/quota display, and steps 00–08. The live run used a dedicated tenant/tag and finished with zero matching sample documents. No resource `apply` or `destroy` was run. A read-only plan showed one in-place difference for the service-reported `/embedding/*` excluded path, so it was not applied. New provisioning, destruction, and pricing measurement were outside this validation. Consult the official [ARM container resource (2026-03-15)](https://learn.microsoft.com/azure/templates/microsoft.documentdb/2026-03-15/databaseaccounts/sqldatabases/containers), [Cosmos DB REST authentication](https://learn.microsoft.com/rest/api/cosmos-db/access-control-on-cosmosdb-resources), [REST query documents](https://learn.microsoft.com/rest/api/cosmos-db/query-documents), [vector search](https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search), [full-text and hybrid search](https://learn.microsoft.com/azure/cosmos-db/gen-ai/full-text-search), [change feed](https://learn.microsoft.com/azure/cosmos-db/nosql/change-feed), [TTL](https://learn.microsoft.com/azure/cosmos-db/nosql/time-to-live), [Cosmos DB data-plane RBAC](https://learn.microsoft.com/azure/cosmos-db/nosql/security/how-to-grant-data-plane-role-based-access), and [Foundry authentication](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry) documentation when adapting this lab.

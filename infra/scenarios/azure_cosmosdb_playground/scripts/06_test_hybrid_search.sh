@@ -1,9 +1,11 @@
 #!/bin/sh
 set -eu
 . "$(CDPATH= cd "$(dirname "$0")" && pwd)/_common.sh"
+parse_options "$@"
 require_tools
 load_outputs
 get_tokens
+verbose "Running the hybrid search lab."
 seed_documents
 embed "Find documents about vector search"
 query=$(tagged_query \
