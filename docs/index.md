@@ -28,6 +28,13 @@ validation, and post-deployment operations.
 See the [repository README](../README.md) for all Azure, AWS, Google Cloud,
 GitHub, and provider-independent scenarios.
 
+## GitHub Copilot Agent Skills
+
+In VS Code agent mode, describe the task or invoke a skill directly:
+
+* [`/create-terraform-scenario`](../.github/skills/create-terraform-scenario/SKILL.md) creates a scenario and its documentation.
+* [`/update-terraform-readme`](../.github/skills/update-terraform-readme/SKILL.md) updates scenario listings, diagrams, and procedures.
+
 ## References
 
 * [Terraform documentation](https://developer.hashicorp.com/terraform/docs)

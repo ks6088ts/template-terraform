@@ -9,7 +9,7 @@ description: Terraform リポジトリの README と共通ドキュメントを�
 
 ## 更新先を選ぶ
 
-1. 対象の Terraform、既存の README、必要に応じてスクリプト・[共通ガイド](../../../docs/tips/index.md)を読む。説明は実装済みの内容に基づける。
+1. 対象の Terraform、既存の README、必要に応じてスクリプト・[共通ガイド](../../../docs/tips/index.md)を読む。作業中の差分を確認して依頼外の編集を保持し、説明は実装済みの内容に基づける。
 2. シナリオ一覧はルートの [README.md](../../../README.md) と [README.ja.md](../../../README.ja.md) の該当プロバイダー（Azure、AWS、Google Cloud、GitHub、その他）の表を更新する。既存行があれば修正し、重複させない。列は Scenario / Overview（日本語版はシナリオ / 概要）、リンク先は各言語のシナリオ README とする。
 3. 構成図、シナリオ固有の変数・出力・操作・検証は `infra/scenarios/<name>/README.md` と `README.ja.md` に書く。認証、標準的な Terraform ワークフロー、バックエンドなど複数シナリオに共通する説明は `docs/tips/` の英日ガイドにまとめ、必要ならその索引も更新する。
 4. 更新先が明示されていれば尊重する。指定された場所と既存の情報設計が衝突し、どちらに置くかで結果が変わる場合は確認する。
