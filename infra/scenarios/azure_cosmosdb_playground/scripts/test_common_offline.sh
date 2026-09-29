@@ -18,6 +18,11 @@ curl() {
     done
     [ "$found" = true ] || return 1
   fi
+  if [ -n "${mock_rejected_header:-}" ]; then
+    for argument do
+      [ "$argument" = "$mock_rejected_header" ] && return 1
+    done
+  fi
   printf '%s\r\n\r\n%s\n%s' "$mock_headers" "$mock_body" "$mock_status"
 }
 
@@ -55,9 +60,23 @@ equal '"cursor-1"' "$HTTP_ETAG" "ETag response header"
 equal '0:session' "$COSMOS_SESSION_TOKEN" "session response header"
 equal 'page-2' "$HTTP_CONTINUATION" "continuation response header"
 
+partition_header="x-ms-documentdb-partitionkey: $PARTITION_KEY"
+mock_rejected_header=$partition_header
+cosmos_request GET colls colls "$COLL_PATH"
+equal 200 "$HTTP_STATUS" "container request without partition key"
+mock_rejected_header=
+mock_expected_header=$partition_header
+cosmos_request GET docs docs "$DOCS_PATH"
+equal 200 "$HTTP_STATUS" "document request with partition key"
+
 mock_expected_header='x-ms-session-token: 0:session'
 cosmos_request GET docs docs "$DOCS_PATH"
 expect_status 200
+mock_expected_header='Content-Type: application/query+json'
+mock_rejected_header='Content-Type: application/json'
+query_documents '{"query":"SELECT * FROM c","parameters":[]}'
+equal 200 "$HTTP_STATUS" "query content type"
+mock_rejected_header=
 mock_expected_header='x-ms-continuation: page-2'
 query_documents '{"query":"SELECT * FROM c","parameters":[]}' "$HTTP_CONTINUATION"
 equal 200 "$HTTP_STATUS" "query continuation request"

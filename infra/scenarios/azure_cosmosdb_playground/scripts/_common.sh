@@ -103,8 +103,16 @@ $cr
   fi
   case "$HTTP_STATUS" in
     2??|304|404|409|412) ;;
-    *) die "HTTP $HTTP_STATUS: $(printf '%s' "$HTTP_BODY" | jq -r '.code // .error.code // "request failed"' 2>/dev/null || printf 'request failed')" ;;
+    *) die "HTTP $HTTP_STATUS: $(http_error_detail)" ;;
   esac
+}
+
+http_error_detail() {
+  printf '%s' "$HTTP_BODY" | jq -r '
+    [(.code // .error.code // empty), (.message // .error.message // empty)]
+    | map(select(type == "string" and length > 0) | split("\n")[0])
+    | if length > 0 then join(": ") else "request failed" end
+  ' 2>/dev/null || printf 'request failed'
 }
 
 header_value() {
@@ -115,28 +123,19 @@ header_value() {
 cosmos_request() {
   method=$1 resource=$2 type=$3 path=$4
   shift 4
-  if [ -n "${COSMOS_SESSION_TOKEN:-}" ]; then
-    request --request "$method" \
-      --header "authorization: $COSMOS_AUTH" \
-      --header "x-ms-date: $(jq -nr 'now | gmtime | strftime("%a, %d %b %Y %H:%M:%S GMT")')" \
-      --header "x-ms-version: $COSMOS_API_VERSION" \
-      --header "x-ms-documentdb-partitionkey: $PARTITION_KEY" \
-      --header "x-ms-session-token: $COSMOS_SESSION_TOKEN" \
-      --header "Accept: application/json" \
-      --header "Content-Type: application/json" \
-      --header "x-ms-max-item-count: 100" \
-      "$@" "$COSMOS_ENDPOINT/$path"
-  else
-    request --request "$method" \
-      --header "authorization: $COSMOS_AUTH" \
-      --header "x-ms-date: $(jq -nr 'now | gmtime | strftime("%a, %d %b %Y %H:%M:%S GMT")')" \
-      --header "x-ms-version: $COSMOS_API_VERSION" \
-      --header "x-ms-documentdb-partitionkey: $PARTITION_KEY" \
-      --header "Accept: application/json" \
-      --header "Content-Type: application/json" \
-      --header "x-ms-max-item-count: 100" \
-      "$@" "$COSMOS_ENDPOINT/$path"
+  if [ "$type" = docs ]; then
+    set -- --header "x-ms-documentdb-partitionkey: $PARTITION_KEY" "$@"
   fi
+  if [ -n "${COSMOS_SESSION_TOKEN:-}" ]; then
+    set -- --header "x-ms-session-token: $COSMOS_SESSION_TOKEN" "$@"
+  fi
+  request --request "$method" \
+    --header "authorization: $COSMOS_AUTH" \
+    --header "x-ms-date: $(jq -nr 'now | gmtime | strftime("%a, %d %b %Y %H:%M:%S GMT")')" \
+    --header "x-ms-version: $COSMOS_API_VERSION" \
+    --header "Accept: application/json" \
+    --header "x-ms-max-item-count: 100" \
+    "$@" "$COSMOS_ENDPOINT/$path"
 }
 
 foundry_request() {
@@ -151,7 +150,7 @@ foundry_request() {
 expect_status() {
   expected=" $* "
   case "$expected" in *" $HTTP_STATUS "*) return 0 ;; esac
-  die "Unexpected HTTP $HTTP_STATUS (expected $*): $(printf '%s' "$HTTP_BODY" | jq -r '.code // .error.code // "request failed"' 2>/dev/null || printf 'request failed')"
+  die "Unexpected HTTP $HTTP_STATUS (expected $*): $(http_error_detail)"
 }
 
 document_path() { printf '%s/%s' "$DOCS_PATH" "$(uri "$1")"; }
@@ -168,13 +167,15 @@ put_document() {
     '.playgroundTag == $tag and .tenantId == $tenant' >/dev/null || die "Refusing to write an untagged document"
   read_document "$id"
   if [ "$HTTP_STATUS" = 404 ]; then
-    cosmos_request POST docs docs "$DOCS_PATH" --data "$doc"
+    cosmos_request POST docs docs "$DOCS_PATH" \
+      --header "Content-Type: application/json" --data "$doc"
     expect_status 201
   else
     printf '%s' "$HTTP_BODY" | jq -e --arg tag "$PLAYGROUND_TAG" --arg tenant "$PLAYGROUND_TENANT" \
       '.playgroundTag == $tag and .tenantId == $tenant' >/dev/null || die "Refusing to replace a document not owned by this playground"
     etag=${HTTP_ETAG:-$(printf '%s' "$HTTP_BODY" | jq -er '._etag')}
-    cosmos_request PUT docs docs "$(document_path "$id")" --header "If-Match: $etag" --data "$doc"
+    cosmos_request PUT docs docs "$(document_path "$id")" \
+      --header "Content-Type: application/json" --header "If-Match: $etag" --data "$doc"
     expect_status 200
   fi
 }

@@ -11,14 +11,14 @@ read_feed() {
   cosmos_request GET docs docs "$DOCS_PATH" \
     --header 'A-IM: Incremental feed' --header "If-None-Match: $feed_etag"
   expect_status 200 304
+  [ -n "$HTTP_ETAG" ] || die "Change feed response has no ETag"
   if [ "$HTTP_STATUS" = 200 ]; then
-    [ -n "$HTTP_ETAG" ] || die "Change feed response has no ETag"
     if [ "$HTTP_ETAG" = "$feed_etag" ] && printf '%s' "$HTTP_BODY" | jq -e \
       '(.Documents // []) | length > 0' >/dev/null; then
       die "Change feed returned documents without advancing its ETag"
     fi
-    feed_etag=$HTTP_ETAG
   fi
+  feed_etag=$HTTP_ETAG
 }
 
 drain_feed() {
@@ -64,6 +64,7 @@ assert_no_event() {
     n=$((n + 1))
     [ "$n" -lt "$POLL_ATTEMPTS" ] && sleep "$POLL_INTERVAL"
   done
+  return 0
 }
 
 # Establish a continuation at the tip, rather than mistaking historical writes for new events.

@@ -104,7 +104,7 @@ sh scripts/08_cleanup.sh
 | `00_validate_prerequisites.sh` | データベース/コンテナーへの接続（HTTP 200）と 2 種類の Entra トークン取得を確認します。トークンは表示しません。 |
 | `01_test_crud.sh` | タグ付きドキュメントの作成（201、再実行時は 200）、取得・更新・検索（200）、削除（204）、削除後の 404 を確認します。 |
 | `02_test_ttl.sh` | 項目の TTL を 30 秒に設定し、取得が HTTP 404 になるまでポーリングします。 |
-| `03_test_change_feed.sh` | フィードを読み切り（200/304）、継続 ETag で挿入・更新（200）を確認します。最新バージョンのフィードでは削除と TTL 期限切れのイベントが出ないことを確認します（変更がなければ 304）。 |
+| `03_test_change_feed.sh` | フィードを読み切り（200/304）、初回 304 で返る ETag も継続位置として保持し、挿入・更新（200）を確認します。最新バージョンのフィードでは削除と TTL 期限切れのイベントが出ないことを確認します（変更がなければ 304）。 |
 | `04_test_vector_search.sh` | サンプルを埋め込み（Foundry 200）、cosine ベクトル近傍検索を実行します（Cosmos 200）。 |
 | `05_test_full_text.sh` | `FullTextContains` / `FullTextScore` で全文検索します（Cosmos 200、埋め込み登録は Foundry 200）。 |
 | `06_test_hybrid_search.sh` | `RRF` でベクトル距離と全文ランキングを統合します（Cosmos 200、埋め込みは Foundry 200）。 |
@@ -130,9 +130,12 @@ unset TF_OUTPUT_JSON
 | --- | --- |
 | モデル/バージョン、SKU、クォータ、リージョンが使用不可で apply に失敗 | Foundry でリージョンの対応とクォータを確認し、モデルオブジェクト全体を適切な値に変更して `plan` を再実行します。既定値がどのサブスクリプションでも使えるとは限りません。 |
 | スクリプトで `403` またはトークンエラー | `az account show` / `az login` で実行者を確認します。データベーススコープの Cosmos DB Built-in Data Contributor と Foundry の Cognitive Services OpenAI User を確認し、ロール反映を待ちます。Cosmos と Foundry ではトークンの audience が異なります。 |
+| データベース/コンテナー確認で `400` と `x-ms-documentdb-partitionkey header cannot be specified` | 同梱の最新スクリプトを使用します。独自の REST ラッパーでは、パーティションキーヘッダーをドキュメント・変更フィード要求だけに付け、データベース/コンテナー要求には付けません。 |
+| クエリで `400`、`SC1001`、または `incorrect syntax near '{'` | クエリ要求が単一の `Content-Type: application/query+json` を送ることを確認します。通常のドキュメント書き込みは `application/json` です。共通 HTTP ラッパーやプロキシによる Content-Type の重複を避けます。 |
 | `404` または Terraform 出力がない | このディレクトリで `apply` が完了したか確認し、`terraform output -json` と `TF_OUTPUT_JSON` を更新して再実行します。 |
-| TTL、変更フィード、ベクトル・全文検索でドキュメントが見つからない | インデックス/TTL の反映を待ち、`POLL_ATTEMPTS` / `POLL_INTERVAL` を増やします。リージョンの機能と tenant/tag も確認します。 |
+| TTL、変更フィード、ベクトル・全文検索でドキュメントが見つからない | インデックス/TTL の反映を待ち、`POLL_ATTEMPTS` / `POLL_INTERVAL` を増やします。リージョンの機能と tenant/tag も確認します。独自の変更フィード実装では、初回 304 応答の ETag も次の `If-None-Match` に使用します。 |
 | モデルの応答が予想外、またはレート制限 | デプロイと残クォータを確認し、`VECTOR_DIMENSIONS` が Terraform の `vector_dimensions` 出力（既定 256）と一致するか確認します。RAG には chat completions 対応デプロイが必要です。 |
+| 独自に追加したリモートバックエンドで state blob がロックされ、`terraformlockid` が空 | 所有者が不明なまま force-unlock しません。同時実行がないと確認できた読み取り専用の検証に限り `terraform plan -lock=false` を使用できますが、`apply` / `destroy` ではロックを無効にしません。 |
 | ローカルステートを紛失 | 既存リソースへの安易な再適用を避け、ステートの復旧やリソースの突き合わせを行ってから破棄します。 |
 
-**検証状況:** Terraform 構成とスクリプトのインターフェースをソースから記載しています。Azure 上での実際の作成・データプレーンの実行・料金計測・エンドツーエンド検証は実施済みとは主張しません。応用する際は公式の [ARM コンテナーリソース（2026-03-15）](https://learn.microsoft.com/azure/templates/microsoft.documentdb/2026-03-15/databaseaccounts/sqldatabases/containers)、[Cosmos DB REST 認証](https://learn.microsoft.com/rest/api/cosmos-db/access-control-on-cosmosdb-resources)、[REST ドキュメントクエリ](https://learn.microsoft.com/rest/api/cosmos-db/query-documents)、[ベクトル検索](https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search)、[全文・ハイブリッド検索](https://learn.microsoft.com/azure/cosmos-db/gen-ai/full-text-search)、[変更フィード](https://learn.microsoft.com/azure/cosmos-db/nosql/change-feed)、[TTL](https://learn.microsoft.com/azure/cosmos-db/nosql/time-to-live)、[Cosmos DB データプレーン RBAC](https://learn.microsoft.com/azure/cosmos-db/nosql/security/how-to-grant-data-plane-role-based-access)、[Foundry 認証](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry)を参照してください。
+**検証状況（2026-09-30）:** Terraform 1.14.7、Azure CLI 2.85.0 と既存のデプロイ済み環境で、シェル構文・オフライン契約テスト・`terraform fmt -check`・`terraform validate`・プロバイダー登録/クォータ表示・手順 00–08 を確認しました。ライブテストには専用の tenant/tag を使い、最後に一致するサンプルドキュメントが 0 件になることを確認しています。リソースの `apply` / `destroy` は実行していません。読み取り専用 plan ではサービスが返す `/embedding/*` の除外パスにより 1 件の in-place 差分が表示されたため、適用していません。新規作成、破棄、料金計測は今回の検証範囲外です。応用する際は公式の [ARM コンテナーリソース（2026-03-15）](https://learn.microsoft.com/azure/templates/microsoft.documentdb/2026-03-15/databaseaccounts/sqldatabases/containers)、[Cosmos DB REST 認証](https://learn.microsoft.com/rest/api/cosmos-db/access-control-on-cosmosdb-resources)、[REST ドキュメントクエリ](https://learn.microsoft.com/rest/api/cosmos-db/query-documents)、[ベクトル検索](https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search)、[全文・ハイブリッド検索](https://learn.microsoft.com/azure/cosmos-db/gen-ai/full-text-search)、[変更フィード](https://learn.microsoft.com/azure/cosmos-db/nosql/change-feed)、[TTL](https://learn.microsoft.com/azure/cosmos-db/nosql/time-to-live)、[Cosmos DB データプレーン RBAC](https://learn.microsoft.com/azure/cosmos-db/nosql/security/how-to-grant-data-plane-role-based-access)、[Foundry 認証](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry)を参照してください。
