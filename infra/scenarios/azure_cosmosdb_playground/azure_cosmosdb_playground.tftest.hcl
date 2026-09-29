@@ -9,20 +9,20 @@ mock_provider "azurerm" {
 
   mock_resource "azurerm_resource_group" {
     defaults = {
-      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/playground"
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurecosmosdbplayground-test1234"
     }
   }
 
   mock_resource "azurerm_cosmosdb_account" {
     defaults = {
-      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/playground/providers/Microsoft.DocumentDB/databaseAccounts/cosmosplaytest1234"
-      endpoint = "https://cosmosplaytest1234.documents.azure.com:443/"
+      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurecosmosdbplayground-test1234/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-azurecosmosdbplayground-test1234"
+      endpoint = "https://cosmos-azurecosmosdbplayground-test1234.documents.azure.com:443/"
     }
   }
 
   mock_resource "azurerm_cosmosdb_sql_database" {
     defaults = {
-      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/playground/providers/Microsoft.DocumentDB/databaseAccounts/cosmosplaytest1234/sqlDatabases/playground"
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurecosmosdbplayground-test1234/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-azurecosmosdbplayground-test1234/sqlDatabases/playground"
     }
   }
 }
@@ -32,7 +32,7 @@ mock_provider "azapi" {
 
   mock_resource "azapi_resource" {
     defaults = {
-      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/playground/providers/Microsoft.CognitiveServices/accounts/foundryplaytest1234"
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurecosmosdbplayground-test1234/providers/Microsoft.CognitiveServices/accounts/azurecosmosdbplayground-test1234"
       output = {
         identity = {
           principalId = "00000000-0000-0000-0000-000000000006"
@@ -57,13 +57,26 @@ run "default_playground" {
 
   assert {
     condition = alltrue([
+      module.resource_group.name == "rg-azurecosmosdbplayground-test1234",
       module.resource_group.location == "eastus2",
-      module.cosmosdb.account_name == "cosmosplaytest1234",
+      module.cosmosdb.account_name == "cosmos-azurecosmosdbplayground-test1234",
       module.cosmosdb.sql_container_id == null,
+      module.microsoft_foundry.account_name == "azurecosmosdbplayground-test1234",
       length(module.microsoft_foundry.deployment_ids) == 2,
       output.cosmos_database_name == module.cosmosdb.sql_database_name,
     ])
     error_message = "Default resources must be public, keyless, single-region serverless NoSQL and two keyless Foundry deployments."
+  }
+
+  assert {
+    condition = alltrue([
+      length(var.tags) == 4,
+      var.tags["scenario"] == "azure_cosmosdb_playground",
+      var.tags["owner"] == "ks6088ts",
+      var.tags["SecurityControl"] == "Ignore",
+      var.tags["CostControl"] == "Ignore",
+    ])
+    error_message = "Default resources must use the standard scenario, owner, security, and cost-control tags."
   }
 
   assert {
@@ -98,18 +111,22 @@ run "custom_operator_and_dimensions" {
   command = plan
 
   variables {
+    name                  = "customplayground"
     operator_principal_id = "00000000-0000-0000-0000-000000000007"
     vector_dimensions     = 128
   }
 
   assert {
     condition = alltrue([
+      module.resource_group.name == "rg-customplayground-test1234",
+      module.cosmosdb.account_name == "cosmos-customplayground-test1234",
+      module.microsoft_foundry.account_name == "customplayground-test1234",
       azurerm_cosmosdb_sql_role_assignment.operator.principal_id == var.operator_principal_id,
       azurerm_role_assignment.operator_foundry.principal_id == var.operator_principal_id,
       azapi_resource.documents.body.properties.resource.vectorEmbeddingPolicy.vectorEmbeddings[0].dimensions == 128,
       output.vector_dimensions == 128,
     ])
-    error_message = "Custom operator and vector dimensions must propagate to resources and outputs."
+    error_message = "Custom name, operator, and vector dimensions must propagate to resources and outputs."
   }
 }
 

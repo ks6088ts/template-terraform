@@ -29,6 +29,8 @@ flowchart LR
 
 Terraform creates the resources and operator role assignments; shell scripts write and remove only tagged sample documents. The default Cosmos database and container names are `playground` and `documents`. The partition key is `/tenantId`; the container enables TTL, a cosine flat vector index on `/embedding` (256 dimensions by default), and an English full-text index on `/content`. The operator receives Cosmos DB Built-in Data Contributor at database scope and Cognitive Services OpenAI User on Foundry. No Foundry agent, application hosting, private endpoint, or remote backend is created.
 
+Resource names share `<name>-<random-suffix>` as their collision-resistant base. With the defaults, the resource group is `rg-azurecosmosdbplayground-<suffix>`, the Cosmos DB account is `cosmos-azurecosmosdbplayground-<suffix>`, and the Foundry account is `azurecosmosdbplayground-<suffix>`.
+
 ## Before you begin
 
 - Terraform **>= 1.11**, Azure CLI, `curl`, `jq`, and a POSIX shell. Sign in with an identity allowed to create resource groups, Cosmos DB and Foundry accounts, model deployments, and Azure/Cosmos data-plane role assignments. The same identity must run the scripts, or set `operator_principal_id` to the script operator's Entra object ID before applying.
@@ -69,7 +71,9 @@ Review the plan and confirm the apply prompt. `-parallelism=1` serializes provis
 
 | Input | Default | Purpose |
 | --- | --- | --- |
-| `name`, `location`, `tags` | `cosmos-playground`, `eastus2`, scenario tag | Resource-group prefix, region, and resource tags |
+| `name` | `azurecosmosdbplayground` | Shared resource base name; an eight-character random suffix is appended |
+| `location` | `eastus2` | Azure region for the resources |
+| `tags` | `scenario`, `owner`, `SecurityControl`, and `CostControl` tags | Resource tags following the other Azure scenarios |
 | `operator_principal_id` | Terraform caller's object ID | Entra principal granted data-plane access |
 | `vector_dimensions` | `256` | Flat vector index and embedding request size; scripts read the output (1–505) |
 | `embedding_model`, `chat_model` | Models/versions/SKUs/capacities above | Foundry deployment configuration; confirm regional availability and quota |

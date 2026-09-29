@@ -9,7 +9,8 @@ module "random_string" {
 }
 
 locals {
-  suffix                = module.random_string.result
+  resource_suffix       = module.random_string.result
+  resource_name         = "${trim(substr(var.name, 0, 27), "-")}-${local.resource_suffix}"
   operator_principal_id = coalesce(var.operator_principal_id, data.azurerm_client_config.current.object_id)
   database_name         = "playground"
   container_name        = "documents"
@@ -19,15 +20,14 @@ data "azurerm_client_config" "current" {}
 
 module "resource_group" {
   source   = "../../modules/azure/resource_group"
-  name     = "${var.name}-${local.suffix}"
+  name     = local.resource_name
   location = var.location
   tags     = var.tags
 }
 
 module "cosmosdb" {
   source                       = "../../modules/azure/cosmosdb"
-  name                         = local.suffix
-  account_name                 = "cosmosplay${local.suffix}"
+  name                         = local.resource_name
   resource_group_name          = module.resource_group.name
   location                     = module.resource_group.location
   tags                         = var.tags
@@ -40,7 +40,7 @@ module "cosmosdb" {
 
 module "microsoft_foundry" {
   source             = "../../modules/azure/microsoft_foundry"
-  name               = "foundryplay${local.suffix}"
+  name               = local.resource_name
   resource_group_id  = module.resource_group.id
   location           = module.resource_group.location
   tags               = var.tags

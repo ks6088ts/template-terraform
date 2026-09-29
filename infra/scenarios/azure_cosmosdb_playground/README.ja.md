@@ -29,6 +29,8 @@ flowchart LR
 
 Terraform がリソースとオペレーターのロール割り当てを作成し、シェルスクリプトはタグ付きサンプルドキュメントだけを書き込み・削除します。データベースは `playground`、コンテナーは `documents`。パーティションキーは `/tenantId` で、TTL、`/embedding` の cosine フラットベクトルインデックス（既定で 256 次元）、`/content` の英語全文インデックスを有効にします。オペレーターにはデータベーススコープで Cosmos DB Built-in Data Contributor、Foundry で Cognitive Services OpenAI User を割り当てます。Foundry エージェント、アプリケーションホスト、プライベートエンドポイント、リモートバックエンドは作成しません。
 
+リソース名は、競合を避ける共通のベース名 `<name>-<random-suffix>` から生成します。既定では、リソースグループは `rg-azurecosmosdbplayground-<suffix>`、Cosmos DB アカウントは `cosmos-azurecosmosdbplayground-<suffix>`、Foundry アカウントは `azurecosmosdbplayground-<suffix>` です。
+
 ## 前提条件
 
 - Terraform **>= 1.11**、Azure CLI、`curl`、`jq`、POSIX シェル。リソースグループ、Cosmos DB、Foundry、モデルデプロイ、および Azure/Cosmos データプレーンのロール割り当てを作成できる ID でログインしてください。同じ ID でスクリプトを実行するか、適用前にスクリプト実行者の Entra オブジェクト ID を `operator_principal_id` に指定します。
@@ -69,7 +71,9 @@ terraform output -json
 
 | 変数 | 既定値 | 用途 |
 | --- | --- | --- |
-| `name`, `location`, `tags` | `cosmos-playground`, `eastus2`, シナリオタグ | リソースグループ名の接頭辞、リージョン、タグ |
+| `name` | `azurecosmosdbplayground` | 共通のリソースベース名。8 文字のランダム接尾辞を追加 |
+| `location` | `eastus2` | リソースを配置する Azure リージョン |
+| `tags` | `scenario`、`owner`、`SecurityControl`、`CostControl` タグ | 他の Azure シナリオに合わせたリソースタグ |
 | `operator_principal_id` | Terraform 実行者のオブジェクト ID | データプレーンへのアクセスを付与する Entra プリンシパル |
 | `vector_dimensions` | `256` | フラットベクトルインデックスと埋め込みの次元。スクリプトは出力値（1～505）を使用 |
 | `embedding_model`, `chat_model` | 上記のモデル/バージョン/SKU/容量 | Foundry デプロイの設定。リージョンとクォータを確認 |

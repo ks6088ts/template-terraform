@@ -1,7 +1,7 @@
 variable "name" {
-  description = "Prefix for the resource group name"
+  description = "Specifies the base name for resources"
   type        = string
-  default     = "cosmos-playground"
+  default     = "azurecosmosdbplayground"
 
   validation {
     condition     = can(regex("^[a-z0-9][a-z0-9-]{0,25}[a-z0-9]$", var.name))
@@ -16,9 +16,14 @@ variable "location" {
 }
 
 variable "tags" {
-  description = "Resource tags"
+  description = "Tags to apply to resources"
   type        = map(string)
-  default     = { scenario = "azure_cosmosdb_playground" }
+  default = {
+    scenario        = "azure_cosmosdb_playground"
+    owner           = "ks6088ts"
+    SecurityControl = "Ignore"
+    CostControl     = "Ignore"
+  }
 }
 
 variable "operator_principal_id" {
