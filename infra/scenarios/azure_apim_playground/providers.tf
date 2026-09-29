@@ -14,9 +14,11 @@ provider "azurerm" {
     "Microsoft.ApiManagement",
     "Microsoft.App",
     "Microsoft.CognitiveServices",
+    "Microsoft.CostManagement",
     "Microsoft.Insights",
     "Microsoft.OperationalInsights",
     "Microsoft.Resources",
+    "Microsoft.Storage",
   ]
 }
 

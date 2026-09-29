@@ -1,0 +1,31 @@
+<fragment>
+  <set-variable name="callerId" value="@{
+      var authorization = context.Request.Headers.GetValueOrDefault(&quot;Authorization&quot;, &quot;&quot;);
+      var jwtValidated = context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;callerJwtValidated&quot;, false);
+      if (jwtValidated &amp;&amp; !string.IsNullOrEmpty(authorization) &amp;&amp; authorization.StartsWith(&quot;Bearer &quot;, StringComparison.OrdinalIgnoreCase))
+      {
+          try
+          {
+              var token = authorization.Substring(7);
+              var parts = token.Split('.');
+              if (parts.Length &gt;= 2)
+              {
+                  var base64 = parts[1].Replace('-', '+').Replace('_', '/');
+                  var padded = base64.PadRight(base64.Length + (4 - base64.Length % 4) % 4, '=');
+                  var payload = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+                  var json = Newtonsoft.Json.Linq.JObject.Parse(payload);
+                  var appId = json[&quot;appid&quot;]?.ToString() ?? json[&quot;azp&quot;]?.ToString();
+                  if (!string.IsNullOrEmpty(appId))
+                  {
+                      return appId;
+                  }
+              }
+          }
+          catch
+          {
+          }
+      }
+
+      return context.Subscription?.Id ?? &quot;unknown&quot;;
+  }" />
+</fragment>

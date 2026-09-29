@@ -1,7 +1,8 @@
 locals {
-  observability_enabled = var.observability != null
-  llm_logging_enabled   = try(var.observability.llm_logging, null) != null
-  token_metrics_enabled = var.llm_token_metrics != null
+  observability_enabled  = var.observability != null
+  llm_logging_enabled    = try(var.observability.llm_logging, null) != null
+  token_metrics_enabled  = var.llm_token_metrics != null
+  custom_metrics_enabled = local.token_metrics_enabled || local.cost_showback_enabled
 
   llm_token_metric_policy = var.llm_token_metrics == null ? "" : format(
     "<llm-emit-token-metric namespace=\"%s\">%s</llm-emit-token-metric>",
@@ -38,7 +39,7 @@ module "application_insights" {
 }
 
 resource "azapi_update_resource" "application_insights_custom_metrics" {
-  count = local.token_metrics_enabled && local.observability_enabled ? 1 : 0
+  count = local.custom_metrics_enabled && local.observability_enabled ? 1 : 0
 
   type        = "Microsoft.Insights/components@2020-02-02"
   resource_id = module.application_insights[0].id
@@ -90,7 +91,7 @@ resource "azapi_resource" "application_insights_diagnostic" {
       httpCorrelationProtocol = "W3C"
       logClientIp             = var.observability.log_client_ip
       loggerId                = azurerm_api_management_logger.application_insights[0].id
-      metrics                 = local.token_metrics_enabled
+      metrics                 = local.custom_metrics_enabled
       sampling = {
         percentage   = var.observability.sampling_percentage
         samplingType = "fixed"

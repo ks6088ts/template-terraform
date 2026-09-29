@@ -66,7 +66,11 @@ resource "azurerm_api_management_api_policy" "core" {
     rate_limit_calls          = var.core_rate_limit.calls
     rate_limit_renewal_period = var.core_rate_limit.renewal_period_seconds
     response_fragment_id      = azurerm_api_management_policy_fragment.response_headers.name
+    caller_attribution_policy = local.caller_attribution_policy
+    caller_metric_policy      = local.caller_metric_policy
   })
+
+  depends_on = [azurerm_api_management_policy_fragment.caller_attribution]
 }
 
 resource "azurerm_api_management_api_operation_policy" "hello" {

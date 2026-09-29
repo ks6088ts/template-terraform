@@ -77,10 +77,10 @@ else
   skip_step "Azure Monitor LLM logs (llm_logging is disabled)"
 fi
 
-if [ "$LLM_TOKEN_METRICS_ENABLED" = "true" ]; then
-  run_step "Application Insights token metrics" "08_test_custom_metrics.sh"
+if [ "$LLM_TOKEN_METRICS_ENABLED" = "true" ] || [ "$COST_SHOWBACK_ENABLED" = "true" ]; then
+  run_step "Application Insights caller and token metrics" "08_test_custom_metrics.sh"
 else
-  skip_step "Application Insights token metrics (llm_token_metrics is disabled)"
+  skip_step "Application Insights custom metrics (llm_token_metrics and cost_showback are disabled)"
 fi
 
 if [ "$CLEANUP_AFTER_RUN" = "true" ]; then

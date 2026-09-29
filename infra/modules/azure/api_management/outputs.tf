@@ -35,5 +35,15 @@ output "public_ip_addresses" {
 
 output "identity_principal_id" {
   description = "Principal ID of the system-assigned managed identity, or null when disabled"
-  value       = var.enable_system_assigned_identity ? data.azurerm_api_management.this[0].identity[0].principal_id : null
+  value       = var.enable_system_assigned_identity ? azurerm_api_management.this.identity[0].principal_id : null
+}
+
+output "identity_type" {
+  description = "Managed identity type configured on the API Management instance, or null when no identity is configured"
+  value       = local.identity_type
+}
+
+output "user_assigned_identity_ids" {
+  description = "Resource IDs of user-assigned managed identities attached to the API Management instance"
+  value       = var.user_assigned_identity_ids
 }

@@ -224,3 +224,39 @@ output "llm_token_metrics_enabled" {
   description = "Whether preview LLM token metrics are emitted to Application Insights"
   value       = local.token_metrics_enabled
 }
+
+output "cost_showback_enabled" {
+  description = "Whether caller attribution and APIM cost showback are enabled"
+  value       = local.cost_showback_enabled
+}
+
+output "cost_workbook_id" {
+  description = "Resource ID of the APIM cost showback workbook, or null when disabled"
+  value       = local.cost_showback_enabled && var.cost_showback.workbook_enabled ? azapi_resource.cost_workbook[0].id : null
+}
+
+output "business_unit_subscription_ids" {
+  description = "APIM subscription IDs created for cost attribution"
+  value       = { for key, subscription in azurerm_api_management_subscription.business_unit : key => subscription.id }
+}
+
+output "business_unit_subscription_primary_keys" {
+  description = "Primary APIM subscription keys created for cost attribution"
+  value       = { for key, password in random_password.business_unit_primary_key : key => password.result }
+  sensitive   = true
+}
+
+output "cost_export_storage_account_id" {
+  description = "Storage account resource ID used by Cost Management export, or null when disabled"
+  value       = try(azurerm_storage_account.cost_export[0].id, null)
+}
+
+output "cost_export_id" {
+  description = "Cost Management export resource ID, or null when disabled"
+  value       = try(azapi_resource.cost_export[0].id, null)
+}
+
+output "request_threshold_alert_ids" {
+  description = "Scheduled query alert resource IDs keyed by business-unit subscription ID"
+  value       = { for key, alert in azurerm_monitor_scheduled_query_rules_alert_v2.request_threshold : key => alert.id }
+}

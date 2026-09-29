@@ -25,6 +25,8 @@ flowchart LR
         APIM -. managed identity .-> Safety["Azure AI Content Safety"]
         APIM -. telemetry .-> AppInsights["Application Insights"]
         APIM -. gateway and LLM logs .-> LogAnalytics["Log Analytics"]
+        LogAnalytics -. queries .-> Workbook["Cost showback workbook"]
+        APIM -. optional cost export .-> Storage["Cost export storage"]
 ```
 
 ## Runnable Features
@@ -39,12 +41,13 @@ The opt-in layers add:
 | Layer | Terraform resources and behavior | Data-plane check |
 | --- | --- | --- |
 | Backend resilience | Two Container Apps, weighted pool, optional cookie affinity, deterministic 503 backend, circuit breaker, and priority failover | Both weighted backends are observed; failover reaches the secondary |
-| AI gateway | Provisioned Foundry account/model or an existing OpenAI v1 endpoint, APIM managed identity, RBAC, and keyless backend authentication | A chat completion returns through APIM |
+| AI gateway | Provisioned Foundry account/model or an existing OpenAI v1 endpoint, APIM managed identity, RBAC, and keyless backend authentication | Chat Completions and Responses APIs work in sync and streaming modes |
 | Token governance | `llm-token-limit` rate/quota policy | Repeated requests reach HTTP 429 |
 | Content Safety | Provisioned or existing Content Safety account, RBAC, managed-identity backend, and `llm-content-safety` | A script-created blocklist term returns HTTP 403 |
 | Standard telemetry | Log Analytics, workspace-based Application Insights, managed-identity logger, APIM diagnostics, zero-byte HTTP body capture | Terraform tests verify the control plane |
 | LLM logs | Azure Monitor AI gateway usage logs; prompt/completion content is disabled by default | KQL finds `ApiManagementGatewayLlmLog` records |
 | Token metrics | Preview `llm-emit-token-metric`, diagnostic metrics, and custom metrics with dimensions | KQL finds recent `AppMetrics` records |
+| Cost showback | Caller attribution, business-unit subscriptions, Azure Monitor Workbook, optional Cost Management export, and optional request-threshold alerts | KQL correlates LLM and gateway records; caller metrics appear in `AppMetrics` |
 
 ## Prerequisites
 
@@ -53,6 +56,8 @@ The opt-in layers add:
 - Azure CLI `log-analytics` extension for telemetry queries (`az extension add --name log-analytics --yes`)
 - `curl` and `jq` for data-plane checks
 - Permissions to create the selected Azure resources and role assignments
+- `Cost Management Contributor` at subscription scope when enabling Cost Management export
+- An alert recipient address and permission to create action groups/rules when enabling request alerts
 - Model availability and quota in the selected region when provisioning Foundry
 
 Use the shared guidance for [provider authentication](../../../docs/tips/provider-authentication.md),
@@ -71,6 +76,7 @@ optional labs.
 | Optional: Load balancing | `profiles/consumption_load_balancing.tfvars` | 3:1 weighted backend pool | 30-45 minutes plus provisioning |
 | Optional: Resilience | `profiles/full_developer.tfvars` | Affinity, circuit breaker, priority failover, and standard monitoring | 45-60 minutes plus provisioning |
 | Optional: AI gateway | `profiles/new_foundry.tfvars` or a local copy | AI, token limits, Content Safety, LLM logs, and token metrics | 60-90 minutes plus provisioning |
+| Optional: Cost showback | `profiles/cost_showback.tfvars` | Caller attribution, business-unit subscriptions, and Workbook | 45-60 minutes plus provisioning |
 
 > [!IMPORTANT]
 > Changing `location` or `sku_name` is not supported for an existing deployment, regardless of the
@@ -127,6 +133,7 @@ before creating the target configuration.
 | --- | --- | --- |
 | `profiles/consumption_load_balancing.tfvars` | Core plus a 3:1 weighted pool on `Consumption_0` | No circuit breaker |
 | `profiles/full_developer.tfvars` | Weighted pool, affinity, circuit breaker, and standard observability | Creates billable Developer APIM and monitoring resources |
+| `profiles/cost_showback.tfvars` | Caller attribution, four sample business units, and the cost Workbook | Cost export and email alerts remain disabled until explicitly configured |
 | `profiles/new_foundry.tfvars` | Full resilience and AI path with provisioned Foundry and Content Safety | Verify model lifecycle, quota, and capacity before apply |
 | `profiles/existing_ai.tfvars` | Full AI path using existing AI and Content Safety resources | Replace every `replace-me` value first |
 
@@ -573,11 +580,11 @@ backend pool, so weighted routing and circuit breaker checks appear as `Skip`.
 
 | Check | Script | Success | Main consideration |
 | --- | --- | --- | --- |
-| AI gateway | `04_test_ai_gateway.sh` | HTTP 200 with a completion | Client uses an APIM key; backend uses managed identity |
+| AI gateway | `04_test_ai_gateway.sh` | HTTP 200 for Chat/Responses in sync/streaming modes | Client uses an APIM key; backend uses managed identity; streaming Chat usage is injected when absent |
 | Token limit | `05_test_token_limit.sh` | HTTP 429 for the rate limit | Quota violations return HTTP 403; counts depend on model and estimation mode |
 | Content Safety | `06_test_content_safety.sh` | Blocklist term rejected with HTTP 403 | Blocklist and item propagation takes time |
-| LLM logs | `07_test_llm_logs.sh` | At least one `ApiManagementGatewayLlmLog` record | Prompt/completion bodies are off by default; ingestion is delayed |
-| Token metrics | `08_test_custom_metrics.sh` | At least one `AppMetrics` record | Maximum five custom dimensions; avoid high cardinality |
+| LLM logs | `07_test_llm_logs.sh` | LLM records correlate to gateway records by `CorrelationId` | Prompt/completion bodies are off by default; ingestion is delayed |
+| Caller/token metrics | `08_test_custom_metrics.sh` | Expected `AppMetrics` records are present | Maximum five token dimensions; caller IDs can be high-cardinality |
 
 Examples for rerunning individual checks:
 
@@ -601,6 +608,53 @@ LOG_QUERY_ATTEMPTS=20 \
 LOG_QUERY_INTERVAL_SECONDS=15 \
 ./scripts/08_test_custom_metrics.sh
 ```
+
+### Lab 5: Deploy cost allocation and showback
+
+The tracked profile enables caller attribution, sample business-unit subscriptions, and the Azure
+Monitor Workbook. It does not enable Cost Management export or email alerts.
+
+```bash
+PROFILE="profiles/cost_showback.tfvars"
+terraform plan -var-file="$PROFILE"
+terraform apply -parallelism=1 -var-file="$PROFILE"
+
+terraform output cost_workbook_id
+terraform output business_unit_subscription_ids
+./scripts/run_all.sh
+```
+
+By default, caller attribution trusts only the APIM subscription ID. Set `cost_showback.entra_id`
+with a tenant and allowed audiences to enable `validate-azure-ad-token`; only a successfully validated
+bearer token can then contribute its `appid` / `azp` claim. Requests without a bearer token continue
+to use the APIM subscription ID.
+
+To test Cost Management export or request-threshold alerts, copy the profile to a git-ignored local
+file and add the required nested objects:
+
+```hcl
+cost_showback = {
+  # Keep the business_units and pricing values from the tracked profile.
+  business_units = {
+    "bu-engineering" = "Engineering"
+  }
+
+  cost_export = {
+    start_date       = "2026-09-01T00:00:00Z"
+    recurrence       = "Daily"
+    root_folder_path = "apim-costing"
+  }
+
+  request_alerts = {
+    email_address     = "apim-alerts@example.com"
+    request_threshold = 1000
+  }
+}
+```
+
+`request_alerts` count requests in a rolling Log Analytics window; they are not Azure Cost Management
+budgets. The Workbook's request and token costs are estimates for showback. Treat Cost Management and
+Azure OpenAI/Foundry usage exports as the billing systems of record.
 
 ### Cleanup
 
@@ -705,11 +759,11 @@ Run an individual script when only one capability needs to be verified again.
 | `01_test_core.sh` | Calls the Hello and mock APIs with a subscription key and checks policy-generated JSON, the OpenAPI example, and the marker header. It then repeats Hello requests to exercise the subscription rate limit | Succeeds when both APIs return HTTP 200 with expected payloads and repeated requests reach HTTP 429. It consumes the current rate-limit window |
 | `02_test_weighted_routing.sh` | Calls the weighted endpoint 24 times by default and counts response backend names as primary or secondary | Succeeds after observing each backend at least once. A small probabilistic sample can occasionally see only one backend |
 | `03_test_failover.sh` | Repeats requests to the failure endpoint, observing primary HTTP 503 responses and the secondary response after the circuit breaker opens. It waits one second between attempts | Succeeds when an HTTP 200 response identifies the secondary before the attempt limit. It deliberately triggers primary failures |
-| `04_test_ai_gateway.sh` | Calls an OpenAI-compatible chat completion using the APIM subscription key as the client credential; APIM uses managed identity for the backend | Succeeds with HTTP 200 and non-empty completion text. It consumes model quota and billable tokens |
+| `04_test_ai_gateway.sh` | Calls Chat Completions and Responses APIs in sync/streaming modes using the APIM subscription key; APIM uses managed identity for the backend | Succeeds with HTTP 200, completion output, SSE completion, and streaming token usage. It consumes model quota and billable tokens |
 | `05_test_token_limit.sh` | Repeatedly sends a token-consuming prompt to the AI gateway and records `x-llm-tokens-consumed` when available | Succeeds when the token rate limit returns HTTP 429 before the attempt limit. It can affect later AI requests until the rate-limit window renews |
 | `06_test_content_safety.sh` | Uses an Azure access token to create or update a blocklist and item, waits for propagation, then sends a blocked prompt and a safe control prompt | Succeeds when the blocked prompt returns HTTP 403 and the safe control prompt returns HTTP 200. Remove the created test item with `09_cleanup.sh` |
-| `07_test_llm_logs.sh` | Queries the past 24 hours of `ApiManagementGatewayLlmLog` in Log Analytics and, when none are found, polls up to 12 times at 10-second intervals by default | Succeeds after finding at least one record. Query errors are shown immediately and stop the script. It requires a prior AI gateway request and telemetry ingestion |
-| `08_test_custom_metrics.sh` | Queries the past 24 hours of `AppMetrics` in Log Analytics and retrieves token metric records plus up to 20 metric names | Succeeds after finding at least one record. Query errors are shown immediately and stop the script. It requires a prior AI gateway request and telemetry ingestion |
+| `07_test_llm_logs.sh` | Joins recent `ApiManagementGatewayLlmLog` and `ApiManagementGatewayLogs` records by `CorrelationId` | Succeeds after finding at least one subscription-correlated record. It requires prior AI traffic and telemetry ingestion |
+| `08_test_custom_metrics.sh` | Queries recent `AppMetrics`; cost showback selects `caller-requests`, otherwise it accepts enabled token metrics | Succeeds after finding the expected custom metric. It requires prior API traffic and telemetry ingestion |
 | `09_cleanup.sh` | Requires the exact `CONFIRM_CLEANUP=delete-apim-playground-data` value, then removes Content Safety blocklist items matching the script's test text | An already-absent item or blocklist is also successful. It preserves the blocklist container's internal ID and doesn't delete Terraform-managed resources |
 | `run_all.sh` | Runs the tests in order according to feature flags and reports disabled layers as `Skip` | Succeeds when every enabled test passes. With `CLEANUP_AFTER_RUN=true`, it runs `09_cleanup.sh` both after success and after an earlier test failure |
 
@@ -747,6 +801,10 @@ All feature objects default to `null`, except the core rate limit. Important inp
 | `observability` | Enables Log Analytics, Application Insights, logger, and diagnostics |
 | `observability.llm_logging` | Enables usage logs; prompt/completion bodies remain off unless explicitly selected |
 | `llm_token_metrics` | Experimental custom metrics and up to five documented dimensions; requires AI and observability |
+| `cost_showback` | Enables caller attribution and pricing parameters; requires observability |
+| `cost_showback.entra_id` | Optional tenant and audience allowlist; validates bearer tokens before using `appid` / `azp` |
+| `cost_showback.cost_export` | Optional Cost Management export with explicit stable start date and secure storage |
+| `cost_showback.request_alerts` | Optional email action group and per-business-unit request-threshold rules |
 | `operator_principal_id` | Principal allowed to manage Content Safety data; defaults to the Terraform caller |
 
 Use `terraform output -json` as the machine-readable contract for scripts. Subscription
@@ -755,7 +813,8 @@ keys are marked sensitive. Do not print them into CI logs or commit output snaps
 ## IaC Boundary
 
 Terraform owns APIs, products, subscriptions, policies, backends, pools, identities,
-RBAC, diagnostics, Foundry deployments, Content Safety accounts, and monitoring
+RBAC, diagnostics, Foundry deployments, Content Safety accounts, monitoring,
+Workbook, Cost Management export, and alert
 resources. The `scripts/` directory performs only these data-plane actions:
 
 - invoke gateway endpoints;
@@ -779,6 +838,10 @@ No script mutates the APIM, Foundry, RBAC, or monitoring control plane.
     [Azure-Samples/AI-Gateway Application Insights module](https://github.com/Azure-Samples/AI-Gateway/blob/main/modules/monitor/v1/appinsights.bicep)
     and sends the not-yet-published `CustomMetricsOptedInType = "WithDimensions"`
     property through AzAPI.
+- Cost and token values in the Workbook are informational estimates, can lag, and can be incomplete
+    for failed/throttled or partially logged requests. They must not be used as a billing ledger.
+- Caller attribution ignores unvalidated JWT claims. Configure `cost_showback.entra_id` to validate
+    bearer tokens before using `appid` or `azp`; otherwise attribution uses APIM subscription IDs.
 - Provisioned Foundry, Content Safety, and Application Insights disable local key
     authentication. APIM uses its system-assigned identity and least-scope role assignments.
 - The tracked Foundry profile uses `DataZoneStandard`. Stored data remains in `eastus2`, while model
@@ -810,6 +873,7 @@ network design, or preview evaluation:
 
 ## Primary Sources
 
+- [Azure-Samples/Apim-Samples costing and showback sample](https://github.com/Azure-Samples/Apim-Samples/tree/main/samples/costing)
 - [API Management backends, pools, and circuit breaker](https://learn.microsoft.com/azure/api-management/backends)
 - [AI gateway capabilities](https://learn.microsoft.com/azure/api-management/genai-gateway-capabilities)
 - [`llm-token-limit` policy](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy)
@@ -817,6 +881,7 @@ network design, or preview evaluation:
 - [Azure AI Content Safety blocklists](https://learn.microsoft.com/azure/ai-services/content-safety/quickstart-blocklist)
 - [Application Insights integration](https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights)
 - [LLM logs and `ApiManagementGatewayLlmLog`](https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs)
+- [Azure OpenAI streaming usage](https://learn.microsoft.com/azure/ai-services/openai/how-to/streaming)
 - [`llm-emit-token-metric` policy](https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy)
 - [Azure OpenAI quota and capacity](https://learn.microsoft.com/azure/foundry/openai/how-to/quota)
 - [AzureRM backend](https://developer.hashicorp.com/terraform/language/backend/azurerm)
