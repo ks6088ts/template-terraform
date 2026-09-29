@@ -6,6 +6,8 @@ updates:
       interval: "weekly"
   # https://docs.github.com/ja/code-security/dependabot/ecosystems-supported-by-dependabot/supported-ecosystems-and-repositories
   - package-ecosystem: "terraform"
-    directory: "/"
+    directories:
+      - "/infra/scenarios/*"
+      - "/infra/modules/*/*"
     schedule:
       interval: "weekly"

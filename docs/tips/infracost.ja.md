@@ -7,7 +7,7 @@ ms.topic: how-to
 
 ## インストールと認証
 
-開発コンテナーには Infracost CLI と Infracost の VS Code 拡張機能がインストールされます。
+開発コンテナーには Infracost CLI 2.16.3 と Infracost の VS Code 拡張機能がインストールされます。
 `.devcontainer/devcontainer.json` の変更を取得した後、コンテナーをリビルドしてください。
 
 コンテナー外で開発する場合は、プラットフォームに応じて CLI をインストールします。

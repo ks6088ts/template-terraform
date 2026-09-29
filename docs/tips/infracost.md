@@ -7,7 +7,7 @@ ms.topic: how-to
 
 ## Install and authenticate
 
-The development container installs the Infracost CLI and the Infracost VS Code
+The development container installs Infracost CLI 2.16.3 and the Infracost VS Code
 extension. Rebuild the container after pulling changes to
 `.devcontainer/devcontainer.json`.
 
