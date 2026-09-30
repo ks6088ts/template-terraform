@@ -24,6 +24,7 @@ cat > "$FIXTURE/bin/az" <<'EOF'
 printf '%s\n' "$*" >> "$FIXTURE/az.calls"
 case "$*" in
   "account show --query id --output tsv") ;;
+  "cloud show --query endpoints.appInsightsResourceId --output tsv") ;;
   *" --subscription sub-123 "*) ;;
   *) exit 1 ;;
 esac
@@ -48,9 +49,14 @@ case "$*" in
     else
       printf '0 * * * * *\n'
     fi ;;
-  *"app-insights query"*)
+  *"cloud show"*) printf 'https://api.applicationinsights.io\n' ;;
+  *"rest"*)
     case "$*" in
-      *" --app insights-123 "*"timestamp between ("*"take 1"*) ;;
+      *"--method post"*"--url https://api.applicationinsights.io/v1/apps/insights-123/query"*"--resource https://api.applicationinsights.io"*"\"query\":"*"take 1"*) ;;
+      *) exit 1 ;;
+    esac
+    case "$*" in
+      *"timestamp >= "*"timestamp <= datetime("*|*"timestamp between ("*) ;;
       *) exit 1 ;;
     esac
     if [ "${MOCK_CASE:-}" = delayed_telemetry ]; then
@@ -176,9 +182,14 @@ fi
 "$SCRIPT_DIR/03_test_storage_identity.sh" > "$FIXTURE/stdout" || fail 'Storage verification failed'
 "$SCRIPT_DIR/04_test_timer.sh" > "$FIXTURE/stdout" || fail 'Timer verification failed'
 "$SCRIPT_DIR/05_test_http_telemetry.sh" > "$FIXTURE/stdout" || fail 'Telemetry verification failed'
-grep -q -- '--app insights-123' "$FIXTURE/az.calls" || fail 'Telemetry not scoped to app ID'
+grep -q -- '--url https://api.applicationinsights.io/v1/apps/insights-123/query' "$FIXTURE/az.calls" ||
+  fail 'Telemetry not scoped to app ID'
+grep -q -- '--resource https://api.applicationinsights.io' "$FIXTURE/az.calls" ||
+  fail 'Telemetry token not scoped to the Application Insights API'
 grep -q -- '--subscription sub-123' "$FIXTURE/az.calls" || fail 'Azure operations not scoped to subscription'
-grep -q "dependencies | where timestamp" "$FIXTURE/az.calls" || fail 'OpenTelemetry dependencies not queried'
+grep -q "dependencies | where timestamp >=" "$FIXTURE/az.calls" || fail 'OpenTelemetry dependencies not queried'
+grep -q "(datetime(.*) - 5s)" "$FIXTURE/az.calls" || fail 'OpenTelemetry query lacks clock-skew tolerance'
+grep -q "timestamp <= datetime(" "$FIXTURE/az.calls" || fail 'Telemetry query lacks a concrete upper time bound'
 grep -q "name == 'flex-otel-check'" "$FIXTURE/az.calls" || fail 'Named OpenTelemetry span not queried'
 grep -q 'datetime(' "$FIXTURE/az.calls" || fail 'OpenTelemetry span not scoped to fresh probe'
 

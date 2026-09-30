@@ -17,9 +17,19 @@ spec.loader.exec_module(app)
 class FunctionAppTests(unittest.TestCase):
     def test_hello_and_function_key_responses(self):
         request = func.HttpRequest(method="GET", url="http://localhost/api/hello", params={"name": "Ada"}, body=b"")
-        with patch.object(app, "tracer") as tracer:
-            self.assertEqual(app.hello_world_http(request).get_body(), b"Hello, Ada!")
-        tracer.start_as_current_span.assert_called_once_with("flex-otel-check")
+        context = MagicMock()
+        context.trace_context.Traceparent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        context.trace_context.Tracestate = "vendor=value"
+        parent_context = object()
+        with patch.object(app, "extract", return_value=parent_context) as extract, patch.object(app, "tracer") as tracer:
+            self.assertEqual(app.hello_world_http(request, context).get_body(), b"Hello, Ada!")
+        extract.assert_called_once_with(
+            {
+                "traceparent": context.trace_context.Traceparent,
+                "tracestate": context.trace_context.Tracestate,
+            }
+        )
+        tracer.start_as_current_span.assert_called_once_with("flex-otel-check", context=parent_context)
         self.assertEqual(app.hello_world_http_with_function_key(request).get_body(), b"Hello, Ada!")
 
     @patch.dict(os.environ, {"STORAGE_ACCOUNT_BLOB_ENDPOINT": "https://example.blob.core.windows.net/", "STORAGE_CONTAINER_NAME": "deploymentpackage"})

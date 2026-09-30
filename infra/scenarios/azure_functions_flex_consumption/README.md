@@ -95,6 +95,8 @@ bash scripts/05_test_http_telemetry.sh
 
 Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_validate_prerequisites.sh` checks `az`, `curl`, `terraform`, `jq`, required Terraform outputs, and that the **active default** Azure CLI subscription matches `subscription_id`; it does not check Core Tools or local Python. Publish the Python code before running the remaining scripts. `run_all.sh` runs the checks in sequence without publishing code. Test scripts exit nonzero when an assertion fails; the OpenTelemetry span and timer checks may need a wait for execution/ingestion. The Storage endpoint's JSON response (`{"status":"ok","container":"deploymentpackage"}` by default) confirms the **Function App's** managed identity can reach its deployment container; a 503 indicates the probe failed (inspect telemetry and role propagation). Verification scripts report a summary, not the response JSON, on stdout.
 
+Telemetry queries use `az rest` with the Application Insights Query API, so the optional Azure CLI `application-insights` extension is not required.
+
 | Check | Credential and expected result |
 | --- | --- |
 | `/api/hello` without token | HTTP **401** from Easy Auth |
@@ -104,7 +106,7 @@ Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_valid
 | `/api/hello-key?name=Azure` with `x-functions-key` | HTTP **200**, body `Hello, Azure!` |
 | `/api/storage-check` without token / with valid bearer token | HTTP **401** / HTTP **200** with JSON `status: "ok"` and container name |
 | Timer | Default `0 * * * * *`: every minute at second zero (UTC by default). The script checks the deployed `%TIMER_SCHEDULE%` binding, the app setting against the Terraform output, and an app-scoped `flex-timer-check: completed` trace from the last 24 hours. Wait for the first run and telemetry ingestion; the query retries for up to 1 minute. |
-| OpenTelemetry span | The script sends an authenticated `/api/hello?name=Telemetry` request (HTTP **200**, `Hello, Telemetry!`), then queries the Application Insights `dependencies` table for a `flex-otel-check` span **since that probe**, retrying for up to 1 minute. This verifies telemetry emitted by the Python worker, not only host-generated request telemetry. |
+| OpenTelemetry span | The script sends an authenticated `/api/hello?name=Telemetry` request (HTTP **200**, `Hello, Telemetry!`), then queries the Application Insights `dependencies` table for a `flex-otel-check` span **since that probe**, retrying for up to 1 minute. The span inherits the Functions invocation trace context so correlation and sampling remain consistent with the host-generated request. This verifies telemetry emitted by the Python worker, not only host-generated request telemetry. |
 
 A successful OpenTelemetry check prints `OpenTelemetry span verified for Application Insights app ...`. To inspect the same worker span manually in **Application Insights > Logs**, run:
 

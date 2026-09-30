@@ -95,6 +95,8 @@ bash scripts/05_test_http_telemetry.sh
 
 6 件を一度に確認する場合は、代わりに `bash scripts/run_all.sh` を実行します。`00_validate_prerequisites.sh` は `az`、`curl`、`terraform`、`jq`、必要な Terraform 出力、および Azure CLI の**現在の既定サブスクリプション**が `subscription_id` と一致することを確認します。Core Tools やローカル Python は確認しません。残りのスクリプトを実行する前に Python コードを公開してください。`run_all.sh` はコードを公開せず、各検証を順番に実行します。アサーション失敗時、スクリプトはゼロ以外で終了します。OpenTelemetry span とタイマーの確認には実行や取り込みの待ち時間が必要な場合があります。Storage エンドポイントの JSON 応答（既定では `{"status":"ok","container":"deploymentpackage"}`）は **Function App の**マネージド ID でデプロイコンテナーにアクセスできることを示します。503 はプローブ失敗を意味します（テレメトリと RBAC の反映を調べてください）。検証スクリプトの標準出力には応答 JSON ではなく結果概要が表示されます。
 
+テレメトリ照会は Application Insights Query API を `az rest` で呼び出すため、任意導入の Azure CLI `application-insights` 拡張機能は不要です。
+
 | 検証 | 認証情報と期待結果 |
 | --- | --- |
 | `/api/hello`、トークンなし | 組み込み認証による HTTP **401** |
@@ -104,7 +106,7 @@ bash scripts/05_test_http_telemetry.sh
 | `/api/hello-key?name=Azure`、`x-functions-key` | HTTP **200**、本文 `Hello, Azure!` |
 | `/api/storage-check`、トークンなし / 有効なアクセストークンあり | HTTP **401** / HTTP **200** と `status: "ok"` とコンテナー名の JSON |
 | タイマー | 既定値 `0 * * * * *` は毎分 0 秒（既定で UTC）。スクリプトはデプロイ済みの `%TIMER_SCHEDULE%` バインディング、Terraform 出力と一致するアプリ設定、過去 24 時間の対象アプリの `flex-timer-check: completed` トレースを検証します。初回実行とテレメトリの取り込みを待ってください。クエリは最大 1 分間再試行します。 |
-| OpenTelemetry span | スクリプトは認証付き `/api/hello?name=Telemetry` を呼び出し（HTTP **200**、`Hello, Telemetry!`）、**この呼び出し以降**の `flex-otel-check` span を Application Insights の `dependencies` テーブルで確認します。取り込みを最大 1 分間再試行し、ホスト生成 request telemetry だけでなく Python worker が生成したテレメトリを検証します。 |
+| OpenTelemetry span | スクリプトは認証付き `/api/hello?name=Telemetry` を呼び出し（HTTP **200**、`Hello, Telemetry!`）、**この呼び出し以降**の `flex-otel-check` span を Application Insights の `dependencies` テーブルで確認します。span は Functions invocation の trace context を継承するため、相関と sampling decision がホスト生成 request と一致します。取り込みを最大 1 分間再試行し、ホスト生成 request telemetry だけでなく Python worker が生成したテレメトリを検証します。 |
 
 OpenTelemetry の確認に成功すると `OpenTelemetry span verified for Application Insights app ...` と表示されます。同じ worker span を **Application Insights > ログ**から手動確認する場合は、次の KQL を実行します。
 

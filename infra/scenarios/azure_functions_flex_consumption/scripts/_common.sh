@@ -99,8 +99,18 @@ function_key() {
 query_telemetry() {
   require_command az
   require_output "$APP_INSIGHTS_APP_ID" application_insights_app_id
-  az monitor app-insights query --subscription "$SUBSCRIPTION_ID" \
-    --app "$APP_INSIGHTS_APP_ID" --analytics-query "$1" --output json
+  APP_INSIGHTS_API_ENDPOINT=$(az cloud show \
+    --query endpoints.appInsightsResourceId --output tsv) ||
+    die "Cannot determine the Application Insights API endpoint."
+  case "$APP_INSIGHTS_API_ENDPOINT" in
+    https://*) APP_INSIGHTS_API_ENDPOINT=${APP_INSIGHTS_API_ENDPOINT%/} ;;
+    *) die "Azure CLI returned an invalid Application Insights API endpoint." ;;
+  esac
+  QUERY_BODY=$(jq -cn --arg query "$1" '{query: $query}') ||
+    die "Cannot encode the Application Insights query."
+  az rest --subscription "$SUBSCRIPTION_ID" --method post \
+    --url "$APP_INSIGHTS_API_ENDPOINT/v1/apps/$APP_INSIGHTS_APP_ID/query" \
+    --resource "$APP_INSIGHTS_API_ENDPOINT" --body "$QUERY_BODY" --output json
 }
 
 has_telemetry_rows() {

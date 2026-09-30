@@ -29,9 +29,10 @@ case "$ACTUAL_SCHEDULE" in
   *) die "Deployed timer schedule differs from Terraform output." ;;
 esac
 # Query the target Application Insights app, not an unscoped workspace shared by other apps.
-QUERY="traces | where timestamp between (ago(24h) .. now()) | where message contains 'flex-timer-check: completed' | take 1"
 attempt=1
 while [ "$attempt" -le 6 ]; do
+  QUERY_ENDED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  QUERY="traces | where timestamp >= ago(24h) | where timestamp <= datetime('$QUERY_ENDED_AT') | where message contains 'flex-timer-check: completed' | take 1"
   RESULT=$(query_telemetry "$QUERY") || die "Timer telemetry query failed."
   if printf '%s' "$RESULT" | has_telemetry_rows; then
     printf 'Timer schedule and execution trace verified.\n'

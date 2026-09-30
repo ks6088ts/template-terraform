@@ -6,6 +6,7 @@ import os
 from azure.identity import ManagedIdentityCredential
 from azure.storage.blob import BlobServiceClient
 from opentelemetry import trace
+from opentelemetry.propagate import extract
 
 app = func.FunctionApp()
 tracer = trace.get_tracer(__name__)
@@ -40,14 +41,18 @@ def hello_world_timer(myTimer: func.TimerRequest) -> None:
 
 
 @app.route(route="hello", auth_level=func.AuthLevel.ANONYMOUS)
-def hello_world_http(req: func.HttpRequest) -> func.HttpResponse:
+def hello_world_http(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
     """
     App Service 組み込み認証で保護する HTTP トリガー関数
     GET/POST リクエストで "hello world" を返す
     """
     logging.info("HTTP trigger function processed a request.")
 
-    with tracer.start_as_current_span("flex-otel-check"):
+    carrier = {
+        "traceparent": context.trace_context.Traceparent,
+        "tracestate": context.trace_context.Tracestate,
+    }
+    with tracer.start_as_current_span("flex-otel-check", context=extract(carrier)):
         return create_hello_response(req)
 
 
