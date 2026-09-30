@@ -4,23 +4,49 @@ description: Deploy a minimal Microsoft Foundry account and optionally enable a 
 
 # Azure Microsoft Foundry scenario
 
-By default, this scenario deploys only a resource group, one Microsoft Foundry account, and one
-project. It doesn't deploy models, Standard setup data services, tracing, or sample data unless
-those features are explicitly enabled.
+## Executive summary
 
-The optional public-endpoint
-[Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)
-adds customer-managed Storage, Azure AI Search, and Cosmos DB. Local keys are disabled; Microsoft
-Entra ID, managed identities, and Azure RBAC are used instead. After also selecting the sample
-models, one command verifies the complete Foundry IQ path:
+This scenario uses Terraform to build a Microsoft Foundry foundation and run a prompt agent that
+answers questions from fictional restaurant reviews. It goes beyond resource provisioning: you can
+experience the complete path from ingesting your own data through search and agent tool use to
+verifying a grounded answer.
 
-```text
-Blob Storage -> Foundry IQ knowledge source -> knowledge base -> MCP connection
-             -> prompt agent -> grounded answer with references
+By default, the scenario deploys only a resource group, Microsoft Foundry account, and project so
+you can begin learning and reviewing the architecture with a smaller cost footprint. Enable the
+optional Standard setup and model deployments when you want to run the end-to-end Foundry IQ
+workflow.
+
+| Service | Role in this scenario |
+| --- | --- |
+| Microsoft Foundry | Manages the AI project, model deployments, prompt agent, and conversations |
+| Azure Blob Storage | Stores fictional restaurant reviews for the agent to reference |
+| Azure AI Search / Foundry IQ | Ingests Blob data and exposes it through a knowledge source and knowledge base |
+| Model Context Protocol (MCP) | Lets the prompt agent call the knowledge base as a tool |
+| Microsoft Entra ID / managed identity / Azure RBAC | Authenticates and authorizes Storage, Search, and Foundry without local keys |
+| Cosmos DB | Stores Agent Service state in the Standard setup |
+| Application Insights (optional) | Visualizes OpenTelemetry spans when server-side tracing is enabled |
+
+By completing the scenario, you can learn how to:
+
+- progressively enable Foundry data services from a minimal Terraform deployment;
+- ingest custom data and retrieve grounded content and references from a knowledge base;
+- connect a prompt agent to a knowledge base through an MCP connection;
+- use Microsoft Entra ID, managed identities, and Azure RBAC instead of API keys; and
+- verify the agent response path with script gates and optional tracing.
+
+```mermaid
+flowchart LR
+    User[User] -->|Question| Agent[Microsoft Foundry<br/>Prompt agent]
+    Agent -->|MCP tool call| KB[Azure AI Search<br/>Foundry IQ knowledge base]
+    Blob[Azure Blob Storage<br/>Restaurant reviews] -->|Ingestion| KS[Foundry IQ<br/>Knowledge source]
+    KS --> KB
+    KB -->|Grounding and references| Agent
+    Agent -->|Grounded answer| User
+    Entra[Microsoft Entra ID<br/>Managed identity / RBAC] -.-> Blob
+    Entra -.-> KB
+    Entra -.-> Agent
+    Agent -. optional tracing .-> AppInsights[Application Insights]
 ```
-
-Server-side tracing is a separate opt-in and sends OpenTelemetry spans to workspace-based
-Application Insights.
 
 > [!IMPORTANT]
 > The default minimal deployment doesn't create the chargeable Search, Storage, Cosmos DB, model,
@@ -131,6 +157,8 @@ terraform output
 
 ### 3. Run the optional end-to-end verification
 
+Run every verification step in order with:
+
 ```bash
 ./scripts/run_all.sh
 ```
@@ -142,8 +170,37 @@ The command stops at the first failed gate:
 3. direct knowledge-base retrieval returns content and at least one grounding reference;
 4. the prompt agent returns text and records at least one MCP event.
 
-Set `VERBOSE_OUTPUT=true` to print full REST responses. To remove script-created data after a
-successful or failed run:
+Add `--verbose` to report each operation, target, and HTTP status. Access tokens and Authorization
+headers aren't printed.
+
+```bash
+./scripts/run_all.sh --verbose
+```
+
+To inspect each step separately, run these commands in order from the scenario directory. You can
+also add `--verbose` to any command:
+
+```bash
+./scripts/00_validate_prerequisites.sh
+./scripts/01_upload_restaurant_reviews.sh
+./scripts/02_create_knowledge_source.sh
+./scripts/03_wait_for_ingestion.sh
+./scripts/04_create_knowledge_base.sh
+./scripts/05_retrieve_knowledge_base.sh
+./scripts/06_create_project_connection.sh
+./scripts/07_create_agent.sh
+./scripts/08_ask_agent.sh
+```
+
+Environment variables customize the workflow. For example, ask the prompt agent a Japanese
+question with:
+
+```bash
+QUESTION="ベジタリアンに向いてるレストランを教えて。" ./scripts/08_ask_agent.sh
+```
+
+The backward-compatible `VERBOSE_OUTPUT=true` setting prints progress plus complete REST responses
+for the steps that support them. To remove script-created data after a successful or failed run:
 
 ```bash
 CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
@@ -373,9 +430,21 @@ file-level rather than one citation per CSV row. The data is fictional.
 | `EMBEDDING_DEPLOYMENT` / `EMBEDDING_MODEL` | `text-embedding-3-large` |
 | `INGESTION_TIMEOUT_SECONDS` / `POLL_INTERVAL_SECONDS` | `900` / `10` |
 | `CLEANUP_TIMEOUT_SECONDS` | `300` |
+| `QUESTION` | The script-specific default English question |
 | `KEEP_CONVERSATION` | `false` |
 | `CLEANUP_AFTER_RUN` | `false` |
 | `VERBOSE_OUTPUT` | `false` |
+
+Set environment variables before a command to adjust sample data, resource names, models, timeouts,
+or questions without changing Terraform-managed infrastructure. `05_retrieve_knowledge_base.sh`
+and `08_ask_agent.sh` continue to accept a positional question; a positional question takes
+precedence over `QUESTION`.
+
+```bash
+QUESTION="Which restaurants are suitable for vegetarians?" ./scripts/08_ask_agent.sh --verbose
+AGENT_MODEL="gpt-5.4-mini" ./scripts/07_create_agent.sh
+POLL_INTERVAL_SECONDS=5 INGESTION_TIMEOUT_SECONDS=600 ./scripts/03_wait_for_ingestion.sh
+```
 
 Knowledge sources, knowledge bases, connections, and Blob uploads use idempotent create-or-update
 operations. Creating an agent creates another version of the same named agent. The Q&A script

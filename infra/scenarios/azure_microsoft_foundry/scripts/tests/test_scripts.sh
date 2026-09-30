@@ -69,6 +69,7 @@ EOF
 cat > "${FIXTURE}/bin/curl" <<'EOF'
 #!/bin/sh
 body_file=""
+data=""
 method="GET"
 url=""
 
@@ -82,7 +83,11 @@ while [ "$#" -gt 0 ]; do
       method=$2
       shift
       ;;
-    --header|--data|--data-binary|--write-out)
+    --data)
+      data=$2
+      shift
+      ;;
+    --header|--data-binary|--write-out)
       shift
       ;;
     http://*|https://*)
@@ -94,6 +99,9 @@ done
 
 [ -n "$body_file" ] || exit 1
 printf '%s|%s|%s\n' "${MOCK_CASE:-}" "$method" "$url" >> "${FIXTURE}/curl.calls"
+if [ -n "$data" ]; then
+  printf '%s\n' "$data" >> "${FIXTURE}/curl.data"
+fi
 
 status=500
 body='{"error":{"code":"UnexpectedRequest","message":"Unexpected mock request"}}'
@@ -179,7 +187,7 @@ expect_failure() {
 }
 
 reset_case() {
-  rm -f "${FIXTURE}/curl.calls" "${FIXTURE}/status.count" "${FIXTURE}/stdout" "${FIXTURE}/stderr"
+  rm -f "${FIXTURE}/curl.calls" "${FIXTURE}/curl.data" "${FIXTURE}/status.count" "${FIXTURE}/stdout" "${FIXTURE}/stderr"
 }
 
 DEFAULTS=$(
@@ -236,6 +244,35 @@ grep -q "DELETE|https://foundry-test.services.ai.azure.com/api/projects/project-
   fail "Transient conversation was not deleted after success."
 
 reset_case
+MOCK_CASE=agent-success
+export MOCK_CASE
+QUESTION="Which restaurant has patio seating?" \
+  "${SCRIPT_DIR}/08_ask_agent.sh" --verbose > "${FIXTURE}/stdout" ||
+  fail "QUESTION environment override with --verbose failed."
+grep -q "Which restaurant has patio seating?" "${FIXTURE}/curl.data" ||
+  fail "QUESTION environment override was not sent to the agent."
+grep -q "\[verbose\] HTTP request: POST https://foundry-test.services.ai.azure.com/api/projects/project-test/openai/v1/responses" "${FIXTURE}/stdout" ||
+  fail "Verbose HTTP request progress was not reported."
+grep -q "\[verbose\] HTTP response: 200 POST https://foundry-test.services.ai.azure.com/api/projects/project-test/openai/v1/responses" "${FIXTURE}/stdout" ||
+  fail "Verbose HTTP response status was not reported."
+if grep -q "offline-token" "${FIXTURE}/stdout" ||
+  { [ -f "${FIXTURE}/stderr" ] && grep -q "offline-token" "${FIXTURE}/stderr"; }; then
+  fail "Verbose output exposed an access token."
+fi
+
+reset_case
+MOCK_CASE=agent-success
+export MOCK_CASE
+QUESTION="Environment question" \
+  "${SCRIPT_DIR}/08_ask_agent.sh" "Positional question" > "${FIXTURE}/stdout" ||
+  fail "Positional question compatibility failed."
+grep -q "Positional question" "${FIXTURE}/curl.data" ||
+  fail "Positional question was not sent to the agent."
+if grep -q "Environment question" "${FIXTURE}/curl.data"; then
+  fail "Environment question incorrectly overrode the positional question."
+fi
+
+reset_case
 MOCK_CASE=agent-no-mcp
 export MOCK_CASE
 expect_failure "${SCRIPT_DIR}/08_ask_agent.sh"
@@ -256,5 +293,11 @@ grep -q "GET|https://search-test.search.windows.net/knowledgesources('restaurant
   fail "Cleanup did not confirm knowledge source deletion."
 grep -q "script-created resources were cleaned up" "${FIXTURE}/stdout" ||
   fail "Cleanup success was not reported."
+
+reset_case
+unset MOCK_CASE
+expect_failure "${SCRIPT_DIR}/run_all.sh" --verbose
+grep -q "\[verbose\] Loading Terraform outputs" "${FIXTURE}/stdout" ||
+  fail "run_all.sh did not propagate --verbose to its numbered scripts."
 
 printf '%s\n' "Offline Microsoft Foundry script checks passed."

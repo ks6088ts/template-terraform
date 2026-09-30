@@ -9,6 +9,8 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 : "${CLEANUP_TIMEOUT_SECONDS:=300}"
 : "${POLL_INTERVAL_SECONDS:=10}"
 
+parse_common_options "$@"
+verbose_log "Preparing cleanup of script-created Foundry IQ resources."
 [ "${CONFIRM_CLEANUP:-}" = "delete-foundry-iq-resources" ] \
   || die "Set CONFIRM_CLEANUP=delete-foundry-iq-resources to delete the script-created resources."
 
@@ -74,6 +76,7 @@ wait_for_search_resource_absent() {
 
     WAIT_NOW_EPOCH=$(date +%s)
     WAIT_ELAPSED_SECONDS=$((WAIT_NOW_EPOCH - WAIT_START_EPOCH))
+    verbose_log "Cleanup wait for ${WAIT_LABEL}: elapsed=${WAIT_ELAPSED_SECONDS}s timeout=${CLEANUP_TIMEOUT_SECONDS}s."
     if [ "$WAIT_ELAPSED_SECONDS" -ge "$CLEANUP_TIMEOUT_SECONDS" ]; then
       die "Timed out after ${CLEANUP_TIMEOUT_SECONDS} seconds waiting for ${WAIT_LABEL} deletion."
     fi

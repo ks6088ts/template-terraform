@@ -7,6 +7,7 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 . "${SCRIPT_DIR}/_common.sh"
 
 : "${CLEANUP_AFTER_RUN:=false}"
+parse_common_options "$@"
 validate_boolean CLEANUP_AFTER_RUN "$CLEANUP_AFTER_RUN"
 
 run_step() {
@@ -16,17 +17,31 @@ run_step() {
 
   log ""
   log "== ${STEP_LABEL} =="
-  if "${SCRIPT_DIR}/${STEP_SCRIPT}" "$@"; then
-    return 0
+  if [ "$VERBOSE_OUTPUT" = "true" ]; then
+    if "${SCRIPT_DIR}/${STEP_SCRIPT}" --verbose "$@"; then
+      return 0
+    else
+      STEP_EXIT_CODE=$?
+    fi
   else
-    STEP_EXIT_CODE=$?
+    if "${SCRIPT_DIR}/${STEP_SCRIPT}" "$@"; then
+      return 0
+    else
+      STEP_EXIT_CODE=$?
+    fi
   fi
 
   if [ "$CLEANUP_AFTER_RUN" = "true" ]; then
     log ""
     log "== Cleanup after failed step =="
-    if ! CONFIRM_CLEANUP=delete-foundry-iq-resources "${SCRIPT_DIR}/09_cleanup.sh"; then
-      log "Warning: cleanup also failed."
+    if [ "$VERBOSE_OUTPUT" = "true" ]; then
+      if ! CONFIRM_CLEANUP=delete-foundry-iq-resources "${SCRIPT_DIR}/09_cleanup.sh" --verbose; then
+        log "Warning: cleanup also failed."
+      fi
+    else
+      if ! CONFIRM_CLEANUP=delete-foundry-iq-resources "${SCRIPT_DIR}/09_cleanup.sh"; then
+        log "Warning: cleanup also failed."
+      fi
     fi
   fi
 
@@ -46,7 +61,11 @@ run_step "Verify grounded agent response" "08_ask_agent.sh"
 if [ "$CLEANUP_AFTER_RUN" = "true" ]; then
   log ""
   log "== Cleanup after successful run =="
-  CONFIRM_CLEANUP=delete-foundry-iq-resources "${SCRIPT_DIR}/09_cleanup.sh"
+  if [ "$VERBOSE_OUTPUT" = "true" ]; then
+    CONFIRM_CLEANUP=delete-foundry-iq-resources "${SCRIPT_DIR}/09_cleanup.sh" --verbose
+  else
+    CONFIRM_CLEANUP=delete-foundry-iq-resources "${SCRIPT_DIR}/09_cleanup.sh"
+  fi
 fi
 
 log ""

@@ -6,6 +6,8 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/_common.sh"
 
+parse_common_options "$@"
+verbose_log "Preparing the private Blob container and restaurant review upload."
 require_common_commands
 load_terraform_outputs
 require_standard_agent_outputs

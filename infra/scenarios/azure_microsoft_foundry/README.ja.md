@@ -4,22 +4,47 @@ description: 最小の Microsoft Foundry をデプロイし、任意で keyless 
 
 # Azure Microsoft Foundry シナリオ
 
-既定では resource group、Microsoft Foundry account、project を 1 つずつ作成するだけです。明示的に
-有効化しない限り、model、Standard setup の data service、tracing、sample data はデプロイしません。
+## エグゼクティブサマリー
 
-任意の public endpoint
-[Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)は、
-利用者管理の Storage、Azure AI Search、Cosmos DB を追加します。Local key は無効化し、Microsoft Entra
-ID、managed identity、Azure RBAC を使用します。Sample model も選択すると、1 つの command で次の
-Foundry IQ 経路全体を検証できます。
+このシナリオでは、Microsoft Foundry を使った生成 AI アプリケーションの基盤を Terraform で構築し、
+架空のレストランレビューに基づいて回答する Prompt Agent を実際に動かします。単にリソースを作るだけでなく、
+独自データの取り込み、検索、Agent からのツール利用、根拠付き回答の確認までを一連の利用体験として学べます。
 
-```text
-Blob Storage -> Foundry IQ knowledge source -> knowledge base -> MCP connection
-             -> Prompt Agent -> 参照付きの grounded answer
+既定では、最初の学習や構成確認を低コストで始められるように、resource group、Microsoft Foundry account、
+project だけをデプロイします。Foundry IQ の end-to-end workflow を試す場合は、任意の Standard setup と
+model deployment を有効化します。
+
+| 利用サービス | このシナリオでの役割 |
+| --- | --- |
+| Microsoft Foundry | AI project、model deployment、Prompt Agent、conversation を管理 |
+| Azure Blob Storage | Agent が参照する架空のレストランレビューデータを保管 |
+| Azure AI Search / Foundry IQ | Blob データを取り込み、knowledge source と knowledge base として検索可能にする |
+| Model Context Protocol (MCP) | Prompt Agent から knowledge base を tool として呼び出す |
+| Microsoft Entra ID / managed identity / Azure RBAC | Storage、Search、Foundry 間を local key なしで認証・認可 |
+| Cosmos DB | Standard setup で Agent Service の状態を保持 |
+| Application Insights（任意） | Server-side tracing を有効にした場合に OpenTelemetry span を可視化 |
+
+このシナリオを通じて、次のことを確認できます。
+
+- Terraform で最小構成から Foundry の data service を段階的に有効化する方法
+- 独自データを knowledge source に取り込み、knowledge base から根拠付きで検索する流れ
+- MCP connection を介して Prompt Agent に knowledge base を利用させる方法
+- API key ではなく Microsoft Entra ID、managed identity、Azure RBAC を使う keyless 構成
+- script の検証 gate と任意の tracing を使って、Agent の回答と処理経路を確認する方法
+
+```mermaid
+flowchart LR
+    User[利用者] -->|質問| Agent[Microsoft Foundry<br/>Prompt Agent]
+    Agent -->|MCP tool call| KB[Azure AI Search<br/>Foundry IQ knowledge base]
+    Blob[Azure Blob Storage<br/>レストランレビュー] -->|取り込み| KS[Foundry IQ<br/>knowledge source]
+    KS --> KB
+    KB -->|根拠と参照| Agent
+    Agent -->|根拠付き回答| User
+    Entra[Microsoft Entra ID<br/>managed identity / RBAC] -.-> Blob
+    Entra -.-> KB
+    Entra -.-> Agent
+    Agent -. optional tracing .-> AppInsights[Application Insights]
 ```
-
-Server-side tracing は独立した opt-in で、OpenTelemetry span を workspace-based Application Insights
-へ送信します。
 
 > [!IMPORTANT]
 > 既定の最小構成は、後述する有料の Search、Storage、Cosmos DB、model、tracing resource を作成しません。
@@ -129,6 +154,8 @@ terraform output
 
 ### 3. 任意の end-to-end 検証
 
+すべての検証を順番に実行するには、次の command を実行します。
+
 ```bash
 ./scripts/run_all.sh
 ```
@@ -140,8 +167,36 @@ terraform output
 3. Knowledge base の direct retrieval が content と 1 件以上の grounding reference を返す
 4. Prompt Agent が text と 1 件以上の MCP event を返す
 
-REST response 全体を表示するには `VERBOSE_OUTPUT=true` を設定します。成功時または失敗時に
-script 作成データを削除する場合は次を実行します。
+各処理、呼び出し先、HTTP status などの進捗を確認するには `--verbose` を付けます。Access token や
+Authorization header は表示しません。
+
+```bash
+./scripts/run_all.sh --verbose
+```
+
+個別に確認する場合は、シナリオディレクトリで次の順番に実行します。各 command に `--verbose` を付けることも
+できます。
+
+```bash
+./scripts/00_validate_prerequisites.sh
+./scripts/01_upload_restaurant_reviews.sh
+./scripts/02_create_knowledge_source.sh
+./scripts/03_wait_for_ingestion.sh
+./scripts/04_create_knowledge_base.sh
+./scripts/05_retrieve_knowledge_base.sh
+./scripts/06_create_project_connection.sh
+./scripts/07_create_agent.sh
+./scripts/08_ask_agent.sh
+```
+
+質問などは環境変数で変更できます。たとえば、Prompt Agent に日本語で質問するには次を実行します。
+
+```bash
+QUESTION="ベジタリアンに向いてるレストランを教えて。" ./scripts/08_ask_agent.sh
+```
+
+既存互換の `VERBOSE_OUTPUT=true` を使うと、進捗に加えて対応している step の REST response 全体も表示します。
+成功時または失敗時に script 作成データを削除する場合は次を実行します。
 
 ```bash
 CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
@@ -369,9 +424,20 @@ file 単位です。データは架空です。
 | `EMBEDDING_DEPLOYMENT` / `EMBEDDING_MODEL` | `text-embedding-3-large` |
 | `INGESTION_TIMEOUT_SECONDS` / `POLL_INTERVAL_SECONDS` | `900` / `10` |
 | `CLEANUP_TIMEOUT_SECONDS` | `300` |
+| `QUESTION` | Script ごとの既定の英語質問 |
 | `KEEP_CONVERSATION` | `false` |
 | `CLEANUP_AFTER_RUN` | `false` |
 | `VERBOSE_OUTPUT` | `false` |
+
+環境変数を command の前に指定すると、sample data、resource 名、利用 model、timeout、質問などを
+Terraform-managed infrastructure を変更せずに調整できます。`05_retrieve_knowledge_base.sh` と
+`08_ask_agent.sh` は positional question も引き続き利用でき、positional question は `QUESTION` より優先されます。
+
+```bash
+QUESTION="ベジタリアンに向いてるレストランを教えて。" ./scripts/08_ask_agent.sh --verbose
+AGENT_MODEL="gpt-5.4-mini" ./scripts/07_create_agent.sh
+POLL_INTERVAL_SECONDS=5 INGESTION_TIMEOUT_SECONDS=600 ./scripts/03_wait_for_ingestion.sh
+```
 
 Knowledge source、knowledge base、connection、Blob upload は同名で再実行できます。Agent 作成は同名 Agent の
 新 version を追加します。Q&A script は既定で conversation を削除します。調査のために残す場合は

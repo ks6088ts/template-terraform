@@ -9,6 +9,8 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 : "${INGESTION_TIMEOUT_SECONDS:=900}"
 : "${POLL_INTERVAL_SECONDS:=10}"
 
+parse_common_options "$@"
+verbose_log "Checking for a fresh knowledge source ingestion run."
 require_common_commands
 load_terraform_outputs
 require_standard_agent_outputs
@@ -130,6 +132,7 @@ while :; do
 
   NOW_EPOCH=$(date +%s)
   ELAPSED_SECONDS=$((NOW_EPOCH - START_EPOCH))
+  verbose_log "Ingestion wait elapsed=${ELAPSED_SECONDS}s timeout=${INGESTION_TIMEOUT_SECONDS}s."
   if [ "$ELAPSED_SECONDS" -ge "$INGESTION_TIMEOUT_SECONDS" ]; then
     print_http_body >&2
     die "Timed out after ${INGESTION_TIMEOUT_SECONDS} seconds waiting for a fresh knowledge source ingestion."

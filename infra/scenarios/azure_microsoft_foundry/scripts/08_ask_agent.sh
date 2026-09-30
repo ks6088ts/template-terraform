@@ -6,7 +6,10 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/_common.sh"
 
-QUESTION=${*:-Which fictional restaurant is a strong choice for a vegan dinner, and why?}
+parse_question_options \
+  "Which fictional restaurant is a strong choice for a vegan dinner, and why?" \
+  "$@"
+verbose_log "Preparing a conversation and grounded prompt-agent request."
 
 require_common_commands
 load_terraform_outputs

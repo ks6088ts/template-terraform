@@ -29,9 +29,75 @@ log() {
   printf '%s\n' "$*"
 }
 
+verbose_log() {
+  if [ "$VERBOSE_OUTPUT" = "true" ]; then
+    log "[verbose] $*"
+  fi
+}
+
 die() {
   printf 'Error: %s\n' "$*" >&2
   exit 1
+}
+
+parse_common_options() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --verbose)
+        VERBOSE_OUTPUT=true
+        ;;
+      --)
+        shift
+        [ "$#" -eq 0 ] || die "Unexpected argument: $1"
+        break
+        ;;
+      *)
+        die "Unexpected argument: $1"
+        ;;
+    esac
+    shift
+  done
+
+  validate_boolean VERBOSE_OUTPUT "$VERBOSE_OUTPUT"
+}
+
+parse_question_options() {
+  COMMON_DEFAULT_QUESTION=$1
+  shift
+  COMMON_QUESTION_ARGUMENT=""
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --verbose)
+        VERBOSE_OUTPUT=true
+        ;;
+      --)
+        shift
+        if [ "$#" -gt 0 ]; then
+          COMMON_QUESTION_ARGUMENT=$*
+        fi
+        break
+        ;;
+      --*)
+        die "Unexpected option: $1"
+        ;;
+      *)
+        if [ -n "$COMMON_QUESTION_ARGUMENT" ]; then
+          COMMON_QUESTION_ARGUMENT="${COMMON_QUESTION_ARGUMENT} $1"
+        else
+          COMMON_QUESTION_ARGUMENT=$1
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  validate_boolean VERBOSE_OUTPUT "$VERBOSE_OUTPUT"
+  if [ -n "$COMMON_QUESTION_ARGUMENT" ]; then
+    QUESTION=$COMMON_QUESTION_ARGUMENT
+  else
+    : "${QUESTION:=$COMMON_DEFAULT_QUESTION}"
+  fi
 }
 
 require_command() {
@@ -51,6 +117,7 @@ terraform_output_value() {
 }
 
 load_terraform_outputs() {
+  verbose_log "Loading Terraform outputs from ${SCENARIO_DIR}."
   TERRAFORM_OUTPUTS=$(terraform -chdir="${SCENARIO_DIR}" output -json)
 
   if [ -z "${RESOURCE_GROUP_NAME:-}" ]; then
@@ -103,6 +170,7 @@ load_terraform_outputs() {
   if [ -z "${AZURE_SUBSCRIPTION_ID:-}" ] && [ -n "$PROJECT_ID" ]; then
     AZURE_SUBSCRIPTION_ID=$(printf '%s' "$PROJECT_ID" | cut -d/ -f3)
   fi
+  verbose_log "Loaded Terraform outputs for project ${PROJECT_NAME:-<unset>}."
 }
 
 require_value() {
@@ -129,6 +197,7 @@ require_model_deployment() {
 }
 
 get_access_token() {
+  verbose_log "Requesting an Azure access token for scope $1."
   az account get-access-token \
     --subscription "$AZURE_SUBSCRIPTION_ID" \
     --scope "$1" \
@@ -151,13 +220,37 @@ trap 'cleanup_http_body' 0
 trap 'cleanup_http_body; exit 1' HUP INT TERM
 
 http_request() {
+  HTTP_REQUEST_METHOD=GET
+  HTTP_REQUEST_URL=""
+  HTTP_REQUEST_METHOD_NEXT=false
+  for HTTP_REQUEST_ARGUMENT do
+    if [ "$HTTP_REQUEST_METHOD_NEXT" = "true" ]; then
+      HTTP_REQUEST_METHOD=$HTTP_REQUEST_ARGUMENT
+      HTTP_REQUEST_METHOD_NEXT=false
+      continue
+    fi
+    case "$HTTP_REQUEST_ARGUMENT" in
+      --request)
+        HTTP_REQUEST_METHOD_NEXT=true
+        ;;
+      http://*|https://*)
+        HTTP_REQUEST_URL=$HTTP_REQUEST_ARGUMENT
+        ;;
+    esac
+  done
+  [ "$HTTP_REQUEST_METHOD_NEXT" = "false" ] || die "HTTP request method is missing."
+  [ -n "$HTTP_REQUEST_URL" ] || die "HTTP request URL is missing."
+  verbose_log "HTTP request: ${HTTP_REQUEST_METHOD} ${HTTP_REQUEST_URL}"
+
   cleanup_http_body
   HTTP_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/foundry-iq-http.XXXXXX")
 
   if HTTP_STATUS=$(curl --silent --show-error --output "$HTTP_BODY_FILE" --write-out '%{http_code}' "$@"); then
+    verbose_log "HTTP response: ${HTTP_STATUS} ${HTTP_REQUEST_METHOD} ${HTTP_REQUEST_URL}"
     return 0
   fi
 
+  verbose_log "HTTP request failed: ${HTTP_REQUEST_METHOD} ${HTTP_REQUEST_URL}"
   if [ -s "$HTTP_BODY_FILE" ]; then
     cat "$HTTP_BODY_FILE" >&2
   fi

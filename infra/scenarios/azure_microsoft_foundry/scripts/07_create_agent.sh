@@ -6,6 +6,8 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/_common.sh"
 
+parse_common_options "$@"
+verbose_log "Preparing a new MCP-enabled prompt-agent version."
 require_common_commands
 load_terraform_outputs
 require_standard_agent_outputs
