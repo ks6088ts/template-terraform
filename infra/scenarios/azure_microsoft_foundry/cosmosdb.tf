@@ -1,6 +1,6 @@
 module "cosmosdb" {
   source = "../../modules/azure/cosmosdb"
-  count  = var.deploy_standard_agent ? 1 : 0
+  count  = var.enable_standard_setup ? 1 : 0
 
   name                          = local.resource_name
   account_name                  = "cosmosmsfoundry${local.resource_suffix}"

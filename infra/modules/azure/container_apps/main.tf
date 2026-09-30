@@ -56,6 +56,46 @@ resource "azurerm_container_app" "this" {
           secret_name = env.value.secret_name
         }
       }
+
+      dynamic "startup_probe" {
+        for_each = var.health_probe_path == null ? [] : [var.health_probe_path]
+        content {
+          transport               = "HTTP"
+          port                    = var.target_port
+          path                    = startup_probe.value
+          initial_delay           = 0
+          interval_seconds        = 5
+          timeout                 = 3
+          failure_count_threshold = 30
+        }
+      }
+
+      dynamic "liveness_probe" {
+        for_each = var.health_probe_path == null ? [] : [var.health_probe_path]
+        content {
+          transport               = "HTTP"
+          port                    = var.target_port
+          path                    = liveness_probe.value
+          initial_delay           = 10
+          interval_seconds        = 30
+          timeout                 = 3
+          failure_count_threshold = 3
+        }
+      }
+
+      dynamic "readiness_probe" {
+        for_each = var.health_probe_path == null ? [] : [var.health_probe_path]
+        content {
+          transport               = "HTTP"
+          port                    = var.target_port
+          path                    = readiness_probe.value
+          initial_delay           = 5
+          interval_seconds        = 10
+          timeout                 = 3
+          failure_count_threshold = 3
+          success_count_threshold = 1
+        }
+      }
     }
 
     min_replicas = var.min_replicas
@@ -65,8 +105,9 @@ resource "azurerm_container_app" "this" {
   dynamic "ingress" {
     for_each = var.enable_ingress ? [1] : []
     content {
-      external_enabled = var.external_enabled
-      target_port      = var.target_port
+      external_enabled           = var.external_enabled
+      allow_insecure_connections = false
+      target_port                = var.target_port
       traffic_weight {
         percentage      = 100
         latest_revision = true
@@ -75,6 +116,48 @@ resource "azurerm_container_app" "this" {
   }
 
   lifecycle {
+    precondition {
+      condition     = var.min_replicas <= var.max_replicas
+      error_message = "min_replicas must be less than or equal to max_replicas."
+    }
+
+    precondition {
+      condition = contains([
+        "0.25:0.5Gi",
+        "0.5:1Gi",
+        "0.75:1.5Gi",
+        "1:2Gi",
+        "1.25:2.5Gi",
+        "1.5:3Gi",
+        "1.75:3.5Gi",
+        "2:4Gi",
+        "2.25:4.5Gi",
+        "2.5:5Gi",
+        "2.75:5.5Gi",
+        "3:6Gi",
+        "3.25:6.5Gi",
+        "3.5:7Gi",
+        "3.75:7.5Gi",
+        "4:8Gi",
+      ], "${var.cpu}:${var.memory}")
+      error_message = "cpu and memory must use a supported Azure Container Apps Consumption workload combination."
+    }
+
+    precondition {
+      condition = alltrue([
+        for env in var.env_vars : env.secret_name == null || contains(
+          [for secret in var.secrets : secret.name],
+          env.secret_name,
+        )
+      ])
+      error_message = "Every secret-backed environment variable must reference a name defined in secrets."
+    }
+
+    precondition {
+      condition     = length(var.registries) == 0 || strcontains(coalesce(var.identity_type, ""), "UserAssigned")
+      error_message = "Registry authentication requires a UserAssigned identity_type."
+    }
+
     precondition {
       condition = alltrue([
         for registry in var.registries : contains(var.identity_ids, registry.identity)

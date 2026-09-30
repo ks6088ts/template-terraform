@@ -33,6 +33,11 @@ output "project_principal_id" {
   value       = azapi_resource.project.output.identity.principalId
 }
 
+output "project_internal_id" {
+  description = "The internal ID used by Microsoft Foundry for project-scoped backing resources"
+  value       = try(azapi_resource.project.output.properties.internalId, null)
+}
+
 output "project_name" {
   description = "The name of the Microsoft Foundry project"
   value       = azapi_resource.project.name

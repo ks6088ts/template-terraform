@@ -42,7 +42,7 @@ locals {
 
 module "azure_ai_search" {
   source = "../../modules/azure/ai_search"
-  count  = var.deploy_standard_agent ? 1 : 0
+  count  = var.enable_standard_setup ? 1 : 0
 
   name                         = "aisearch${local.resource_suffix}"
   resource_group_name          = module.resource_group.name
@@ -59,7 +59,7 @@ module "azure_ai_search" {
 
 module "blob_storage" {
   source = "../../modules/azure/storage"
-  count  = var.deploy_standard_agent ? 1 : 0
+  count  = var.enable_standard_setup ? 1 : 0
 
   name                            = local.resource_name
   storage_account_name            = local.blob_storage_account_name
@@ -88,12 +88,14 @@ module "blob_storage" {
 module "microsoft_foundry" {
   source = "../../modules/azure/microsoft_foundry"
 
-  name               = local.microsoft_foundry_name
-  resource_group_id  = module.resource_group.id
-  location           = var.location
-  tags               = var.tags
-  disable_local_auth = true
-  model_deployments  = var.model_deployments
+  name                 = local.microsoft_foundry_name
+  resource_group_id    = module.resource_group.id
+  location             = var.location
+  tags                 = var.tags
+  disable_local_auth   = true
+  project_display_name = "Microsoft Foundry Standard setup"
+  project_description  = "Keyless Standard setup and Foundry IQ sample project"
+  model_deployments    = var.model_deployments
 
   # The destroy-only purge action must outlive the Foundry account.
   depends_on = [

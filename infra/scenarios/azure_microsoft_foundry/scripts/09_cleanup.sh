@@ -6,6 +6,9 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/_common.sh"
 
+: "${CLEANUP_TIMEOUT_SECONDS:=300}"
+: "${POLL_INTERVAL_SECONDS:=10}"
+
 [ "${CONFIRM_CLEANUP:-}" = "delete-foundry-iq-resources" ] \
   || die "Set CONFIRM_CLEANUP=delete-foundry-iq-resources to delete the script-created resources."
 
@@ -18,6 +21,8 @@ validate_resource_name KNOWLEDGE_SOURCE_NAME "$KNOWLEDGE_SOURCE_NAME"
 validate_resource_name KNOWLEDGE_BASE_NAME "$KNOWLEDGE_BASE_NAME"
 validate_resource_name PROJECT_CONNECTION_NAME "$PROJECT_CONNECTION_NAME"
 validate_resource_name AGENT_NAME "$AGENT_NAME"
+validate_positive_integer CLEANUP_TIMEOUT_SECONDS "$CLEANUP_TIMEOUT_SECONDS"
+validate_positive_integer POLL_INTERVAL_SECONDS "$POLL_INTERVAL_SECONDS"
 
 FOUNDRY_TOKEN=$(get_access_token "https://ai.azure.com/.default")
 ARM_TOKEN=$(get_access_token "https://management.azure.com/.default")
@@ -30,7 +35,7 @@ delete_allow_not_found() {
   http_request "$@"
   case "$HTTP_STATUS" in
     200|202|204)
-      log "Deleted ${DELETE_LABEL}."
+      log "Delete accepted: ${DELETE_LABEL}."
       ;;
     404)
       log "Already absent: ${DELETE_LABEL}."
@@ -41,6 +46,49 @@ delete_allow_not_found() {
       ;;
   esac
 }
+
+wait_for_search_resource_absent() {
+  WAIT_LABEL=$1
+  WAIT_URL=$2
+  WAIT_START_EPOCH=$(date +%s)
+
+  while :; do
+    http_request \
+      --request GET \
+      "$WAIT_URL" \
+      --header "Authorization: Bearer ${SEARCH_TOKEN}" \
+      --header "Accept: application/json"
+
+    case "$HTTP_STATUS" in
+      404)
+        log "Confirmed absent: ${WAIT_LABEL}."
+        return 0
+        ;;
+      200)
+        ;;
+      *)
+        print_http_body >&2
+        die "Failed while checking deletion of ${WAIT_LABEL}; HTTP status ${HTTP_STATUS}."
+        ;;
+    esac
+
+    WAIT_NOW_EPOCH=$(date +%s)
+    WAIT_ELAPSED_SECONDS=$((WAIT_NOW_EPOCH - WAIT_START_EPOCH))
+    if [ "$WAIT_ELAPSED_SECONDS" -ge "$CLEANUP_TIMEOUT_SECONDS" ]; then
+      die "Timed out after ${CLEANUP_TIMEOUT_SECONDS} seconds waiting for ${WAIT_LABEL} deletion."
+    fi
+    sleep "$POLL_INTERVAL_SECONDS"
+  done
+}
+
+if [ -n "${CONVERSATION_ID:-}" ]; then
+  ENCODED_CONVERSATION_ID=$(url_encode "$CONVERSATION_ID")
+  delete_allow_not_found "Foundry conversation ${CONVERSATION_ID}" \
+    --request DELETE \
+    "${PROJECT_ENDPOINT}/openai/v1/conversations/${ENCODED_CONVERSATION_ID}" \
+    --header "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+    --header "Accept: application/json"
+fi
 
 ENCODED_AGENT_NAME=$(url_encode "$AGENT_NAME")
 delete_allow_not_found "Foundry agent ${AGENT_NAME}" \
@@ -56,17 +104,21 @@ delete_allow_not_found "Foundry project connection ${PROJECT_CONNECTION_NAME}" \
   --header "Authorization: Bearer ${ARM_TOKEN}" \
   --header "Accept: application/json"
 
+KNOWLEDGE_BASE_URL="${SEARCH_ENDPOINT}/knowledgebases('${KNOWLEDGE_BASE_NAME}')?api-version=${SEARCH_API_VERSION}"
 delete_allow_not_found "knowledge base ${KNOWLEDGE_BASE_NAME}" \
   --request DELETE \
-  "${SEARCH_ENDPOINT}/knowledgebases('${KNOWLEDGE_BASE_NAME}')?api-version=${SEARCH_API_VERSION}" \
+  "$KNOWLEDGE_BASE_URL" \
   --header "Authorization: Bearer ${SEARCH_TOKEN}" \
   --header "Accept: application/json"
+wait_for_search_resource_absent "knowledge base ${KNOWLEDGE_BASE_NAME}" "$KNOWLEDGE_BASE_URL"
 
+KNOWLEDGE_SOURCE_URL="${SEARCH_ENDPOINT}/knowledgesources('${KNOWLEDGE_SOURCE_NAME}')?api-version=${SEARCH_API_VERSION}"
 delete_allow_not_found "knowledge source ${KNOWLEDGE_SOURCE_NAME}" \
   --request DELETE \
-  "${SEARCH_ENDPOINT}/knowledgesources('${KNOWLEDGE_SOURCE_NAME}')?api-version=${SEARCH_API_VERSION}" \
+  "$KNOWLEDGE_SOURCE_URL" \
   --header "Authorization: Bearer ${SEARCH_TOKEN}" \
   --header "Accept: application/json"
+wait_for_search_resource_absent "knowledge source ${KNOWLEDGE_SOURCE_NAME}" "$KNOWLEDGE_SOURCE_URL"
 
 ENCODED_BLOB_NAME=$(url_encode "$BLOB_NAME")
 delete_allow_not_found "Blob ${BLOB_NAME}" \

@@ -25,7 +25,7 @@ provider authentication, and remote state guidance.
 | [azure_cosmosdb_playground](./infra/scenarios/azure_cosmosdb_playground/README.md) | Explores Cosmos DB NoSQL CRUD, TTL, change feed, vector/full-text/hybrid search, and Foundry-backed RAG. |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.md) | Deploys Azure data stores, including Cosmos DB, Storage, Key Vault, PostgreSQL, and Monitor, with public access for testing. |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.md) | Deploys Python Functions on Flex Consumption with Microsoft Entra and function-key authentication, managed-identity Storage, and OpenTelemetry observability in Application Insights. |
-| [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Deploys the Azure infrastructure required to run Microsoft Foundry workloads. |
+| [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Deploys a keyless Foundry Standard setup and verifies Foundry IQ retrieval with an MCP-enabled prompt agent. |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.md) | Deploys a spoke network for an Azure hub-and-spoke architecture with a VNet, Bastion, private Storage endpoint, and VM. |
 | [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.md) | Deploys the azure_inclusive_ai_labs API and its VOICEVOX-powered speech synthesis services on Azure Container Apps. |
 | [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.md) | Deploys a cost-conscious Azure Container Registry and Azure Kubernetes Service environment without private networking. |

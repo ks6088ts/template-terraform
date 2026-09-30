@@ -4,8 +4,9 @@ resource "azapi_resource" "account" {
   location = var.location
   tags     = var.tags
 
-  type                      = "Microsoft.CognitiveServices/accounts@2025-06-01"
-  parent_id                 = var.resource_group_id
+  type      = "Microsoft.CognitiveServices/accounts@2026-07-01"
+  parent_id = var.resource_group_id
+  # AzAPI 2.13 doesn't yet embed the documented 2026-07-01 Foundry ARM schemas.
   schema_validation_enabled = false
 
   body = {
@@ -18,14 +19,11 @@ resource "azapi_resource" "account" {
     }
 
     properties = {
-      # Support both Entra ID and API Key authentication for Cognitive Services account
-      disableLocalAuth = var.disable_local_auth
-
-      # Specifies that this is an AI Foundry resource
-      allowProjectManagement = true
-
-      # Set custom subdomain name for DNS names created for this Foundry resource
-      customSubDomainName = var.name
+      allowProjectManagement        = true
+      customSubDomainName           = var.name
+      disableLocalAuth              = var.disable_local_auth
+      publicNetworkAccess           = "Enabled"
+      restrictOutboundNetworkAccess = false
     }
   }
 }
@@ -36,11 +34,12 @@ resource "azapi_resource" "project" {
   location = var.location
   tags     = var.tags
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects@2025-06-01"
+  type                      = "Microsoft.CognitiveServices/accounts/projects@2026-07-01"
   parent_id                 = azapi_resource.account.id
   schema_validation_enabled = false
   response_export_values = [
     "identity.principalId",
+    "properties.internalId",
   ]
   body = {
     sku = {
@@ -62,13 +61,10 @@ resource "azapi_resource" "project" {
 resource "azapi_resource" "deployment" {
   for_each = { for d in var.model_deployments : d.name => d }
 
-  name      = each.value.name
-  type      = "Microsoft.CognitiveServices/accounts/deployments@2023-05-01"
-  parent_id = azapi_resource.account.id
-
-  depends_on = [
-    azapi_resource.account
-  ]
+  name                      = each.value.name
+  type                      = "Microsoft.CognitiveServices/accounts/deployments@2026-07-01"
+  parent_id                 = azapi_resource.account.id
+  schema_validation_enabled = false
 
   body = {
     sku = {
@@ -81,6 +77,11 @@ resource "azapi_resource" "deployment" {
         name    = each.value.model
         version = each.value.version
       }
+      versionUpgradeOption = each.value.version_upgrade_option
     }
   }
+
+  replace_triggers_refs = [
+    "body.properties.model",
+  ]
 }

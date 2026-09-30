@@ -77,6 +77,17 @@ variable "target_port" {
   default     = 80
 }
 
+variable "health_probe_path" {
+  description = "HTTP path used for startup, liveness, and readiness probes. Set to null to use the Container Apps default TCP probes."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.health_probe_path == null || startswith(coalesce(var.health_probe_path, "/"), "/")
+    error_message = "health_probe_path must start with '/' or be null."
+  }
+}
+
 variable "container_command" {
   description = "Command to run in the container (overrides the image entrypoint)"
   type        = list(string)

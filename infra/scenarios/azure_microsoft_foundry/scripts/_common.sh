@@ -15,11 +15,12 @@ SCENARIO_DIR=$(CDPATH='' cd "${SCRIPT_DIR}/.." && pwd)
 : "${AGENT_MODEL:=gpt-5.4-mini}"
 : "${EMBEDDING_DEPLOYMENT:=text-embedding-3-large}"
 : "${EMBEDDING_MODEL:=text-embedding-3-large}"
-: "${SEARCH_API_VERSION:=2026-05-01-preview}"
+: "${SEARCH_API_VERSION:=2026-08-01-preview}"
 : "${PROJECT_CONNECTION_API_VERSION:=2025-10-01-preview}"
 : "${AGENT_API_VERSION:=v1}"
-: "${STORAGE_API_VERSION:=2023-11-03}"
+: "${STORAGE_API_VERSION:=2026-04-06}"
 : "${VERBOSE_OUTPUT:=false}"
+: "${KEEP_CONVERSATION:=false}"
 
 HTTP_BODY_FILE=""
 HTTP_STATUS=""
@@ -107,7 +108,7 @@ load_terraform_outputs() {
 require_value() {
   VALUE_LABEL=$1
   VALUE_CONTENT=$2
-  [ -n "$VALUE_CONTENT" ] || die "Terraform output is empty: ${VALUE_LABEL}. Apply with deploy_standard_agent=true first."
+  [ -n "$VALUE_CONTENT" ] || die "Terraform output is empty: ${VALUE_LABEL}. Apply with enable_standard_setup=true first."
 }
 
 require_standard_agent_outputs() {
@@ -210,4 +211,13 @@ validate_positive_integer() {
     ''|*[!0-9]*) die "${INTEGER_LABEL} must be a positive integer: ${INTEGER_VALUE}" ;;
   esac
   [ "$INTEGER_VALUE" -gt 0 ] || die "${INTEGER_LABEL} must be greater than zero."
+}
+
+validate_boolean() {
+  BOOLEAN_LABEL=$1
+  BOOLEAN_VALUE=$2
+  case "$BOOLEAN_VALUE" in
+    true|false) ;;
+    *) die "${BOOLEAN_LABEL} must be true or false: ${BOOLEAN_VALUE}" ;;
+  esac
 }

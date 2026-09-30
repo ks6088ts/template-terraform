@@ -21,6 +21,7 @@ ACR_LOGIN_SERVER=""
 AZURE_SUBSCRIPTION_ID=""
 CONTAINER_APP_URL=""
 AUTHENTICATION_IDENTIFIER_URI=""
+APPLICATION_INSIGHTS_APP_ID=""
 IMAGE_TAG_REFERENCE=""
 
 log() {
@@ -63,6 +64,7 @@ load_terraform_outputs() {
   ACR_LOGIN_SERVER=$(terraform_output_value acr_login_server)
   CONTAINER_APP_URL=$(terraform_output_value container_app_url)
   AUTHENTICATION_IDENTIFIER_URI=$(terraform_output_value container_app_authentication_identifier_uri)
+  APPLICATION_INSIGHTS_APP_ID=$(terraform_output_value application_insights_app_id)
 
   AZURE_SUBSCRIPTION_ID=""
   if [ -n "$ACR_ID" ]; then

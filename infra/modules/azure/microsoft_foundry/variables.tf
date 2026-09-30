@@ -20,7 +20,7 @@ variable "tags" {
 }
 
 variable "disable_local_auth" {
-  description = "Disable local authentication (API Key) for the Cognitive Services account"
+  description = "Disable key-based local authentication for the Microsoft Foundry account"
   type        = bool
   default     = false
 }
@@ -38,14 +38,39 @@ variable "project_description" {
 }
 
 variable "model_deployments" {
-  description = "Specifies the model deployments for Azure AI Foundry"
+  description = "Model deployments to create in the Microsoft Foundry account"
   type = list(object({
-    format   = optional(string, "OpenAI")
-    name     = string
-    model    = string
-    version  = string
-    sku_name = optional(string, "GlobalStandard")
-    capacity = number
+    format                 = optional(string, "OpenAI")
+    name                   = string
+    model                  = string
+    version                = string
+    sku_name               = optional(string, "GlobalStandard")
+    capacity               = number
+    version_upgrade_option = optional(string, "NoAutoUpgrade")
   }))
   default = []
+
+  validation {
+    condition     = length(var.model_deployments) == length(distinct([for deployment in var.model_deployments : deployment.name]))
+    error_message = "Model deployment names must be unique."
+  }
+
+  validation {
+    condition = alltrue([
+      for deployment in var.model_deployments :
+      deployment.capacity > 0 && floor(deployment.capacity) == deployment.capacity
+    ])
+    error_message = "Model deployment capacity must be a positive integer measured in thousands of tokens per minute."
+  }
+
+  validation {
+    condition = alltrue([
+      for deployment in var.model_deployments :
+      contains(
+        ["NoAutoUpgrade", "OnceCurrentVersionExpired", "OnceNewDefaultVersionAvailable"],
+        deployment.version_upgrade_option,
+      )
+    ])
+    error_message = "version_upgrade_option must be NoAutoUpgrade, OnceCurrentVersionExpired, or OnceNewDefaultVersionAvailable."
+  }
 }

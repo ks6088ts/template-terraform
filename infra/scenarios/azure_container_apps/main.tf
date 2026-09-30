@@ -183,6 +183,9 @@ locals {
   application_insights_env_vars = var.enable_application_insights ? [{
     name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
     secret_name = local.application_insights_secret_name
+    }, {
+    name  = "OTEL_SERVICE_NAME"
+    value = "app-${local.resource_name}"
   }] : []
 
   authentication = var.enable_authentication ? {
@@ -208,6 +211,7 @@ module "container_apps" {
   min_replicas               = var.min_replicas
   max_replicas               = var.max_replicas
   target_port                = var.container_port
+  health_probe_path          = var.health_probe_path
   env_vars                   = concat(local.application_insights_env_vars, var.env_vars)
   secrets                    = concat(local.application_insights_secrets, var.secrets)
   authentication             = local.authentication
