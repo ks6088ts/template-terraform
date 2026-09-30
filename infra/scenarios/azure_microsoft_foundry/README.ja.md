@@ -1,26 +1,29 @@
 ---
-description: Keyless な Microsoft Foundry Standard setup をデプロイし、Foundry IQ Prompt Agent を検証する
+description: 最小の Microsoft Foundry をデプロイし、任意で keyless Standard setup と Foundry IQ workflow を有効化する
 ---
 
 # Azure Microsoft Foundry シナリオ
 
-このシナリオは、Azure に Microsoft Foundry account と project を 1 つずつデプロイします。リポジトリに
-含まれる構成では、利用者管理の Storage、Azure AI Search、Cosmos DB を使う public endpoint の
-[Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)を
-有効にします。Local key は無効化し、Microsoft Entra ID、managed identity、Azure RBAC を使用します。
+既定では resource group、Microsoft Foundry account、project を 1 つずつ作成するだけです。明示的に
+有効化しない限り、model、Standard setup の data service、tracing、sample data はデプロイしません。
 
-Terraform の完了後、1 つの command で架空の飲食店レビューを upload し、次の経路全体を検証できます。
+任意の public endpoint
+[Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)は、
+利用者管理の Storage、Azure AI Search、Cosmos DB を追加します。Local key は無効化し、Microsoft Entra
+ID、managed identity、Azure RBAC を使用します。Sample model も選択すると、1 つの command で次の
+Foundry IQ 経路全体を検証できます。
 
 ```text
 Blob Storage -> Foundry IQ knowledge source -> knowledge base -> MCP connection
              -> Prompt Agent -> 参照付きの grounded answer
 ```
 
-任意の server-side tracing では OpenTelemetry span を workspace-based Application Insights に送信します。
+Server-side tracing は独立した opt-in で、OpenTelemetry span を workspace-based Application Insights
+へ送信します。
 
 > [!IMPORTANT]
-> これは学習用シナリオであり、production landing zone ではありません。Public endpoint と preview の
-> Foundry IQ、RemoteTool、identity-based tracing を使用します。デプロイ前に
+> 既定の最小構成は、後述する有料の Search、Storage、Cosmos DB、model、tracing resource を作成しません。
+> 任意の end-to-end workflow は学習用であり production landing zone ではありません。有効化前に
 > [境界とコスト](#境界とコスト)を確認してください。
 
 ## クイック スタート
@@ -28,16 +31,16 @@ Blob Storage -> Foundry IQ knowledge source -> knowledge base -> MCP connection
 ### 前提条件
 
 - Terraform **1.11 以降**
-- Azure CLI **2.50 以降**、`curl`、`jq`、POSIX 互換 shell
-- リソースと role assignment を作成できる Azure subscription
-- Foundry Agent Service、Foundry IQ、選択した 2 model をサポートする Japan East または別 region
-- 選択した SKU と capacity に十分な model quota
+- Azure CLI **2.50 以降**
+- Foundry account と project を作成できる Azure subscription
+- 任意 workflow では `curl`、`jq`、POSIX 互換 shell、role assignment 作成権限、対応 region、
+  十分な model quota
 
 共通の [Azure 認証](../../../docs/tips/provider-authentication.ja.md)と
 [Terraform workflow](../../../docs/tips/terraform-workflow.ja.md)に従ってください。既定 backend は
 このリポジトリ用の Azure Blob backend です。リポジトリ外で使う場合は変更してください。
 
-### 1. Sign-in と構成の確認
+### 1. 最小 Foundry environment のデプロイ
 
 ```bash
 az login
@@ -47,18 +50,47 @@ cd infra/scenarios/azure_microsoft_foundry
 terraform init
 terraform validate
 terraform plan
+terraform apply
 ```
 
-`operator_principal_id` は Terraform 実行 principal の object ID を既定で使用します。デプロイ後の script
-を別 principal が実行する場合だけ上書きします。
+既定 plan に含まれるのは resource group、Foundry account、project、destroy-time purge hook です。
+Model deployment、Standard setup、tracing resource は含まれません。
+
+### 2. 任意: Foundry IQ workflow の有効化
+
+デプロイする機能と model を指定する local `terraform.tfvars` を作成します。この file は repository で
+ignore されます。
+
+```hcl
+enable_standard_setup = true
+
+model_deployments = [
+  {
+    name                   = "gpt-5.4-mini"
+    model                  = "gpt-5.4-mini"
+    version                = "2026-03-17"
+    capacity               = 100
+    version_upgrade_option = "NoAutoUpgrade"
+  },
+  {
+    name                   = "text-embedding-3-large"
+    model                  = "text-embedding-3-large"
+    version                = "1"
+    capacity               = 30
+    version_upgrade_option = "NoAutoUpgrade"
+  },
+]
+```
+
+Model の提供状況、version、capacity 増分、quota は region と subscription に依存します。Apply 前に
+確認してください。Capacity の単位は 1,000 token/minute です。
+
+`operator_principal_id` は Terraform 実行 principal の object ID を既定で使用します。Script を別
+principal が実行する場合だけ上書きします。
 
 ```bash
 terraform plan -var="operator_principal_id=<entra-object-id>"
 ```
-
-Apply 前に model の提供状況と quota を確認してください。既定 capacity の単位は 1,000 token/minute です。
-
-### 2. Infrastructure のデプロイ
 
 Azure model deployment は同時作成時に競合する場合があるため、Terraform を逐次実行します。
 
@@ -67,7 +99,7 @@ terraform apply -parallelism=1
 terraform output
 ```
 
-### 3. End-to-end 検証
+### 3. 任意の end-to-end 検証
 
 ```bash
 ./scripts/run_all.sh
@@ -89,7 +121,7 @@ CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
 
 ### 4. Cleanup
 
-Script が作成した resource だけを削除します。
+任意 script を実行した場合は、最初に script が作成した data-plane resource だけを削除します。
 
 ```bash
 CONFIRM_CLEANUP=delete-foundry-iq-resources ./scripts/09_cleanup.sh
@@ -115,54 +147,54 @@ flowchart TD
     RG["Resource group"]
     Account["Microsoft Foundry account<br/>system identity / local auth 無効"]
     Project["Foundry project<br/>system identity"]
-    Chat["gpt-5.4-mini deployment"]
-    Embedding["text-embedding-3-large deployment"]
-    Search["Azure AI Search<br/>system identity / local auth 無効"]
-    Storage["StorageV2 / ZRS<br/>shared key 無効"]
-    Cosmos["Cosmos DB for NoSQL<br/>Session consistency / local auth 無効"]
-    AccountHost["Account capability host"]
-    ProjectHost["Project capability host"]
+    Chat["gpt-5.4-mini deployment<br/>opt-in"]
+    Embedding["text-embedding-3-large deployment<br/>opt-in"]
+    Search["Azure AI Search<br/>Standard setup opt-in"]
+    Storage["StorageV2 / ZRS<br/>Standard setup opt-in"]
+    Cosmos["Cosmos DB for NoSQL<br/>Standard setup opt-in"]
+    AccountHost["Account capability host<br/>opt-in"]
+    ProjectHost["Project capability host<br/>opt-in"]
     Insights["Application Insights + Log Analytics<br/>任意"]
     Scripts["Foundry IQ scripts"]
 
     Operator --> RG
     RG --> Account
     Account --> Project
-    Account --> Chat
-    Account --> Embedding
-    RG --> Search
-    RG --> Storage
-    RG --> Cosmos
-    Account --> AccountHost
-    Project --> ProjectHost
-    ProjectHost --> Search
-    ProjectHost --> Storage
-    ProjectHost --> Cosmos
-    Operator --> Scripts
-    Scripts --> Storage
-    Scripts --> Search
-    Scripts --> Project
-    Search --> Storage
-    Search --> Embedding
+    Account -.-> Chat
+    Account -.-> Embedding
+    RG -.-> Search
+    RG -.-> Storage
+    RG -.-> Cosmos
+    Account -.-> AccountHost
+    Project -.-> ProjectHost
+    ProjectHost -.-> Search
+    ProjectHost -.-> Storage
+    ProjectHost -.-> Cosmos
+    Operator -.-> Scripts
+    Scripts -.-> Storage
+    Scripts -.-> Search
+    Scripts -.-> Project
+    Search -.-> Storage
+    Search -.-> Embedding
     Project -. "trace" .-> Insights
 ```
 
-Terraform は Azure resource、connection、role assignment、capability host を管理します。Script が管理する
-のは sample Blob container/file、Search knowledge object、RemoteTool connection、Prompt Agent version、
-一時 conversation だけです。
+実線の Foundry account/project 経路が既定です。Model deployment、点線側の data service、connection、
+role、capability host、tracing は opt-in です。Script が管理するのは任意の sample Blob container/file、
+Search knowledge object、RemoteTool connection、Prompt Agent version、一時 conversation だけです。
 
-### 既定の model deployment
+### Sample 用 model deployment 例
 
-Workflow が使う model だけをデプロイします。
+`model_deployments` の既定値は `[]` です。任意 workflow の quick start では次の 2 model だけを使います。
 
 | Deployment / model | Version | SKU | Capacity | Version upgrade |
 | --- | --- | --- | ---: | --- |
 | `gpt-5.4-mini` | `2026-03-17` | `GlobalStandard` | 100 | `NoAutoUpgrade` |
 | `text-embedding-3-large` | `1` | `GlobalStandard` | 30 | `NoAutoUpgrade` |
 
-Model の提供状況、許容 capacity 増分、quota、Agent Service 互換性は region と subscription に依存します。
-必要に応じて `model_deployments` を上書きしてください。`GlobalStandard` は resource region 外で request を
-処理する場合があります。Data residency が必要な場合は data-zone または regional deployment type を
+これらは例であり暗黙の既定値ではありません。Model の提供状況、許容 capacity 増分、quota、Agent
+Service 互換性は region と subscription に依存します。`GlobalStandard` は resource region 外で request
+を処理する場合があります。Data residency が必要な場合は data-zone または regional deployment type を
 使用してください。
 
 ### 主な input
@@ -170,15 +202,15 @@ Model の提供状況、許容 capacity 増分、quota、Agent Service 互換性
 | Input | Default | 用途 |
 | --- | --- | --- |
 | `location` | `japaneast` | Azure region |
-| `enable_standard_setup` | `true` | 利用者管理の Search、Storage、Cosmos DB、connection、capability host を作成 |
+| `enable_standard_setup` | `false` | 利用者管理の Search、Storage、Cosmos DB、connection、capability host を作成 |
 | `azure_ai_search_sku` | `standard` | Search tier。`basic` とサポート対象の上位 tier を指定可能 |
 | `enable_tracing` | `false` | Entra-only Application Insights tracing を追加 |
 | `operator_principal_id` | Terraform principal | Script 実行を許可する principal |
 | `enable_operator_cosmosdb_read_access` | `false` | `enterprise_memory` の read-only 調査権限を追加 |
-| `model_deployments` | 上記 2 行 | Model、version、SKU、capacity、upgrade 動作 |
+| `model_deployments` | `[]` | 任意の model、version、SKU、capacity、upgrade 動作 |
 
-既定値ではシナリオ全体を構築します。Foundry account、project、model deployment だけが必要な場合は、
-自身の variable file で `enable_standard_setup = false` を指定します。
+既定では Foundry account と project だけを作成します。Standard setup、model、tracing、Operator の
+Cosmos 調査権限は、それぞれ明示 input が必要です。
 
 `deploy_standard_agent` は削除しました。既存 variable file は次のように変更してください。
 
@@ -196,9 +228,9 @@ Script は `terraform output -json` を自動的に読み取ります。利用�
 
 - Foundry account 名と OpenAI endpoint
 - Foundry project 名、resource ID、project endpoint
-- Model deployment ID
-- Search、Storage、Cosmos DB の名前と endpoint
-- Capability host と project connection の ID
+- 任意の model deployment ID（既定は空）
+- 任意の Search、Storage、Cosmos DB の名前と endpoint
+- 任意の capability host と project connection の ID
 - 任意の Log Analytics と Application Insights の ID
 
 Endpoint は公開 resource identifier であり credential ではありません。Terraform state や診断 output 全体を
@@ -214,7 +246,7 @@ Endpoint は公開 resource identifier であり credential ではありませ�
 - Tracing は `ProjectManagedIdentity` と local authentication 無効の Application Insights を使用
 - Script は ARM、Storage、Search、Foundry ごとに Azure CLI token を取得
 
-主な role assignment は次のとおりです。
+次の role assignment は Standard setup を有効にした場合だけ作成します。
 
 | Assignee | Scope | Role |
 | --- | --- | --- |
@@ -238,9 +270,9 @@ Reader です。Agent state には prompt、response、conversation state、Agen
 
 ## Standard setup の互換性
 
-このシナリオは stable ARM API `2026-07-01` の account/project capability host を使用します。Microsoft は
-現在 `capabilitySettings` を推奨していますが、この preview は現時点で UK South と Canada Central に
-限定されています。既定の Japan East では capability host がサポート対象経路です。
+Standard setup を有効にすると、stable ARM API `2026-07-01` の account/project capability host を
+使用します。Microsoft は現在 `capabilitySettings` を推奨していますが、この preview は現時点で
+UK South と Canada Central に限定されています。Japan East では capability host がサポート対象経路です。
 
 AzAPI 2.13 は `2026-07-01` schema をまだ内蔵していないため、公式に記載されたこれらの Foundry ARM
 resource だけ embedded provider validation を無効化しています。Provider schema が追従するまで Terraform
@@ -259,6 +291,9 @@ Project identity は次の利用者管理 resource にアクセスします。
 Connection は secret を保持しないため Key Vault は作成しません。Private endpoint と BYO VNet も対象外です。
 
 ## Foundry IQ / Prompt Agent workflow
+
+この workflow には `enable_standard_setup = true`、互換性のある chat deployment、embedding deployment が
+必要です。既定の最小構成では実行できません。
 
 ### 主 command
 
@@ -337,15 +372,18 @@ access 要件を適用してください。
 
 ## 境界とコスト
 
-- Public endpoint を有効にします。Microsoft Entra 認証は key を排除しますが network traffic を分離しません。
-- Search は既定で Standard/S1、1 replica です。Sample には十分ですが query SLA はありません。Public
-  keyless path では Basic も指定できます。Private Blob execution に必要な S2 以上は対象外です。
+- Foundry account/project は public endpoint を使います。任意の Standard setup service も public
+  endpoint を使います。Microsoft Entra 認証は key を排除しますが network traffic を分離しません。
+- Standard setup を有効にした場合、上書きしなければ Search は Standard/S1、1 replica です。Sample には
+  十分ですが query SLA はありません。Public keyless path では Basic も指定できます。Private Blob
+  execution に必要な S2 以上は対象外です。
 - Semantic ranker と agentic retrieval は別々の月次無料枠から開始します。無料枠を超えると、それぞれの
   Standard pay-as-you-go plan を有効にしない限り billing error になります。
-- Cosmos DB は provisioned throughput を使います。Microsoft の account 最低要件は 3,000 RU/s です。
-  New runtime は 1,000 RU/s container を 2 つ使い、classic compatibility ではさらに 3 つ追加されるため、
-  両方を使う場合は project ごとに最大 5,000 RU/s を想定します。
-- Storage、Search、Cosmos DB、model token、trace ingestion/retention に料金が発生する可能性があります。
+- 任意の Cosmos DB は provisioned throughput を使います。Microsoft の account 最低要件は 3,000 RU/s
+  です。New runtime は 1,000 RU/s container を 2 つ使い、classic compatibility ではさらに 3 つ
+  追加されるため、両方を使う場合は project ごとに最大 5,000 RU/s を想定します。
+- 最小構成でも Foundry account/project に該当する料金が発生する場合があります。任意の Storage、Search、
+  Cosmos DB、model token、trace ingestion/retention は追加料金になります。
 - Private network、Key Vault/CMK、alert、dashboard、application UI、document-level ACL passthrough、
   application 固有の Responsible AI/evaluation test は対象外です。
 

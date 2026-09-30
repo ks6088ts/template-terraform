@@ -84,23 +84,20 @@ mock_provider "random" {
   }
 }
 
-run "standard_setup_disabled" {
+run "minimal_foundry_by_default" {
   command = plan
-
-  variables {
-    enable_standard_setup = false
-    enable_tracing        = false
-    model_deployments     = []
-  }
 
   assert {
     condition = alltrue([
       length(module.azure_ai_search) == 0,
       length(module.blob_storage) == 0,
       length(module.cosmosdb) == 0,
+      length(module.log_analytics) == 0,
+      length(module.application_insights) == 0,
       length(azapi_resource.azure_ai_search_connection) == 0,
       length(azapi_resource.blob_storage_connection) == 0,
       length(azapi_resource.cosmosdb_connection) == 0,
+      length(azapi_resource.application_insights_connection) == 0,
       length(azapi_resource.account_capability_host) == 0,
       length(azapi_resource.project_capability_host) == 0,
     ])
@@ -124,6 +121,8 @@ run "standard_setup_disabled" {
       length(azurerm_role_assignment.operator_foundry_project_manager) == 0,
       length(azurerm_role_assignment.operator_cosmos_db_reader) == 0,
       length(azurerm_role_assignment.cosmos_db_operator) == 0,
+      length(azurerm_role_assignment.monitoring_metrics_publisher) == 0,
+      length(azurerm_role_assignment.operator_log_analytics_reader) == 0,
       length(azurerm_cosmosdb_sql_role_assignment.cosmos_data_contributor) == 0,
       length(azurerm_cosmosdb_sql_role_assignment.operator_cosmos_data_reader) == 0,
     ])
@@ -137,6 +136,10 @@ run "standard_setup_disabled" {
       output.cosmosdb_account_id == null,
       output.account_capability_host_id == null,
       output.project_capability_host_id == null,
+      output.microsoft_foundry_deployment_ids == {},
+      output.log_analytics_workspace_id == null,
+      output.application_insights_id == null,
+      output.application_insights_connection_id == null,
     ])
     error_message = "Standard setup outputs must be null when disabled."
   }
@@ -280,6 +283,10 @@ run "standard_setup_enabled" {
       azurerm_role_assignment.storage_account_contributor[0].role_definition_name == "Storage Account Contributor",
       azurerm_role_assignment.storage_blob_data_contributor[0].role_definition_name == "Storage Blob Data Contributor",
       azurerm_role_assignment.storage_blob_data_owner[0].role_definition_name == "Storage Blob Data Owner",
+      azurerm_role_assignment.storage_blob_data_contributor[0].condition_version == "2.0",
+      azurerm_role_assignment.storage_blob_data_owner[0].condition_version == "2.0",
+      !strcontains(azurerm_role_assignment.storage_blob_data_contributor[0].condition, "ActionMatches"),
+      !strcontains(azurerm_role_assignment.storage_blob_data_owner[0].condition, "ActionMatches"),
       strcontains(azurerm_role_assignment.storage_blob_data_contributor[0].condition, "11111111-2222-3333-4444-555555555555-"),
       strcontains(azurerm_role_assignment.storage_blob_data_contributor[0].condition, "*-azureml-blobstore"),
       strcontains(azurerm_role_assignment.storage_blob_data_owner[0].condition, "*-agents-blobstore"),
@@ -403,7 +410,7 @@ run "standard_setup_rejects_free_search" {
   ]
 }
 
-run "default_models_are_minimal" {
+run "models_disabled_by_default" {
   command = plan
 
   variables {
@@ -412,15 +419,41 @@ run "default_models_are_minimal" {
 
   assert {
     condition = alltrue([
+      length(var.model_deployments) == 0,
+      output.microsoft_foundry_deployment_ids == {},
+    ])
+    error_message = "The default configuration must not deploy any models."
+  }
+}
+
+run "sample_models_enabled_explicitly" {
+  command = plan
+
+  variables {
+    enable_standard_setup = false
+    model_deployments = [
+      {
+        name                   = "gpt-5.4-mini"
+        model                  = "gpt-5.4-mini"
+        version                = "2026-03-17"
+        capacity               = 100
+        version_upgrade_option = "NoAutoUpgrade"
+      },
+      {
+        name                   = "text-embedding-3-large"
+        model                  = "text-embedding-3-large"
+        version                = "1"
+        capacity               = 30
+        version_upgrade_option = "NoAutoUpgrade"
+      },
+    ]
+  }
+
+  assert {
+    condition = alltrue([
       length(var.model_deployments) == 2,
-      var.model_deployments[0].name == "gpt-5.4-mini",
-      var.model_deployments[0].capacity == 100,
-      var.model_deployments[0].version_upgrade_option == "NoAutoUpgrade",
-      var.model_deployments[1].name == "text-embedding-3-large",
-      var.model_deployments[1].capacity == 30,
-      var.model_deployments[1].version_upgrade_option == "NoAutoUpgrade",
       toset(keys(output.microsoft_foundry_deployment_ids)) == toset(["gpt-5.4-mini", "text-embedding-3-large"]),
     ])
-    error_message = "The default configuration must deploy only the chat and embedding models used by the workflow."
+    error_message = "The Foundry IQ sample models must be created only when explicitly configured."
   }
 }

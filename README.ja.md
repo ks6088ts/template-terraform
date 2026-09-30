@@ -25,7 +25,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | [azure_cosmosdb_playground](./infra/scenarios/azure_cosmosdb_playground/README.ja.md) | Cosmos DB NoSQL の CRUD、TTL、変更フィード、ベクトル・全文・ハイブリッド検索、Foundry を使った RAG を体験します。 |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.ja.md) | Cosmos DB、Storage、Key Vault、PostgreSQL、Monitor などの Azure データストアを、テスト用のパブリックアクセスを許可してデプロイします。 |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.ja.md) | Python Functions を Flex Consumption にデプロイし、Microsoft Entra 認証と Function Key 認証、マネージド ID による Storage アクセス、Application Insights 上の OpenTelemetry オブザーバビリティを検証します。 |
-| [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.ja.md) | Keyless な Foundry Standard setup をデプロイし、MCP 対応 Prompt Agent で Foundry IQ retrieval を検証します。 |
+| [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.ja.md) | 最小の Foundry account/project をデプロイし、任意で keyless Standard setup と Foundry IQ 検証を追加します。 |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.ja.md) | Azure ハブアンドスポークアーキテクチャ用のスポークネットワークとして、VNet、Bastion、Storage のプライベートエンドポイント、VM をデプロイします。 |
 | [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.ja.md) | Azure Container Apps 上に azure_inclusive_ai_labs API と VOICEVOX を使用した音声合成サービスをデプロイします。 |
 | [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.ja.md) | 閉域構成を使用せず、コストを抑えた Azure Container Registry と Azure Kubernetes Service の環境をデプロイします。 |

@@ -24,7 +24,7 @@ variable "tags" {
 variable "enable_standard_setup" {
   description = "Deploy the customer-managed data services and capability hosts required for Microsoft Foundry Standard setup"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_tracing" {
@@ -62,7 +62,7 @@ variable "enable_operator_cosmosdb_read_access" {
 }
 
 variable "model_deployments" {
-  description = "Model deployments required by the Foundry IQ ingestion and prompt-agent workflow"
+  description = "Optional model deployments to create in the Microsoft Foundry account"
   type = list(object({
     format                 = optional(string, "OpenAI")
     name                   = string
@@ -72,20 +72,5 @@ variable "model_deployments" {
     capacity               = number
     version_upgrade_option = optional(string, "NoAutoUpgrade")
   }))
-  default = [
-    {
-      name                   = "gpt-5.4-mini"
-      model                  = "gpt-5.4-mini"
-      version                = "2026-03-17"
-      capacity               = 100
-      version_upgrade_option = "NoAutoUpgrade"
-    },
-    {
-      name                   = "text-embedding-3-large"
-      model                  = "text-embedding-3-large"
-      version                = "1"
-      capacity               = 30
-      version_upgrade_option = "NoAutoUpgrade"
-    }
-  ]
+  default = []
 }

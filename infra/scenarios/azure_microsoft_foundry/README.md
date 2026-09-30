@@ -1,45 +1,48 @@
 ---
-description: Deploy a keyless Microsoft Foundry Standard setup and verify a Foundry IQ prompt-agent workflow
+description: Deploy a minimal Microsoft Foundry account and optionally enable a keyless Standard setup and Foundry IQ workflow
 ---
 
 # Azure Microsoft Foundry scenario
 
-This scenario deploys one Microsoft Foundry account and project in Azure. The checked-in
-configuration enables a public-endpoint [Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)
-with customer-managed Storage, Azure AI Search, and Cosmos DB. Local keys are disabled; Microsoft
-Entra ID, managed identities, and Azure RBAC are used instead.
+By default, this scenario deploys only a resource group, one Microsoft Foundry account, and one
+project. It doesn't deploy models, Standard setup data services, tracing, or sample data unless
+those features are explicitly enabled.
 
-After Terraform completes, one command uploads fictional restaurant-review data and verifies the
-complete path:
+The optional public-endpoint
+[Standard setup](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup)
+adds customer-managed Storage, Azure AI Search, and Cosmos DB. Local keys are disabled; Microsoft
+Entra ID, managed identities, and Azure RBAC are used instead. After also selecting the sample
+models, one command verifies the complete Foundry IQ path:
 
 ```text
 Blob Storage -> Foundry IQ knowledge source -> knowledge base -> MCP connection
              -> prompt agent -> grounded answer with references
 ```
 
-Optional server-side tracing sends OpenTelemetry spans to workspace-based Application Insights.
+Server-side tracing is a separate opt-in and sends OpenTelemetry spans to workspace-based
+Application Insights.
 
 > [!IMPORTANT]
-> This is a learning scenario, not a production landing zone. It uses public endpoints and preview
-> Foundry IQ, RemoteTool, and identity-based tracing features. Review the
-> [boundaries](#boundaries-and-cost) before deploying.
+> The default minimal deployment doesn't create the chargeable Search, Storage, Cosmos DB, model,
+> or tracing resources described below. The optional end-to-end workflow is a learning scenario,
+> not a production landing zone; review [boundaries and cost](#boundaries-and-cost) before enabling
+> it.
 
 ## Quick start
 
 ### Prerequisites
 
 - Terraform **1.11 or later**
-- Azure CLI **2.50 or later**, `curl`, `jq`, and a POSIX-compatible shell
-- An Azure subscription in which you can create resources and role assignments
-- Japan East or another region that supports Foundry Agent Service, Foundry IQ, and both selected
-  model deployments
-- Sufficient model quota for the selected SKU and capacities
+- Azure CLI **2.50 or later**
+- An Azure subscription in which you can create the Foundry account and project
+- For the optional workflow: `curl`, `jq`, a POSIX-compatible shell, role-assignment permissions,
+  a supported region, and sufficient model quota
 
 Use the common [Azure authentication](../../../docs/tips/provider-authentication.md) and
 [Terraform workflow](../../../docs/tips/terraform-workflow.md) guidance. The default backend is the
 repository's Azure Blob backend; adapt it before use outside this repository.
 
-### 1. Sign in and review the configuration
+### 1. Deploy the minimal Foundry environment
 
 ```bash
 az login
@@ -49,19 +52,47 @@ cd infra/scenarios/azure_microsoft_foundry
 terraform init
 terraform validate
 terraform plan
+terraform apply
 ```
 
+The default plan contains the resource group, Foundry account, project, and destroy-time purge
+hook. Model deployments and all Standard setup/tracing resources are absent.
+
+### 2. Optional: enable the Foundry IQ workflow
+
+Create a local `terraform.tfvars` (ignored by this repository) with the features and models you
+intend to deploy:
+
+```hcl
+enable_standard_setup = true
+
+model_deployments = [
+  {
+    name                   = "gpt-5.4-mini"
+    model                  = "gpt-5.4-mini"
+    version                = "2026-03-17"
+    capacity               = 100
+    version_upgrade_option = "NoAutoUpgrade"
+  },
+  {
+    name                   = "text-embedding-3-large"
+    model                  = "text-embedding-3-large"
+    version                = "1"
+    capacity               = 30
+    version_upgrade_option = "NoAutoUpgrade"
+  },
+]
+```
+
+Model availability, versions, capacity increments, and quota vary by region and subscription.
+Review these values before applying. Capacity is measured in thousands of tokens per minute.
+
 `operator_principal_id` defaults to the object ID used by Terraform. Override it only when the
-principal running the post-deployment scripts is different:
+principal running the scripts is different:
 
 ```bash
 terraform plan -var="operator_principal_id=<entra-object-id>"
 ```
-
-Review model availability and quota before applying. The default capacities are measured in
-thousands of tokens per minute.
-
-### 2. Deploy the infrastructure
 
 Azure model deployments can conflict when created concurrently, so serialize Terraform operations:
 
@@ -70,7 +101,7 @@ terraform apply -parallelism=1
 terraform output
 ```
 
-### 3. Run the end-to-end verification
+### 3. Run the optional end-to-end verification
 
 ```bash
 ./scripts/run_all.sh
@@ -92,7 +123,7 @@ CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
 
 ### 4. Clean up
 
-Remove only the resources created by the scripts:
+If you ran the optional scripts, remove only their data-plane resources first:
 
 ```bash
 CONFIRM_CLEANUP=delete-foundry-iq-resources ./scripts/09_cleanup.sh
@@ -117,53 +148,54 @@ flowchart TD
     RG["Resource group"]
     Account["Microsoft Foundry account<br/>system identity; local auth disabled"]
     Project["Foundry project<br/>system identity"]
-    Chat["gpt-5.4-mini deployment"]
-    Embedding["text-embedding-3-large deployment"]
-    Search["Azure AI Search<br/>system identity; local auth disabled"]
-    Storage["StorageV2 / ZRS<br/>shared key disabled"]
-    Cosmos["Cosmos DB for NoSQL<br/>Session consistency; local auth disabled"]
-    AccountHost["Account capability host"]
-    ProjectHost["Project capability host"]
+    Chat["gpt-5.4-mini deployment<br/>(opt-in)"]
+    Embedding["text-embedding-3-large deployment<br/>(opt-in)"]
+    Search["Azure AI Search<br/>(Standard setup opt-in)"]
+    Storage["StorageV2 / ZRS<br/>(Standard setup opt-in)"]
+    Cosmos["Cosmos DB for NoSQL<br/>(Standard setup opt-in)"]
+    AccountHost["Account capability host<br/>(opt-in)"]
+    ProjectHost["Project capability host<br/>(opt-in)"]
     Insights["Application Insights + Log Analytics<br/>(optional)"]
     Scripts["Foundry IQ scripts"]
 
     Operator --> RG
     RG --> Account
     Account --> Project
-    Account --> Chat
-    Account --> Embedding
-    RG --> Search
-    RG --> Storage
-    RG --> Cosmos
-    Account --> AccountHost
-    Project --> ProjectHost
-    ProjectHost --> Search
-    ProjectHost --> Storage
-    ProjectHost --> Cosmos
-    Operator --> Scripts
-    Scripts --> Storage
-    Scripts --> Search
-    Scripts --> Project
-    Search --> Storage
-    Search --> Embedding
+    Account -.-> Chat
+    Account -.-> Embedding
+    RG -.-> Search
+    RG -.-> Storage
+    RG -.-> Cosmos
+    Account -.-> AccountHost
+    Project -.-> ProjectHost
+    ProjectHost -.-> Search
+    ProjectHost -.-> Storage
+    ProjectHost -.-> Cosmos
+    Operator -.-> Scripts
+    Scripts -.-> Storage
+    Scripts -.-> Search
+    Scripts -.-> Project
+    Search -.-> Storage
+    Search -.-> Embedding
     Project -. "traces" .-> Insights
 ```
 
-Terraform manages the Azure resources, connections, role assignments, and capability hosts. The
-scripts manage only the sample Blob container and file, Search knowledge objects, RemoteTool
-connection, prompt-agent versions, and transient conversations.
+The solid Foundry account/project path is the default. Model deployments, dashed data-service path,
+connections, roles, capability hosts, and tracing are opt-in. The scripts manage only the optional
+sample Blob container and file, Search knowledge objects, RemoteTool connection, prompt-agent
+versions, and transient conversations.
 
-### Default model deployments
+### Suggested sample model deployments
 
-Only the models used by the workflow are deployed:
+`model_deployments` defaults to `[]`. For the optional workflow, the quick-start example uses only:
 
 | Deployment/model | Version | SKU | Capacity | Version upgrades |
 | --- | --- | --- | ---: | --- |
 | `gpt-5.4-mini` | `2026-03-17` | `GlobalStandard` | 100 | `NoAutoUpgrade` |
 | `text-embedding-3-large` | `1` | `GlobalStandard` | 30 | `NoAutoUpgrade` |
 
-Model availability, allowed capacity increments, quota, and Agent Service compatibility vary by
-region and subscription. Override `model_deployments` when required. `GlobalStandard` can process
+These are examples, not implicit defaults. Model availability, allowed capacity increments, quota,
+and Agent Service compatibility vary by region and subscription. `GlobalStandard` can process
 requests outside the resource region; use a data-zone or regional deployment type when residency
 requirements demand it.
 
@@ -172,15 +204,15 @@ requirements demand it.
 | Input | Default | Purpose |
 | --- | --- | --- |
 | `location` | `japaneast` | Azure region |
-| `enable_standard_setup` | `true` | Deploy customer-managed Search, Storage, Cosmos DB, connections, and capability hosts |
+| `enable_standard_setup` | `false` | Deploy customer-managed Search, Storage, Cosmos DB, connections, and capability hosts |
 | `azure_ai_search_sku` | `standard` | Search tier; `basic` and supported higher tiers are accepted |
 | `enable_tracing` | `false` | Add Entra-only Application Insights tracing |
 | `operator_principal_id` | Terraform principal | Principal authorized to run the scripts |
 | `enable_operator_cosmosdb_read_access` | `false` | Add read-only inspection of `enterprise_memory` |
-| `model_deployments` | Two rows above | Models, versions, SKUs, capacities, and upgrade behavior |
+| `model_deployments` | `[]` | Optional models, versions, SKUs, capacities, and upgrade behavior |
 
-The default builds the complete scenario. Set `enable_standard_setup = false` in your own variable
-file to create only the Foundry account, project, and model deployments.
+The default creates only the Foundry account and project. Standard setup, models, tracing, and
+operator Cosmos inspection each require an explicit input.
 
 `deploy_standard_agent` was removed. Existing variable files must rename it:
 
@@ -198,9 +230,9 @@ The scripts read `terraform output -json` automatically. The most useful human-f
 
 - Foundry account name and OpenAI endpoint
 - Foundry project name, resource ID, and project endpoint
-- model deployment IDs
-- Search, Storage, and Cosmos DB names/endpoints
-- capability-host and project-connection IDs
+- optional model deployment IDs (empty by default)
+- optional Search, Storage, and Cosmos DB names/endpoints
+- optional capability-host and project-connection IDs
 - optional Log Analytics and Application Insights IDs
 
 Endpoints are public resource identifiers, not credentials. Do not publish Terraform state or full
@@ -216,7 +248,7 @@ All scenario authentication paths are keyless:
 - Tracing uses `ProjectManagedIdentity` and Application Insights with local authentication disabled.
 - Scripts acquire separate Azure CLI tokens for ARM, Storage, Search, and Foundry audiences.
 
-The main role assignments are:
+The following role assignments are created only when Standard setup is enabled:
 
 | Assignee | Scope | Role |
 | --- | --- | --- |
@@ -241,10 +273,9 @@ metadata; grant this access only to trusted operators.
 
 ## Standard setup compatibility
 
-This scenario uses account and project capability hosts with stable ARM API `2026-07-01`.
-Microsoft now recommends `capabilitySettings`, but that preview is currently limited to UK South
-and Canada Central. Capability hosts remain the supported path for the default Japan East
-configuration.
+When Standard setup is enabled, this scenario uses account and project capability hosts with stable
+ARM API `2026-07-01`. Microsoft now recommends `capabilitySettings`, but that preview is currently
+limited to UK South and Canada Central. Capability hosts remain the supported path for Japan East.
 
 AzAPI 2.13 doesn't yet embed the `2026-07-01` schemas, so embedded provider validation is disabled
 only for these documented Foundry ARM resources. Terraform mock tests assert their expected types
@@ -264,6 +295,9 @@ The scenario doesn't create Key Vault because these connections contain no store
 doesn't create private endpoints or a BYO VNet.
 
 ## Foundry IQ and prompt-agent workflow
+
+This workflow requires `enable_standard_setup = true`, one compatible chat deployment, and one
+embedding deployment. It isn't available in the default minimal deployment.
 
 ### Primary command
 
@@ -343,18 +377,19 @@ requirements before enabling it.
 
 ## Boundaries and cost
 
-- Public endpoints are enabled. Microsoft Entra authentication removes keys but doesn't isolate
-  network traffic.
-- Search defaults to Standard/S1 with one replica. This is suitable for the sample but has no query
-  SLA. Basic is accepted for the public keyless path; private Blob execution needs at least S2 and
-  is outside this scenario.
+- The Foundry account/project use public endpoints. Optional Standard setup services also use
+  public endpoints. Microsoft Entra authentication removes keys but doesn't isolate network traffic.
+- When Standard setup is enabled, Search uses Standard/S1 with one replica unless overridden. This
+  is suitable for the sample but has no query SLA. Basic is accepted for the public keyless path;
+  private Blob execution needs at least S2 and is outside this scenario.
 - Semantic ranker and agentic retrieval start on separate monthly free allowances. Requests fail
   with a billing error after an allowance is exhausted unless its Standard pay-as-you-go plan is
   enabled separately.
-- Cosmos DB uses provisioned throughput. Microsoft documents a 3,000 RU/s account minimum; the new
-  runtime uses two 1,000-RU/s containers, while classic compatibility can add three more. Plan up to
-  5,000 RU/s per project when both runtimes are present.
-- Storage, Search, Cosmos DB, model tokens, tracing ingestion, and retention can incur charges.
+- Optional Cosmos DB uses provisioned throughput. Microsoft documents a 3,000 RU/s account minimum;
+  the new runtime uses two 1,000-RU/s containers, while classic compatibility can add three more.
+  Plan up to 5,000 RU/s per project when both runtimes are present.
+- The minimal default still incurs Foundry account/project charges where applicable. Optional
+  Storage, Search, Cosmos DB, model tokens, tracing ingestion, and retention add further charges.
 - Private networking, Key Vault/CMK, alerts, dashboards, application UI, document-level ACL
   passthrough, and application-specific Responsible AI/evaluation tests are outside scope.
 
