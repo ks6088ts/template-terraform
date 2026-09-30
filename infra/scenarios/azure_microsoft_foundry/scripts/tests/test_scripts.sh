@@ -70,6 +70,7 @@ cat > "${FIXTURE}/bin/curl" <<'EOF'
 #!/bin/sh
 body_file=""
 data=""
+authorization=""
 method="GET"
 url=""
 
@@ -87,7 +88,13 @@ while [ "$#" -gt 0 ]; do
       data=$2
       shift
       ;;
-    --header|--data-binary|--write-out)
+    --header)
+      case "$2" in
+        Authorization:*) authorization=${2#Authorization: } ;;
+      esac
+      shift
+      ;;
+    --data-binary|--write-out)
       shift
       ;;
     http://*|https://*)
@@ -98,6 +105,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$body_file" ] || exit 1
+[ "$authorization" = "Bearer offline-token" ] || {
+  printf 'Unexpected Authorization header for %s %s\n' "$method" "$url" >&2
+  exit 1
+}
 printf '%s|%s|%s\n' "${MOCK_CASE:-}" "$method" "$url" >> "${FIXTURE}/curl.calls"
 if [ -n "$data" ]; then
   printf '%s\n' "$data" >> "${FIXTURE}/curl.data"
@@ -107,7 +118,19 @@ status=500
 body='{"error":{"code":"UnexpectedRequest","message":"Unexpected mock request"}}'
 
 case "${MOCK_CASE:-}:$method:$url" in
-  ingestion-fresh:GET:*"/knowledgesources('restaurant-reviews-ks')/status"*)
+  full-run:PUT:*"?restype=container")
+    status=201
+    body=''
+    ;;
+  full-run:PUT:*"/restaurant_reviews.csv")
+    status=201
+    body=''
+    ;;
+  full-run:PUT:*"/knowledgesources('restaurant-reviews-ks')"*)
+    status=201
+    body='{"name":"restaurant-reviews-ks","azureBlobParameters":{"createdResources":{"indexer":"restaurant-reviews-ks-indexer"}}}'
+    ;;
+  ingestion-fresh:GET:*"/knowledgesources('restaurant-reviews-ks')/status"*|full-run:GET:*"/knowledgesources('restaurant-reviews-ks')/status"*)
     count=0
     [ ! -f "${FIXTURE}/status.count" ] || count=$(cat "${FIXTURE}/status.count")
     count=$((count + 1))
@@ -119,15 +142,19 @@ case "${MOCK_CASE:-}:$method:$url" in
       body='{"synchronizationStatus":"idle","lastSynchronizationState":{"startTime":"2026-09-30T00:01:00Z","endTime":"2026-09-30T00:01:05Z","itemsUpdatesProcessed":1,"itemsUpdatesFailed":0}}'
     fi
     ;;
-  ingestion-fresh:GET:*"/knowledgesources('restaurant-reviews-ks')"*)
+  ingestion-fresh:GET:*"/knowledgesources('restaurant-reviews-ks')"*|full-run:GET:*"/knowledgesources('restaurant-reviews-ks')"*)
     status=200
     body='{"name":"restaurant-reviews-ks","azureBlobParameters":{"createdResources":{"indexer":"restaurant-reviews-ks-indexer"}}}'
     ;;
-  ingestion-fresh:POST:*"/indexers('restaurant-reviews-ks-indexer')/search.run"*)
+  ingestion-fresh:POST:*"/indexers('restaurant-reviews-ks-indexer')/search.run"*|full-run:POST:*"/indexers('restaurant-reviews-ks-indexer')/search.run"*)
     status=202
     body=''
     ;;
-  retrieval-success:POST:*"/knowledgebases('restaurant-reviews-kb')/retrieve"*)
+  full-run:PUT:*"/knowledgebases('restaurant-reviews-kb')"*)
+    status=201
+    body='{"name":"restaurant-reviews-kb"}'
+    ;;
+  retrieval-success:POST:*"/knowledgebases('restaurant-reviews-kb')/retrieve"*|full-run:POST:*"/knowledgebases('restaurant-reviews-kb')/retrieve"*)
     status=206
     body='{"response":[{"content":[{"type":"text","text":"Grounded vegan result"}]}],"references":[{"type":"azureBlob","blobUrl":"https://example/reviews.csv","rerankerScore":3.2}],"activity":[]}'
     ;;
@@ -135,15 +162,27 @@ case "${MOCK_CASE:-}:$method:$url" in
     status=200
     body='{"response":[{"content":[{"type":"text","text":"Ungrounded result"}]}],"references":[]}'
     ;;
-  agent-success:POST:*/openai/v1/conversations)
+  full-run:PUT:*/connections/restaurant-reviews-kb-mcp*)
     status=201
-    body='{"id":"conv-success"}'
+    body='{"name":"restaurant-reviews-kb-mcp"}'
     ;;
-  agent-success:POST:*/openai/v1/responses)
+  full-run:POST:*/agents*)
+    status=201
+    body='{"name":"restaurant-qa-agent","version":"1"}'
+    ;;
+  agent-success:POST:*/openai/v1/conversations|full-run:POST:*/openai/v1/conversations)
+    status=201
+    if [ "${MOCK_CASE:-}" = "full-run" ]; then
+      body='{"id":"conv-full-run"}'
+    else
+      body='{"id":"conv-success"}'
+    fi
+    ;;
+  agent-success:POST:*/openai/v1/responses|full-run:POST:*/openai/v1/responses)
     status=200
     body='{"output_text":"Grounded agent answer","output":[{"type":"mcp_call"}]}'
     ;;
-  agent-success:DELETE:*/openai/v1/conversations/conv-success)
+  agent-success:DELETE:*/openai/v1/conversations/conv-success|full-run:DELETE:*/openai/v1/conversations/conv-full-run)
     status=204
     body=''
     ;;
@@ -198,6 +237,22 @@ DEFAULTS=$(
 [ "$DEFAULTS" = "2026-08-01-preview|2026-04-06|false|gpt-5.4-mini" ] ||
   fail "Unexpected common defaults: ${DEFAULTS}"
 
+reset_case
+TOKEN_OUTPUT=$(
+  (
+    # shellcheck disable=SC1091
+    . "${SCRIPT_DIR}/_common.sh"
+    VERBOSE_OUTPUT=true
+    AZURE_SUBSCRIPTION_ID=sub-123
+    export VERBOSE_OUTPUT AZURE_SUBSCRIPTION_ID
+    get_access_token "https://search.azure.com/.default"
+  ) 2> "${FIXTURE}/stderr"
+)
+[ "$TOKEN_OUTPUT" = "offline-token" ] ||
+  fail "Verbose logging contaminated the access token value."
+grep -q "\[verbose\] Requesting an Azure access token" "${FIXTURE}/stderr" ||
+  fail "Verbose access-token progress was not reported."
+
 if (
   # shellcheck disable=SC1091
   . "${SCRIPT_DIR}/_common.sh"
@@ -247,7 +302,7 @@ reset_case
 MOCK_CASE=agent-success
 export MOCK_CASE
 QUESTION="Which restaurant has patio seating?" \
-  "${SCRIPT_DIR}/08_ask_agent.sh" --verbose > "${FIXTURE}/stdout" ||
+  "${SCRIPT_DIR}/08_ask_agent.sh" --verbose > "${FIXTURE}/stdout" 2> "${FIXTURE}/stderr" ||
   fail "QUESTION environment override with --verbose failed."
 grep -q "Which restaurant has patio seating?" "${FIXTURE}/curl.data" ||
   fail "QUESTION environment override was not sent to the agent."
@@ -285,19 +340,40 @@ reset_case
 MOCK_CASE=cleanup
 export MOCK_CASE
 CONFIRM_CLEANUP=delete-foundry-iq-resources \
-  "${SCRIPT_DIR}/09_cleanup.sh" > "${FIXTURE}/stdout" ||
-  fail "Cleanup workflow failed."
+  "${SCRIPT_DIR}/09_cleanup.sh" --verbose > "${FIXTURE}/stdout" 2> "${FIXTURE}/stderr" ||
+  fail "Cleanup workflow with --verbose failed."
 grep -q "GET|https://search-test.search.windows.net/knowledgebases('restaurant-reviews-kb')" "${FIXTURE}/curl.calls" ||
   fail "Cleanup did not confirm knowledge base deletion."
 grep -q "GET|https://search-test.search.windows.net/knowledgesources('restaurant-reviews-ks')" "${FIXTURE}/curl.calls" ||
   fail "Cleanup did not confirm knowledge source deletion."
 grep -q "script-created resources were cleaned up" "${FIXTURE}/stdout" ||
   fail "Cleanup success was not reported."
+grep -q "\[verbose\] HTTP response: 404 GET https://search-test.search.windows.net/knowledgesources('restaurant-reviews-ks')" "${FIXTURE}/stdout" ||
+  fail "Cleanup verbose HTTP status was not reported."
 
 reset_case
-unset MOCK_CASE
-expect_failure "${SCRIPT_DIR}/run_all.sh" --verbose
-grep -q "\[verbose\] Loading Terraform outputs" "${FIXTURE}/stdout" ||
-  fail "run_all.sh did not propagate --verbose to its numbered scripts."
+MOCK_CASE=full-run
+export MOCK_CASE
+"${SCRIPT_DIR}/run_all.sh" --verbose > "${FIXTURE}/stdout" 2> "${FIXTURE}/stderr" ||
+  fail "run_all.sh did not complete with --verbose."
+for message in \
+  "Validating local tools, Terraform outputs, models, Azure login, and token audiences." \
+  "Preparing the private Blob container and restaurant review upload." \
+  "Preparing the keyless Azure Blob knowledge source." \
+  "Checking for a fresh knowledge source ingestion run." \
+  "Preparing the extractive knowledge base." \
+  "Preparing direct knowledge base retrieval." \
+  "Preparing the managed-identity RemoteTool project connection." \
+  "Preparing a new MCP-enabled prompt-agent version." \
+  "Preparing a conversation and grounded prompt-agent request."
+do
+  grep -Fq "[verbose] ${message}" "${FIXTURE}/stdout" ||
+    fail "run_all.sh did not propagate --verbose for: ${message}"
+done
+grep -q "All Microsoft Foundry scenario checks passed." "${FIXTURE}/stdout" ||
+  fail "run_all.sh did not report successful completion."
+if grep -q "offline-token" "${FIXTURE}/stdout" "${FIXTURE}/stderr"; then
+  fail "run_all.sh --verbose exposed an access token."
+fi
 
 printf '%s\n' "Offline Microsoft Foundry script checks passed."

@@ -197,7 +197,7 @@ require_model_deployment() {
 }
 
 get_access_token() {
-  verbose_log "Requesting an Azure access token for scope $1."
+  verbose_log "Requesting an Azure access token for scope $1." >&2
   az account get-access-token \
     --subscription "$AZURE_SUBSCRIPTION_ID" \
     --scope "$1" \
