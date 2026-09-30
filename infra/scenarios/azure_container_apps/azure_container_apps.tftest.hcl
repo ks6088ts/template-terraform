@@ -39,6 +39,7 @@ mock_provider "azurerm" {
   mock_resource "azurerm_application_insights" {
     defaults = {
       id                  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Insights/components/appi-test"
+      app_id              = "00000000-0000-0000-0000-000000000008"
       connection_string   = "InstrumentationKey=00000000-0000-0000-0000-000000000007"
       instrumentation_key = "00000000-0000-0000-0000-000000000007"
     }
@@ -70,6 +71,7 @@ run "private_registry_is_wired_by_default" {
     condition = alltrue([
       var.container_image == "nginx:latest",
       var.container_port == 80,
+      var.health_probe_path == null,
       var.acr_sku == "Basic",
       module.container_registry.login_server == "registrytest1234.azurecr.io",
     ])
@@ -104,6 +106,7 @@ run "private_registry_is_wired_by_default" {
       output.container_app_identity_id == azurerm_user_assigned_identity.container_app_acr_pull.id,
       output.container_app_identity_client_id == "00000000-0000-0000-0000-000000000002",
       output.container_app_identity_principal_id == "00000000-0000-0000-0000-000000000003",
+      output.application_insights_app_id == "00000000-0000-0000-0000-000000000008",
     ])
     error_message = "Registry and pull identity outputs must expose the managed resources."
   }
@@ -133,4 +136,44 @@ run "acr_sku_rejects_unsupported_values" {
   }
 
   expect_failures = [var.acr_sku]
+}
+
+run "application_insights_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_application_insights = false
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.application_insights) == 0,
+      output.application_insights_id == null,
+      output.application_insights_app_id == null,
+      output.application_insights_connection_string == null,
+    ])
+    error_message = "Disabling Application Insights must remove the resource and return null observability outputs."
+  }
+}
+
+run "custom_image_enables_health_probes" {
+  command = plan
+
+  variables {
+    container_image   = "registrytest1234.azurecr.io/tasks-mcp-server@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    container_port    = 8080
+    health_probe_path = "/health"
+    min_replicas      = 1
+    max_replicas      = 1
+  }
+
+  assert {
+    condition = alltrue([
+      var.container_port == 8080,
+      var.health_probe_path == "/health",
+      var.min_replicas == 1,
+      var.max_replicas == 1,
+    ])
+    error_message = "The custom MCP deployment settings must enable /health probes and one warm replica."
+  }
 }

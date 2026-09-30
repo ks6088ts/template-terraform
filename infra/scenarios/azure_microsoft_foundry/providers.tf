@@ -14,10 +14,14 @@ provider "azurerm" {
       "Microsoft.CognitiveServices",
       "Microsoft.Resources",
     ],
-    var.deploy_standard_agent ? [
+    var.enable_standard_setup ? [
       "Microsoft.DocumentDB",
       "Microsoft.Search",
       "Microsoft.Storage",
+    ] : [],
+    var.enable_tracing ? [
+      "Microsoft.Insights",
+      "Microsoft.OperationalInsights",
     ] : [],
   )
 }

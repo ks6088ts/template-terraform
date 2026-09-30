@@ -52,27 +52,35 @@ http_request \
   --header "Accept: application/json" \
   --data "$PAYLOAD"
 
-expect_http_status 200
+expect_http_status 200 206
 SEARCH_TOKEN=""
 
 GROUNDING_TEXT=$(jq -r '[.response[]?.content[]? | select(.type == "text") | .text] | join("\n")' "$HTTP_BODY_FILE")
+REFERENCE_COUNT=$(jq -r '.references | length' "$HTTP_BODY_FILE")
+
+[ -n "$GROUNDING_TEXT" ] || {
+  print_http_body >&2
+  die "Knowledge retrieval returned no grounding content."
+}
+[ "$REFERENCE_COUNT" -gt 0 ] || {
+  print_http_body >&2
+  die "Knowledge retrieval returned no grounding references."
+}
+
+if [ "$HTTP_STATUS" = "206" ]; then
+  log "Knowledge retrieval returned partial content; inspect activity details before production use."
+fi
 
 log "Question: ${QUESTION}"
 log "Grounding response:"
-if [ -z "$GROUNDING_TEXT" ]; then
-  log "(No grounding content returned.)"
-elif printf '%s' "$GROUNDING_TEXT" | jq . 2>/dev/null; then
+if printf '%s' "$GROUNDING_TEXT" | jq . 2>/dev/null; then
   :
 else
   printf '%s\n' "$GROUNDING_TEXT"
 fi
 
-log "References:"
-if ! jq -e '.references | length > 0' "$HTTP_BODY_FILE" >/dev/null 2>&1; then
-  log "(No references returned.)"
-else
-  jq -r '.references[] | "- type=\(.type) source=\(.blobUrl // .docKey // .id) score=\(.rerankerScore // "n/a")"' "$HTTP_BODY_FILE"
-fi
+log "References (${REFERENCE_COUNT}):"
+jq -r '.references[] | "- type=\(.type) source=\(.blobUrl // .docKey // .id) score=\(.rerankerScore // "n/a")"' "$HTTP_BODY_FILE"
 
 if [ "$VERBOSE_OUTPUT" = "true" ]; then
   log "Full response:"

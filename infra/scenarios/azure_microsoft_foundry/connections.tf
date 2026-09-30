@@ -1,7 +1,7 @@
 resource "azapi_resource" "azure_ai_search_connection" {
-  count = var.deploy_standard_agent ? 1 : 0
+  count = var.enable_standard_setup ? 1 : 0
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-07-01"
   name                      = module.azure_ai_search[0].name
   parent_id                 = module.microsoft_foundry.project_id
   schema_validation_enabled = false
@@ -26,9 +26,9 @@ resource "azapi_resource" "azure_ai_search_connection" {
 }
 
 resource "azapi_resource" "blob_storage_connection" {
-  count = var.deploy_standard_agent ? 1 : 0
+  count = var.enable_standard_setup ? 1 : 0
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-07-01"
   name                      = module.blob_storage[0].account_name
   parent_id                 = module.microsoft_foundry.project_id
   schema_validation_enabled = false
@@ -47,14 +47,16 @@ resource "azapi_resource" "blob_storage_connection" {
   }
 
   depends_on = [
+    azurerm_role_assignment.storage_account_contributor,
     azurerm_role_assignment.storage_blob_data_contributor,
+    azurerm_role_assignment.storage_blob_data_owner,
   ]
 }
 
 resource "azapi_resource" "cosmosdb_connection" {
-  count = var.deploy_standard_agent ? 1 : 0
+  count = var.enable_standard_setup ? 1 : 0
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-07-01"
   name                      = module.cosmosdb[0].account_name
   parent_id                 = module.microsoft_foundry.project_id
   schema_validation_enabled = false
@@ -80,7 +82,7 @@ resource "azapi_resource" "cosmosdb_connection" {
 resource "azapi_resource" "application_insights_connection" {
   count = var.enable_tracing ? 1 : 0
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-09-01"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-07-01"
   name                      = module.application_insights[0].name
   parent_id                 = module.microsoft_foundry.project_id
   schema_validation_enabled = false

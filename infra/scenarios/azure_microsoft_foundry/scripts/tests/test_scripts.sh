@@ -1,0 +1,260 @@
+#!/bin/sh
+
+set -eu
+
+TEST_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+SCRIPT_DIR=$(CDPATH='' cd "${TEST_DIR}/.." && pwd)
+FIXTURE=$(mktemp -d "${TMPDIR:-/tmp}/foundry-tests.XXXXXX")
+mkdir "${FIXTURE}/bin"
+trap 'rm -rf "$FIXTURE"' 0
+trap 'exit 1' HUP INT TERM
+export FIXTURE
+
+PATH="${FIXTURE}/bin:${PATH}"
+export PATH
+
+cat > "${FIXTURE}/bin/terraform" <<'EOF'
+#!/bin/sh
+case "$*" in
+  *" output -json")
+    cat <<'JSON'
+{
+  "resource_group_name": {"value": "rg-foundry-test"},
+  "microsoft_foundry_account_name": {"value": "foundry-test"},
+  "microsoft_foundry_openai_endpoint": {"value": "https://foundry-test.openai.azure.com/"},
+  "microsoft_foundry_project_id": {"value": "/subscriptions/sub-123/resourceGroups/rg-foundry-test/providers/Microsoft.CognitiveServices/accounts/foundry-test/projects/project-test"},
+  "microsoft_foundry_project_name": {"value": "project-test"},
+  "microsoft_foundry_project_endpoint": {"value": "https://foundry-test.services.ai.azure.com/api/projects/project-test"},
+  "microsoft_foundry_deployment_ids": {
+    "value": {
+      "gpt-5.4-mini": "/deployments/gpt-5.4-mini",
+      "text-embedding-3-large": "/deployments/text-embedding-3-large"
+    }
+  },
+  "azure_ai_search_id": {"value": "/subscriptions/sub-123/resourceGroups/rg-foundry-test/providers/Microsoft.Search/searchServices/search-test"},
+  "azure_ai_search_name": {"value": "search-test"},
+  "azure_ai_search_endpoint": {"value": "https://search-test.search.windows.net"},
+  "blob_storage_account_id": {"value": "/subscriptions/sub-123/resourceGroups/rg-foundry-test/providers/Microsoft.Storage/storageAccounts/storage-test"},
+  "blob_storage_account_name": {"value": "storagetest"},
+  "blob_storage_endpoint": {"value": "https://storagetest.blob.core.windows.net/"},
+  "operator_principal_id": {"value": "00000000-0000-0000-0000-000000000004"}
+}
+JSON
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+
+cat > "${FIXTURE}/bin/az" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "${FIXTURE}/az.calls"
+case "$*" in
+  *"account get-access-token"*)
+    printf '%s\n' "offline-token"
+    ;;
+  *"account show"*)
+    :
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+EOF
+
+cat > "${FIXTURE}/bin/sleep" <<'EOF'
+#!/bin/sh
+:
+EOF
+
+cat > "${FIXTURE}/bin/curl" <<'EOF'
+#!/bin/sh
+body_file=""
+method="GET"
+url=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output)
+      body_file=$2
+      shift
+      ;;
+    --request)
+      method=$2
+      shift
+      ;;
+    --header|--data|--data-binary|--write-out)
+      shift
+      ;;
+    http://*|https://*)
+      url=$1
+      ;;
+  esac
+  shift
+done
+
+[ -n "$body_file" ] || exit 1
+printf '%s|%s|%s\n' "${MOCK_CASE:-}" "$method" "$url" >> "${FIXTURE}/curl.calls"
+
+status=500
+body='{"error":{"code":"UnexpectedRequest","message":"Unexpected mock request"}}'
+
+case "${MOCK_CASE:-}:$method:$url" in
+  ingestion-fresh:GET:*"/knowledgesources('restaurant-reviews-ks')/status"*)
+    count=0
+    [ ! -f "${FIXTURE}/status.count" ] || count=$(cat "${FIXTURE}/status.count")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "${FIXTURE}/status.count"
+    status=200
+    if [ "$count" -eq 1 ]; then
+      body='{"synchronizationStatus":"idle","lastSynchronizationState":{"startTime":"2026-09-30T00:00:00Z","endTime":"2026-09-30T00:00:05Z","itemsUpdatesProcessed":1,"itemsUpdatesFailed":0}}'
+    else
+      body='{"synchronizationStatus":"idle","lastSynchronizationState":{"startTime":"2026-09-30T00:01:00Z","endTime":"2026-09-30T00:01:05Z","itemsUpdatesProcessed":1,"itemsUpdatesFailed":0}}'
+    fi
+    ;;
+  ingestion-fresh:GET:*"/knowledgesources('restaurant-reviews-ks')"*)
+    status=200
+    body='{"name":"restaurant-reviews-ks","azureBlobParameters":{"createdResources":{"indexer":"restaurant-reviews-ks-indexer"}}}'
+    ;;
+  ingestion-fresh:POST:*"/indexers('restaurant-reviews-ks-indexer')/search.run"*)
+    status=202
+    body=''
+    ;;
+  retrieval-success:POST:*"/knowledgebases('restaurant-reviews-kb')/retrieve"*)
+    status=206
+    body='{"response":[{"content":[{"type":"text","text":"Grounded vegan result"}]}],"references":[{"type":"azureBlob","blobUrl":"https://example/reviews.csv","rerankerScore":3.2}],"activity":[]}'
+    ;;
+  retrieval-no-references:POST:*"/knowledgebases('restaurant-reviews-kb')/retrieve"*)
+    status=200
+    body='{"response":[{"content":[{"type":"text","text":"Ungrounded result"}]}],"references":[]}'
+    ;;
+  agent-success:POST:*/openai/v1/conversations)
+    status=201
+    body='{"id":"conv-success"}'
+    ;;
+  agent-success:POST:*/openai/v1/responses)
+    status=200
+    body='{"output_text":"Grounded agent answer","output":[{"type":"mcp_call"}]}'
+    ;;
+  agent-success:DELETE:*/openai/v1/conversations/conv-success)
+    status=204
+    body=''
+    ;;
+  agent-no-mcp:POST:*/openai/v1/conversations)
+    status=201
+    body='{"id":"conv-no-mcp"}'
+    ;;
+  agent-no-mcp:POST:*/openai/v1/responses)
+    status=200
+    body='{"output_text":"Answer without a tool call","output":[{"type":"message"}]}'
+    ;;
+  agent-no-mcp:DELETE:*/openai/v1/conversations/conv-no-mcp)
+    status=204
+    body=''
+    ;;
+  cleanup:DELETE:*)
+    status=204
+    body=''
+    ;;
+  cleanup:GET:*"/knowledgebases('restaurant-reviews-kb')"*|cleanup:GET:*"/knowledgesources('restaurant-reviews-ks')"*)
+    status=404
+    body='{"error":{"code":"NotFound"}}'
+    ;;
+esac
+
+printf '%s' "$body" > "$body_file"
+printf '%s' "$status"
+EOF
+
+chmod +x "${FIXTURE}/bin/"*
+
+fail() {
+  printf 'FAIL: %s\n' "$*" >&2
+  exit 1
+}
+
+expect_failure() {
+  if "$@" > "${FIXTURE}/stdout" 2> "${FIXTURE}/stderr"; then
+    fail "Expected failure: $*"
+  fi
+}
+
+reset_case() {
+  rm -f "${FIXTURE}/curl.calls" "${FIXTURE}/status.count" "${FIXTURE}/stdout" "${FIXTURE}/stderr"
+}
+
+DEFAULTS=$(
+  # shellcheck disable=SC1091
+  . "${SCRIPT_DIR}/_common.sh"
+  printf '%s|%s|%s|%s' "$SEARCH_API_VERSION" "$STORAGE_API_VERSION" "$KEEP_CONVERSATION" "$AGENT_MODEL"
+)
+[ "$DEFAULTS" = "2026-08-01-preview|2026-04-06|false|gpt-5.4-mini" ] ||
+  fail "Unexpected common defaults: ${DEFAULTS}"
+
+if (
+  # shellcheck disable=SC1091
+  . "${SCRIPT_DIR}/_common.sh"
+  validate_boolean TEST maybe
+) >/dev/null 2>&1; then
+  fail "Invalid boolean value was accepted."
+fi
+
+reset_case
+MOCK_CASE=ingestion-fresh
+export MOCK_CASE
+"${SCRIPT_DIR}/03_wait_for_ingestion.sh" > "${FIXTURE}/stdout" ||
+  fail "Fresh ingestion workflow failed."
+grep -q "/search.run" "${FIXTURE}/curl.calls" ||
+  fail "Stale completed ingestion was accepted without starting a fresh run."
+grep -q "2026-09-30T00:01:00Z completed successfully" "${FIXTURE}/stdout" ||
+  fail "Fresh ingestion completion was not reported."
+
+reset_case
+MOCK_CASE=retrieval-success
+export MOCK_CASE
+"${SCRIPT_DIR}/05_retrieve_knowledge_base.sh" > "${FIXTURE}/stdout" ||
+  fail "Partial retrieval with grounding references failed."
+grep -q "partial content" "${FIXTURE}/stdout" ||
+  fail "Partial retrieval response was not surfaced."
+grep -q "References (1)" "${FIXTURE}/stdout" ||
+  fail "Grounding reference count was not reported."
+
+reset_case
+MOCK_CASE=retrieval-no-references
+export MOCK_CASE
+expect_failure "${SCRIPT_DIR}/05_retrieve_knowledge_base.sh"
+grep -q "no grounding references" "${FIXTURE}/stderr" ||
+  fail "Missing grounding references did not produce a clear failure."
+
+reset_case
+MOCK_CASE=agent-success
+export MOCK_CASE
+"${SCRIPT_DIR}/08_ask_agent.sh" > "${FIXTURE}/stdout" ||
+  fail "Grounded agent response workflow failed."
+grep -q "MCP events: 1" "${FIXTURE}/stdout" ||
+  fail "MCP event count was not reported."
+grep -q "DELETE|https://foundry-test.services.ai.azure.com/api/projects/project-test/openai/v1/conversations/conv-success" "${FIXTURE}/curl.calls" ||
+  fail "Transient conversation was not deleted after success."
+
+reset_case
+MOCK_CASE=agent-no-mcp
+export MOCK_CASE
+expect_failure "${SCRIPT_DIR}/08_ask_agent.sh"
+grep -q "did not contain an MCP tool event" "${FIXTURE}/stderr" ||
+  fail "Missing MCP event did not fail the verification gate."
+grep -q "DELETE|https://foundry-test.services.ai.azure.com/api/projects/project-test/openai/v1/conversations/conv-no-mcp" "${FIXTURE}/curl.calls" ||
+  fail "Transient conversation was not deleted after a failed verification gate."
+
+reset_case
+MOCK_CASE=cleanup
+export MOCK_CASE
+CONFIRM_CLEANUP=delete-foundry-iq-resources \
+  "${SCRIPT_DIR}/09_cleanup.sh" > "${FIXTURE}/stdout" ||
+  fail "Cleanup workflow failed."
+grep -q "GET|https://search-test.search.windows.net/knowledgebases('restaurant-reviews-kb')" "${FIXTURE}/curl.calls" ||
+  fail "Cleanup did not confirm knowledge base deletion."
+grep -q "GET|https://search-test.search.windows.net/knowledgesources('restaurant-reviews-ks')" "${FIXTURE}/curl.calls" ||
+  fail "Cleanup did not confirm knowledge source deletion."
+grep -q "script-created resources were cleaned up" "${FIXTURE}/stdout" ||
+  fail "Cleanup success was not reported."
+
+printf '%s\n' "Offline Microsoft Foundry script checks passed."

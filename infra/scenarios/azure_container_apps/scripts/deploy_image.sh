@@ -47,6 +47,7 @@ jq -n \
   '{
     container_image: $container_image,
     container_port: 8080,
+    health_probe_path: "/health",
     min_replicas: 1,
     max_replicas: 1
   }' >"$TEMP_VARS_FILE"

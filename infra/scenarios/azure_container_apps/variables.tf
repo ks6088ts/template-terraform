@@ -72,6 +72,17 @@ variable "container_port" {
   }
 }
 
+variable "health_probe_path" {
+  description = "HTTP path used for Container Apps startup, liveness, and readiness probes. Null uses the platform default TCP probes."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.health_probe_path == null || startswith(coalesce(var.health_probe_path, "/"), "/")
+    error_message = "health_probe_path must start with '/' or be null."
+  }
+}
+
 variable "cpu" {
   description = "CPU cores allocated to the container (e.g., 0.25, 0.5, 1.0)"
   type        = number

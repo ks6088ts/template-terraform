@@ -78,6 +78,11 @@ output "application_insights_name" {
   value       = var.enable_application_insights ? module.application_insights[0].name : null
 }
 
+output "application_insights_app_id" {
+  description = "Application ID used to query Application Insights telemetry (null when disabled)"
+  value       = var.enable_application_insights ? module.application_insights[0].app_id : null
+}
+
 output "application_insights_connection_string" {
   description = "Connection string of the Application Insights resource (null when disabled)"
   value       = var.enable_application_insights ? module.application_insights[0].connection_string : null

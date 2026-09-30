@@ -145,6 +145,14 @@ jobs:
         run: |
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
+      - name: Run Microsoft Foundry offline script tests
+        if: matrix.scenario == 'azure_microsoft_foundry'
+        run: sh infra/scenarios/azure_microsoft_foundry/scripts/tests/test_scripts.sh
+      - name: Run Microsoft Foundry module tests
+        if: matrix.scenario == 'azure_microsoft_foundry'
+        run: |
+          terraform -chdir=infra/modules/azure/microsoft_foundry init -backend=false
+          terraform -chdir=infra/modules/azure/microsoft_foundry test
 
   # Test Google scenarios (google_*)
   test-google:

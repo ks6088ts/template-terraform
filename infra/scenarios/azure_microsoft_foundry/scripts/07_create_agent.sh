@@ -60,7 +60,16 @@ FOUNDRY_TOKEN=""
 CREATED_AGENT_NAME=$(jq -r '.name // empty' "$HTTP_BODY_FILE")
 CREATED_AGENT_VERSION=$(jq -r '.version // empty' "$HTTP_BODY_FILE")
 
-log "Created Foundry agent version: ${CREATED_AGENT_NAME:-$AGENT_NAME}${CREATED_AGENT_VERSION:+ version ${CREATED_AGENT_VERSION}}"
+[ "$CREATED_AGENT_NAME" = "$AGENT_NAME" ] || {
+  print_http_body >&2
+  die "Agent creation response did not contain the expected agent name."
+}
+[ -n "$CREATED_AGENT_VERSION" ] || {
+  print_http_body >&2
+  die "Agent creation response did not contain a version."
+}
+
+log "Created Foundry agent version: ${CREATED_AGENT_NAME} version ${CREATED_AGENT_VERSION}"
 log "Rerunning this script creates another version of the same named agent."
 
 if [ "$VERBOSE_OUTPUT" = "true" ]; then

@@ -7,6 +7,11 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from mcp_server import mcp
 
+if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+    from azure.monitor.opentelemetry import configure_azure_monitor
+
+    configure_azure_monitor()
+
 
 def transport_security_settings() -> TransportSecuritySettings:
     allowed_hosts = [

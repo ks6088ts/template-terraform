@@ -21,8 +21,8 @@ variable "tags" {
   }
 }
 
-variable "deploy_standard_agent" {
-  description = "Deploy the resources required for a standard Microsoft Foundry agent"
+variable "enable_standard_setup" {
+  description = "Deploy the customer-managed data services and capability hosts required for Microsoft Foundry Standard setup"
   type        = bool
   default     = false
 }
@@ -39,8 +39,8 @@ variable "azure_ai_search_sku" {
   default     = "standard"
 
   validation {
-    condition     = contains(["standard", "standard2", "standard3", "storage_optimized_l1", "storage_optimized_l2"], var.azure_ai_search_sku)
-    error_message = "Azure AI Search SKU must be one of: standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
+    condition     = contains(["basic", "standard", "standard2", "standard3", "storage_optimized_l1", "storage_optimized_l2"], var.azure_ai_search_sku)
+    error_message = "Azure AI Search SKU must be one of: basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
   }
 }
 
@@ -51,68 +51,26 @@ variable "operator_principal_id" {
 }
 
 variable "enable_operator_cosmosdb_read_access" {
-  description = "Grant the operator principal read-only access to inspect the Standard Agent Cosmos DB account and enterprise_memory data"
+  description = "Grant the operator principal read-only access to inspect the Standard setup Cosmos DB account and enterprise_memory data"
   type        = bool
   default     = false
 
   validation {
-    condition     = !var.enable_operator_cosmosdb_read_access || var.deploy_standard_agent
-    error_message = "enable_operator_cosmosdb_read_access = true requires deploy_standard_agent = true."
+    condition     = !var.enable_operator_cosmosdb_read_access || var.enable_standard_setup
+    error_message = "enable_operator_cosmosdb_read_access = true requires enable_standard_setup = true."
   }
 }
 
 variable "model_deployments" {
-  description = "Specifies the model deployments for Azure AI Foundry"
+  description = "Optional model deployments to create in the Microsoft Foundry account"
   type = list(object({
-    format   = optional(string, "OpenAI")
-    name     = string
-    model    = string
-    version  = string
-    sku_name = optional(string, "GlobalStandard")
-    capacity = number
+    format                 = optional(string, "OpenAI")
+    name                   = string
+    model                  = string
+    version                = string
+    sku_name               = optional(string, "GlobalStandard")
+    capacity               = number
+    version_upgrade_option = optional(string, "NoAutoUpgrade")
   }))
-  default = [
-    {
-      name     = "gpt-6-sol"
-      model    = "gpt-6-sol"
-      version  = "2026-09-22"
-      capacity = 1000
-    },
-    {
-      name     = "gpt-6-luna"
-      model    = "gpt-6-luna"
-      version  = "2026-09-22"
-      capacity = 1000
-    },
-    {
-      name     = "gpt-6-astra"
-      model    = "gpt-6-astra"
-      version  = "2026-09-03"
-      capacity = 1000
-    },
-    {
-      name     = "gpt-5.5"
-      model    = "gpt-5.5"
-      version  = "2026-04-24"
-      capacity = 1000
-    },
-    {
-      name     = "gpt-5.4-mini"
-      model    = "gpt-5.4-mini"
-      version  = "2026-03-17"
-      capacity = 1000
-    },
-    {
-      name     = "text-embedding-3-large"
-      model    = "text-embedding-3-large"
-      version  = "1"
-      capacity = 3000
-    },
-    {
-      name     = "text-embedding-3-small"
-      model    = "text-embedding-3-small"
-      version  = "1"
-      capacity = 3000
-    }
-  ]
+  default = []
 }
