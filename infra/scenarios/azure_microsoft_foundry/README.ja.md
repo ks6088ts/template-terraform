@@ -195,7 +195,7 @@ Authorization header は表示しません。
 QUESTION="ベジタリアンに向いてるレストランを教えて。" ./scripts/08_ask_agent.sh
 ```
 
-既存互換の `VERBOSE_OUTPUT=true` を使うと、進捗に加えて対応している step の REST response 全体も表示します。
+`VERBOSE_OUTPUT=true` を使うと、進捗に加えて対応している step の REST response 全体も表示します。
 成功時または失敗時に script 作成データを削除する場合は次を実行します。
 
 ```bash
@@ -298,16 +298,6 @@ Service 互換性は region と subscription に依存します。`GlobalStandar
 既定では Foundry account と project だけを作成します。Standard setup、model、tracing、Operator の
 Cosmos 調査権限は、それぞれ明示 input が必要です。
 
-`deploy_standard_agent` は削除しました。既存 variable file は次のように変更してください。
-
-```hcl
-# 変更前
-deploy_standard_agent = true
-
-# 現在
-enable_standard_setup = true
-```
-
 ### 主な output
 
 Script は `terraform output -json` を自動的に読み取ります。利用者が確認しやすい output は次のとおりです。
@@ -354,15 +344,15 @@ Storage data role は account scope で割り当てますが、Azure ABAC condit
 Reader です。Agent state には prompt、response、conversation state、Agent metadata が含まれる可能性が
 あるため、信頼できる Operator だけに付与してください。
 
-## Standard setup の互換性
+## Standard setup の実装
 
 Standard setup を有効にすると、stable ARM API `2026-07-01` の account/project capability host を
-使用します。Microsoft は現在 `capabilitySettings` を推奨していますが、この preview は現時点で
-UK South と Canada Central に限定されています。Japan East では capability host がサポート対象経路です。
+使用します。Japan East では capability host がサポート対象経路です。`capabilitySettings` preview は
+UK South と Canada Central に限定されています。
 
-AzAPI 2.13 は `2026-07-01` schema をまだ内蔵していないため、公式に記載されたこれらの Foundry ARM
-resource だけ embedded provider validation を無効化しています。Provider schema が追従するまで Terraform
-mock test で resource type と payload を検証します。
+AzAPI 2.13 は `2026-07-01` schema を内蔵していないため、公式に記載されたこれらの Foundry ARM resource
+だけ embedded provider validation を無効化しています。Terraform mock test で resource type と payload を
+検証します。
 
 Capability host は account/project scope ごとに 1 つだけ作成でき、更新できません。Terraform は設定値が
 変わると replacement し、固定 sleep の代わりに既知の一時的な authorization/provisioning error を
@@ -431,7 +421,7 @@ file 単位です。データは架空です。
 
 環境変数を command の前に指定すると、sample data、resource 名、利用 model、timeout、質問などを
 Terraform-managed infrastructure を変更せずに調整できます。`05_retrieve_knowledge_base.sh` と
-`08_ask_agent.sh` は positional question も引き続き利用でき、positional question は `QUESTION` より優先されます。
+`08_ask_agent.sh` は positional question を受け付け、positional question は `QUESTION` より優先されます。
 
 ```bash
 QUESTION="ベジタリアンに向いてるレストランを教えて。" ./scripts/08_ask_agent.sh --verbose
@@ -477,8 +467,8 @@ access 要件を適用してください。
 - Semantic ranker と agentic retrieval は別々の月次無料枠から開始します。無料枠を超えると、それぞれの
   Standard pay-as-you-go plan を有効にしない限り billing error になります。
 - 任意の Cosmos DB は provisioned throughput を使います。Microsoft の account 最低要件は 3,000 RU/s
-  です。New runtime は 1,000 RU/s container を 2 つ使い、classic compatibility ではさらに 3 つ
-  追加されるため、両方を使う場合は project ごとに最大 5,000 RU/s を想定します。
+  です。Agent Service は project ごとに 1,000 RU/s container を最大 5 つ作成する可能性があるため、
+  最大 5,000 RU/s を想定します。
 - 最小構成でも Foundry account/project に該当する料金が発生する場合があります。任意の Storage、Search、
   Cosmos DB、model token、trace ingestion/retention は追加料金になります。
 - Private network、Key Vault/CMK、alert、dashboard、application UI、document-level ACL passthrough、

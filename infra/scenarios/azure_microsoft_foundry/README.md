@@ -199,8 +199,8 @@ question with:
 QUESTION="Which restaurants are suitable for vegetarians?" ./scripts/08_ask_agent.sh
 ```
 
-The backward-compatible `VERBOSE_OUTPUT=true` setting prints progress plus complete REST responses
-for the steps that support them. To remove script-created data after a successful or failed run:
+`VERBOSE_OUTPUT=true` prints progress plus complete REST responses for the steps that support them.
+To remove script-created data after a successful or failed run:
 
 ```bash
 CLEANUP_AFTER_RUN=true ./scripts/run_all.sh
@@ -302,16 +302,6 @@ requirements demand it.
 The default creates only the Foundry account and project. Standard setup, models, tracing, and
 operator Cosmos inspection each require an explicit input.
 
-`deploy_standard_agent` was removed. Existing variable files must rename it:
-
-```hcl
-# Before
-deploy_standard_agent = true
-
-# Now
-enable_standard_setup = true
-```
-
 ### Useful outputs
 
 The scripts read `terraform output -json` automatically. The most useful human-facing outputs are:
@@ -359,15 +349,15 @@ Optional Cosmos inspection adds ARM `Reader` on the account and Cosmos DB Built-
 on `enterprise_memory`. Agent state can contain prompts, responses, conversation state, and agent
 metadata; grant this access only to trusted operators.
 
-## Standard setup compatibility
+## Standard setup implementation
 
 When Standard setup is enabled, this scenario uses account and project capability hosts with stable
-ARM API `2026-07-01`. Microsoft now recommends `capabilitySettings`, but that preview is currently
-limited to UK South and Canada Central. Capability hosts remain the supported path for Japan East.
+ARM API `2026-07-01`. Capability hosts are the supported path for Japan East; the
+`capabilitySettings` preview is limited to UK South and Canada Central.
 
-AzAPI 2.13 doesn't yet embed the `2026-07-01` schemas, so embedded provider validation is disabled
-only for these documented Foundry ARM resources. Terraform mock tests assert their expected types
-and payloads until the provider schema catches up.
+AzAPI 2.13 doesn't embed the `2026-07-01` schemas, so embedded provider validation is disabled only
+for these documented Foundry ARM resources. Terraform mock tests assert their expected types and
+payloads.
 
 Capability hosts are immutable and limited to one per account/project scope. Terraform replaces
 them when configured properties change and retries known transient authorization/provisioning
@@ -437,8 +427,7 @@ file-level rather than one citation per CSV row. The data is fictional.
 
 Set environment variables before a command to adjust sample data, resource names, models, timeouts,
 or questions without changing Terraform-managed infrastructure. `05_retrieve_knowledge_base.sh`
-and `08_ask_agent.sh` continue to accept a positional question; a positional question takes
-precedence over `QUESTION`.
+and `08_ask_agent.sh` accept a positional question, which takes precedence over `QUESTION`.
 
 ```bash
 QUESTION="Which restaurants are suitable for vegetarians?" ./scripts/08_ask_agent.sh --verbose
@@ -471,9 +460,9 @@ Terraform creates a 30-day Log Analytics workspace, workspace-based Application 
 project-scoped `AppInsights` connection, and required roles. After an agent request, allow two to
 five minutes and inspect **Agents > Traces** in Microsoft Foundry.
 
-Identity-based trace ingestion remains preview. Traces can include prompts, model input/output,
-tool arguments/results, latency, token usage, and errors. Apply privacy, retention, and access
-requirements before enabling it.
+Identity-based trace ingestion is in preview. Traces can include prompts, model input/output, tool
+arguments/results, latency, token usage, and errors. Apply privacy, retention, and access requirements
+before enabling it.
 
 ## Boundaries and cost
 
@@ -486,10 +475,10 @@ requirements before enabling it.
   with a billing error after an allowance is exhausted unless its Standard pay-as-you-go plan is
   enabled separately.
 - Optional Cosmos DB uses provisioned throughput. Microsoft documents a 3,000 RU/s account minimum;
-  the new runtime uses two 1,000-RU/s containers, while classic compatibility can add three more.
-  Plan up to 5,000 RU/s per project when both runtimes are present.
-- The minimal default still incurs Foundry account/project charges where applicable. Optional
-  Storage, Search, Cosmos DB, model tokens, tracing ingestion, and retention add further charges.
+  Agent Service can provision up to five 1,000-RU/s containers per project. Plan for up to 5,000
+  RU/s per project.
+- The minimal default can incur Foundry account/project charges where applicable. Optional Storage,
+  Search, Cosmos DB, model tokens, tracing ingestion, and retention add further charges.
 - Private networking, Key Vault/CMK, alerts, dashboards, application UI, document-level ACL
   passthrough, and application-specific Responsible AI/evaluation tests are outside scope.
 
