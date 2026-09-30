@@ -143,7 +143,7 @@ cat > "$FIXTURE/bin/func" <<'EOF'
 printf '%s\n' "$*" > "$FIXTURE/func.calls"
 ls -a > "$FIXTURE/published.files"
 case "$*" in
-  "azure functionapp publish func-example --subscription sub-123 --build remote") ;;
+  "azure functionapp publish func-example --subscription sub-123 --build remote --python") ;;
   *) exit 1 ;;
 esac
 EOF

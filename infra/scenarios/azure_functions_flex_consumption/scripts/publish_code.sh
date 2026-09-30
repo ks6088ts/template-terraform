@@ -21,6 +21,6 @@ for file in function_app.py requirements.txt host.json; do
   cp "$SCENARIO_DIR/src/$file" "$STAGE/$file"
 done
 (cd "$STAGE" && func azure functionapp publish "$FUNCTION_APP_NAME" \
-  --subscription "$SUBSCRIPTION_ID" --build remote) ||
+  --subscription "$SUBSCRIPTION_ID" --build remote --python) ||
   die "Core Tools publish failed."
 printf 'Published %s to subscription %s.\n' "$FUNCTION_APP_NAME" "$SUBSCRIPTION_ID"
