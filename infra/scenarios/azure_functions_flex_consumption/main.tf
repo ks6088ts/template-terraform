@@ -16,6 +16,10 @@ module "random_string" {
 locals {
   resource_suffix = module.random_string.result
   resource_name   = "${trim(substr(var.name, 0, 46), "-")}-${local.resource_suffix}"
+  function_app_settings = merge(var.app_settings, {
+    PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY = "true"
+    TIMER_SCHEDULE                              = var.timer_schedule
+  })
 }
 
 # =============================================================================
@@ -128,9 +132,7 @@ module "functions_flex_consumption" {
   zone_redundant         = var.zone_redundant
 
   # Additional app settings
-  app_settings = merge(var.app_settings, {
-    TIMER_SCHEDULE = var.timer_schedule
-  })
+  app_settings = local.function_app_settings
 
   authentication = {
     client_id            = azuread_application.function_app.client_id

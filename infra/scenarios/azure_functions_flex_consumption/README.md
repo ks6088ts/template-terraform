@@ -1,10 +1,10 @@
 ---
-description: Hands-on Python Azure Functions Flex Consumption with Entra authentication, identity-based Storage, and monitoring
+description: Hands-on Python Azure Functions Flex Consumption with Entra authentication, identity-based Storage, and OpenTelemetry observability
 ---
 
 # Azure Functions Flex Consumption (Python)
 
-Deploy a Linux FC1 Flex Consumption Function App, explicitly publish the Python sample, then verify two HTTP authorization paths, managed-identity Storage access, a timer, and telemetry. Terraform provisions infrastructure **only**; a successful apply does not publish functions.
+Deploy a Linux FC1 Flex Consumption Function App, explicitly publish the Python sample, then verify two HTTP authorization paths, managed-identity Storage access, a timer, and OpenTelemetry traces. Terraform provisions infrastructure **only**; a successful apply does not publish functions.
 
 ## Architecture
 
@@ -19,14 +19,14 @@ flowchart LR
     Plan["Linux FC1 plan"] --> App["Python Function App<br/>/api/hello<br/>/api/hello-key<br/>/api/storage-check<br/>timer"]
     Auth -->|/api/hello and /api/storage-check| App
     App -->|System-assigned identity<br/>Blob Owner; Queue/Table Contributor| Storage["Storage Account<br/>private deployment container<br/>host Blob/Queue/Table"]
-    App -->|Connection string: telemetry| AI["Application Insights"]
+    App -->|OpenTelemetry host and Python worker| AI["Application Insights"]
     AI --> LA["Log Analytics workspace"]
   end
   Operator["Terraform identity"] -->|Storage Blob Data Contributor| Storage
   Publisher["scripts/publish_code.sh<br/>Functions Core Tools"] -->|One Deploy| App
 ```
 
-Easy Auth protects `/api/hello` and `/api/storage-check` before the Python runtime. `/api/hello-key` is excluded from Easy Auth deliberately: the Functions host enforces its `function` authorization level instead. The Python timer runs according to the `TIMER_SCHEDULE` app setting. The Storage probe reads the deployment container via `ManagedIdentityCredential`, using the `STORAGE_ACCOUNT_BLOB_ENDPOINT` (Blob service URI) and `STORAGE_CONTAINER_NAME` (deployment container) app settings; it does not expose blobs. The Application Insights connection string carries telemetry only; Storage access uses managed identity, not that connection string.
+Easy Auth protects `/api/hello` and `/api/storage-check` before the Python runtime. `/api/hello-key` is excluded from Easy Auth deliberately: the Functions host enforces its `function` authorization level instead. The Python timer runs according to the `TIMER_SCHEDULE` app setting. The Storage probe reads the deployment container via `ManagedIdentityCredential`, using the `STORAGE_ACCOUNT_BLOB_ENDPOINT` (Blob service URI) and `STORAGE_CONTAINER_NAME` (deployment container) app settings; it does not expose blobs. The Functions host exports telemetry with `telemetryMode: OpenTelemetry`; `PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY=true` makes the Python worker initialize the Azure Monitor OpenTelemetry Distro, and `/api/hello` emits a `flex-otel-check` span. The Application Insights connection string carries telemetry only; Storage access uses managed identity, not that connection string.
 
 ## Prerequisites
 
@@ -78,7 +78,7 @@ After apply, **publish the Python code separately** from this scenario directory
 bash scripts/publish_code.sh
 ```
 
-The script publishes the Python sample using Functions Core Tools (Flex One Deploy). It stages only `function_app.py`, `requirements.txt`, and `host.json` from `src/` before publishing. The tracked `src/local.settings.json` is excluded by `src/.funcignore` and is not in the staged allowlist; never add real credentials to this tracked file. Wait for the host to become ready before running verification. Re-publish after changing the Python code; Terraform does not deploy source. Do not substitute `zip_deploy_file` or a generic App Service zip deployment for the Flex publishing workflow.
+The script publishes the Python sample using Functions Core Tools (Flex One Deploy). It stages only `function_app.py`, `requirements.txt`, and `host.json` from `src/` before publishing. The remote build installs the single direct observability dependency, `azure-monitor-opentelemetry==1.8.10`; the worker app setting initializes it, so the application does not call `configure_azure_monitor()` a second time. The tracked `src/local.settings.json` is excluded by `src/.funcignore` and is not in the staged allowlist; never add real credentials to this tracked file. Wait for the host to become ready before running verification. Re-publish after changing the Python code; Terraform does not deploy source. Do not substitute `zip_deploy_file` or a generic App Service zip deployment for the Flex publishing workflow.
 
 ## Verify
 
@@ -93,7 +93,7 @@ bash scripts/04_test_timer.sh
 bash scripts/05_test_http_telemetry.sh
 ```
 
-Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_validate_prerequisites.sh` checks `az`, `curl`, `terraform`, `jq`, required Terraform outputs, and that the **active default** Azure CLI subscription matches `subscription_id`; it does not check Core Tools or local Python. Publish the Python code before running the remaining scripts. `run_all.sh` runs the checks in sequence without publishing code. Test scripts exit nonzero when an assertion fails; telemetry and timer checks may need a wait for execution/ingestion. The Storage endpoint's JSON response (`{"status":"ok","container":"deploymentpackage"}` by default) confirms the **Function App's** managed identity can reach its deployment container; a 503 indicates the probe failed (inspect telemetry and role propagation). Verification scripts report a summary, not the response JSON, on stdout.
+Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_validate_prerequisites.sh` checks `az`, `curl`, `terraform`, `jq`, required Terraform outputs, and that the **active default** Azure CLI subscription matches `subscription_id`; it does not check Core Tools or local Python. Publish the Python code before running the remaining scripts. `run_all.sh` runs the checks in sequence without publishing code. Test scripts exit nonzero when an assertion fails; the OpenTelemetry span and timer checks may need a wait for execution/ingestion. The Storage endpoint's JSON response (`{"status":"ok","container":"deploymentpackage"}` by default) confirms the **Function App's** managed identity can reach its deployment container; a 503 indicates the probe failed (inspect telemetry and role propagation). Verification scripts report a summary, not the response JSON, on stdout.
 
 | Check | Credential and expected result |
 | --- | --- |
@@ -104,7 +104,16 @@ Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_valid
 | `/api/hello-key?name=Azure` with `x-functions-key` | HTTP **200**, body `Hello, Azure!` |
 | `/api/storage-check` without token / with valid bearer token | HTTP **401** / HTTP **200** with JSON `status: "ok"` and container name |
 | Timer | Default `0 * * * * *`: every minute at second zero (UTC by default). The script checks the deployed `%TIMER_SCHEDULE%` binding, the app setting against the Terraform output, and an app-scoped `flex-timer-check: completed` trace from the last 24 hours. Wait for the first run and telemetry ingestion; the query retries for up to 1 minute. |
-| HTTP telemetry | The script sends an authenticated `/api/hello?name=Telemetry` request (HTTP **200**, `Hello, Telemetry!`), then checks for successful `/api/hello` request telemetry **since that probe** in workspace-backed Application Insights, retrying for up to 1 minute. |
+| OpenTelemetry span | The script sends an authenticated `/api/hello?name=Telemetry` request (HTTP **200**, `Hello, Telemetry!`), then queries the Application Insights `dependencies` table for a `flex-otel-check` span **since that probe**, retrying for up to 1 minute. This verifies telemetry emitted by the Python worker, not only host-generated request telemetry. |
+
+A successful OpenTelemetry check prints `OpenTelemetry span verified for Application Insights app ...`. To inspect the same worker span manually in **Application Insights > Logs**, run:
+
+```kusto
+dependencies
+| where name == "flex-otel-check"
+| project timestamp, name, operation_Id, id, duration, success
+| order by timestamp desc
+```
 
 The Entra verification script acquires a token for the **exact** Terraform output URI. You can inspect the audience without printing a token:
 
@@ -157,7 +166,7 @@ The default changed from Python `3.11` to `3.13` for this **Python-only** sample
 * **401 with bearer token:** Confirm interactive Azure CLI login in `function_app_authentication_tenant_id`, request a fresh token for the exact identifier URI, and check that the Python `/api/hello` trigger is anonymous behind Easy Auth. A bearer token does not replace a Function key at `/api/hello-key`.
 * **403 or 503 after apply/publish:** RBAC for keyless Storage and the Terraform executor may need several minutes to propagate. Wait and retry; inspect Azure role assignments and Application Insights exceptions. Storage shared-key access is disabled.
 * **No functions after apply:** Publish via `scripts/publish_code.sh`. `terraform apply` only provisions the app.
-* **No timer/HTTP telemetry yet:** Timer defaults to once per minute, not once per hour. Verify `timer_schedule`, publish status, selected subscription, workspace and App Insights outputs; allow time for telemetry ingestion.
+* **No timer/OpenTelemetry span yet:** Timer defaults to once per minute, not once per hour. Verify `timer_schedule`, publish status, `telemetryMode` in `host.json`, the `PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY` app setting, selected subscription, workspace and App Insights outputs; allow time for telemetry ingestion.
 * Flex execution, Storage, Application Insights/Log Analytics ingestion and retention can incur charges even at low traffic. Check [Flex billing](https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan#billing) and [Azure Monitor pricing](https://azure.microsoft.com/pricing/details/monitor/). To remove scenario-managed resources from the **same initialized state**, review and run `terraform plan -destroy` then `terraform destroy`; this removes the resource group and scenario Entra app. Do not destroy a separate backend that still stores live state. Verify removal and keep or dispose of state/backups per policy.
 
 ## Primary sources
@@ -165,6 +174,7 @@ The default changed from Python `3.11` to `3.13` for this **Python-only** sample
 * [Flex Consumption overview and supported runtimes](https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan), [deploy to Flex](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#deploy-to-flex-consumption), [Python developer guide](https://learn.microsoft.com/azure/azure-functions/functions-reference-python), [timer NCRONTAB](https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#ncrontab-expressions).
 * [App Service authentication](https://learn.microsoft.com/azure/app-service/overview-authentication-authorization), [Entra provider allowed applications](https://learn.microsoft.com/azure/app-service/configure-authentication-provider-aad), [authsettingsV2](https://learn.microsoft.com/azure/templates/microsoft.web/sites/config-authsettingsv2), [HTTP authorization levels](https://learn.microsoft.com/azure/azure-functions/functions-bindings-http-webhook-trigger#authorization-level), [Function keys](https://learn.microsoft.com/azure/azure-functions/function-keys-how-to#call-endpoints-with-access-keys).
 * [Identity-based host storage](https://learn.microsoft.com/azure/azure-functions/functions-reference?tabs=blob#connecting-to-host-storage-with-an-identity), [managed identity and Blob SDK](https://learn.microsoft.com/azure/storage/blobs/storage-quickstart-blobs-python), [workspace-based Application Insights](https://learn.microsoft.com/azure/azure-monitor/app/create-workspace-resource), [Azure CLI token command](https://learn.microsoft.com/cli/azure/account#az-account-get-access-token).
+* [Use OpenTelemetry with Azure Functions](https://learn.microsoft.com/azure/azure-functions/opentelemetry-howto), [Azure Functions OpenTelemetry distributed tracing tutorial](https://learn.microsoft.com/azure/azure-functions/monitor-functions-opentelemetry-distributed-tracing), and [Azure Monitor OpenTelemetry Distro for Python](https://learn.microsoft.com/python/api/overview/azure/monitor-opentelemetry-readme).
 * [Azure CLI public application ID](https://learn.microsoft.com/power-platform/admin/apps-to-allow), [Azure CLI source](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli-core/azure/cli/core/auth/constants.py); [AzureRM provider Flex resource, version 5.7.0](https://registry.terraform.io/providers/hashicorp/azurerm/5.7.0/docs/resources/function_app_flex_consumption), [AzureAD pre-authorized application](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/application_pre_authorized).
 * Primary-source issue/implementation discussions: [Flex zip deployment issue #29630](https://github.com/hashicorp/terraform-provider-azurerm/issues/29630) and [AzureRM Flex identity-based Storage workaround (PR #29099)](https://github.com/hashicorp/terraform-provider-azurerm/pull/29099). Do not assume traditional `zip_deploy_file` behavior applies to Flex.
 * [Azure-Samples Flex Consumption Terraform AzureRM example, pinned revision `46c638a8f1053f6863f478e736290ba0646504fa`](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples/tree/46c638a8f1053f6863f478e736290ba0646504fa/IaC/terraformazurerm). Both examples use AzureRM to provision a Flex Function App, deployment container, Application Insights and Log Analytics workspace. This scenario additionally configures AzureAD and Easy Auth, compares Entra tokens with Function keys, verifies managed-identity Storage access and telemetry, and explicitly publishes its Python code with `scripts/publish_code.sh`. The sample's runtime version list reflects its pinned revision and does not list this scenario's Python 3.13 default.

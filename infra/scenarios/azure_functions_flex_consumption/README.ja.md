@@ -1,10 +1,10 @@
 ---
-description: Entra 認証、ID ベースの Storage アクセス、監視を備えた Python Azure Functions Flex Consumption のハンズオン
+description: Entra 認証、ID ベースの Storage アクセス、OpenTelemetry オブザーバビリティを備えた Python Azure Functions Flex Consumption のハンズオン
 ---
 
 # Azure Functions Flex Consumption（Python）
 
-Linux FC1 Flex Consumption の Function App を構築し、Python サンプルを明示的に公開して、2 種類の HTTP 認証、マネージド ID での Storage アクセス、タイマー、テレメトリを検証します。Terraform が構築するのは**インフラのみ**です。apply だけでは関数コードは公開されません。
+Linux FC1 Flex Consumption の Function App を構築し、Python サンプルを明示的に公開して、2 種類の HTTP 認証、マネージド ID での Storage アクセス、タイマー、OpenTelemetry トレースを検証します。Terraform が構築するのは**インフラのみ**です。apply だけでは関数コードは公開されません。
 
 ## アーキテクチャ
 
@@ -19,14 +19,14 @@ flowchart LR
     Plan["Linux FC1 プラン"] --> App["Python Function App<br/>/api/hello<br/>/api/hello-key<br/>/api/storage-check<br/>タイマー"]
     Auth -->|/api/hello と /api/storage-check| App
     App -->|システム割り当て ID<br/>Blob Owner、Queue/Table Contributor| Storage["Storage Account<br/>プライベートなデプロイコンテナー<br/>ホスト用 Blob/Queue/Table"]
-    App -->|接続文字列: テレメトリ| AI["Application Insights"]
+    App -->|OpenTelemetry host と Python worker| AI["Application Insights"]
     AI --> LA["Log Analytics ワークスペース"]
   end
   Operator["Terraform 実行 ID"] -->|Storage Blob Data Contributor| Storage
   Publisher["scripts/publish_code.sh<br/>Functions Core Tools"] -->|One Deploy| App
 ```
 
-組み込み認証は Python ランタイムに到達する前に `/api/hello` と `/api/storage-check` を保護します。`/api/hello-key` は認証方式の比較のため対象外とし、Functions ホストが `function` 認証レベルを強制します。Python タイマーは `TIMER_SCHEDULE` アプリ設定に従います。Storage プローブは `STORAGE_ACCOUNT_BLOB_ENDPOINT`（Blob サービスの URI）と `STORAGE_CONTAINER_NAME`（デプロイコンテナー）のアプリ設定を使用し、`ManagedIdentityCredential` でコンテナーの属性を読み取ります。Blob の内容は公開しません。Application Insights の接続文字列はテレメトリ専用です。Storage には接続文字列ではなくマネージド ID でアクセスします。
+組み込み認証は Python ランタイムに到達する前に `/api/hello` と `/api/storage-check` を保護します。`/api/hello-key` は認証方式の比較のため対象外とし、Functions ホストが `function` 認証レベルを強制します。Python タイマーは `TIMER_SCHEDULE` アプリ設定に従います。Storage プローブは `STORAGE_ACCOUNT_BLOB_ENDPOINT`（Blob サービスの URI）と `STORAGE_CONTAINER_NAME`（デプロイコンテナー）のアプリ設定を使用し、`ManagedIdentityCredential` でコンテナーの属性を読み取ります。Blob の内容は公開しません。Functions ホストは `telemetryMode: OpenTelemetry` でテレメトリを送信し、`PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY=true` により Python worker が Azure Monitor OpenTelemetry Distro を初期化します。`/api/hello` は `flex-otel-check` span を生成します。Application Insights の接続文字列はテレメトリ専用です。Storage には接続文字列ではなくマネージド ID でアクセスします。
 
 ## 前提条件
 
@@ -78,7 +78,7 @@ apply 後、このシナリオディレクトリから Python コードを**別�
 bash scripts/publish_code.sh
 ```
 
-このスクリプトは Functions Core Tools を使って Python サンプルを公開します（Flex の One Deploy）。`src/` から `function_app.py`、`requirements.txt`、`host.json` だけをステージングします。追跡対象の `src/local.settings.json` は `src/.funcignore` で除外され、公開用の許可リストにも含まれません。この追跡対象ファイルに実際の認証情報を追加しないでください。ホストの起動を待ってから検証してください。Python コード変更後も再公開が必要です。Terraform はソースをデプロイしません。Flex への公開を `zip_deploy_file` や従来の App Service zip デプロイで代用しないでください。
+このスクリプトは Functions Core Tools を使って Python サンプルを公開します（Flex の One Deploy）。`src/` から `function_app.py`、`requirements.txt`、`host.json` だけをステージングします。remote build はオブザーバビリティ用の唯一の直接依存 `azure-monitor-opentelemetry==1.8.10` を導入します。worker の app setting がこれを初期化するため、アプリから `configure_azure_monitor()` を重複して呼び出しません。追跡対象の `src/local.settings.json` は `src/.funcignore` で除外され、公開用の許可リストにも含まれません。この追跡対象ファイルに実際の認証情報を追加しないでください。ホストの起動を待ってから検証してください。Python コード変更後も再公開が必要です。Terraform はソースをデプロイしません。Flex への公開を `zip_deploy_file` や従来の App Service zip デプロイで代用しないでください。
 
 ## 検証
 
@@ -93,7 +93,7 @@ bash scripts/04_test_timer.sh
 bash scripts/05_test_http_telemetry.sh
 ```
 
-6 件を一度に確認する場合は、代わりに `bash scripts/run_all.sh` を実行します。`00_validate_prerequisites.sh` は `az`、`curl`、`terraform`、`jq`、必要な Terraform 出力、および Azure CLI の**現在の既定サブスクリプション**が `subscription_id` と一致することを確認します。Core Tools やローカル Python は確認しません。残りのスクリプトを実行する前に Python コードを公開してください。`run_all.sh` はコードを公開せず、各検証を順番に実行します。アサーション失敗時、スクリプトはゼロ以外で終了します。タイマー実行やテレメトリ取り込みには待ち時間が必要な場合があります。Storage エンドポイントの JSON 応答（既定では `{"status":"ok","container":"deploymentpackage"}`）は **Function App の**マネージド ID でデプロイコンテナーにアクセスできることを示します。503 はプローブ失敗を意味します（テレメトリと RBAC の反映を調べてください）。検証スクリプトの標準出力には応答 JSON ではなく結果概要が表示されます。
+6 件を一度に確認する場合は、代わりに `bash scripts/run_all.sh` を実行します。`00_validate_prerequisites.sh` は `az`、`curl`、`terraform`、`jq`、必要な Terraform 出力、および Azure CLI の**現在の既定サブスクリプション**が `subscription_id` と一致することを確認します。Core Tools やローカル Python は確認しません。残りのスクリプトを実行する前に Python コードを公開してください。`run_all.sh` はコードを公開せず、各検証を順番に実行します。アサーション失敗時、スクリプトはゼロ以外で終了します。OpenTelemetry span とタイマーの確認には実行や取り込みの待ち時間が必要な場合があります。Storage エンドポイントの JSON 応答（既定では `{"status":"ok","container":"deploymentpackage"}`）は **Function App の**マネージド ID でデプロイコンテナーにアクセスできることを示します。503 はプローブ失敗を意味します（テレメトリと RBAC の反映を調べてください）。検証スクリプトの標準出力には応答 JSON ではなく結果概要が表示されます。
 
 | 検証 | 認証情報と期待結果 |
 | --- | --- |
@@ -104,7 +104,16 @@ bash scripts/05_test_http_telemetry.sh
 | `/api/hello-key?name=Azure`、`x-functions-key` | HTTP **200**、本文 `Hello, Azure!` |
 | `/api/storage-check`、トークンなし / 有効なアクセストークンあり | HTTP **401** / HTTP **200** と `status: "ok"` とコンテナー名の JSON |
 | タイマー | 既定値 `0 * * * * *` は毎分 0 秒（既定で UTC）。スクリプトはデプロイ済みの `%TIMER_SCHEDULE%` バインディング、Terraform 出力と一致するアプリ設定、過去 24 時間の対象アプリの `flex-timer-check: completed` トレースを検証します。初回実行とテレメトリの取り込みを待ってください。クエリは最大 1 分間再試行します。 |
-| HTTP テレメトリ | スクリプトは認証付き `/api/hello?name=Telemetry` を呼び出し（HTTP **200**、`Hello, Telemetry!`）、**この呼び出し以降**の成功した `/api/hello` のテレメトリをワークスペース連携 Application Insights で確認します。取り込みを最大 1 分間再試行します。 |
+| OpenTelemetry span | スクリプトは認証付き `/api/hello?name=Telemetry` を呼び出し（HTTP **200**、`Hello, Telemetry!`）、**この呼び出し以降**の `flex-otel-check` span を Application Insights の `dependencies` テーブルで確認します。取り込みを最大 1 分間再試行し、ホスト生成 request telemetry だけでなく Python worker が生成したテレメトリを検証します。 |
+
+OpenTelemetry の確認に成功すると `OpenTelemetry span verified for Application Insights app ...` と表示されます。同じ worker span を **Application Insights > ログ**から手動確認する場合は、次の KQL を実行します。
+
+```kusto
+dependencies
+| where name == "flex-otel-check"
+| project timestamp, name, operation_Id, id, duration, success
+| order by timestamp desc
+```
 
 Entra 検証スクリプトは Terraform 出力の**正確な** URI を対象にトークンを取得します。トークンを出力せずに audience を確認する方法:
 
@@ -157,7 +166,7 @@ bash scripts/01_test_entra_http.sh
 * **アクセストークン付きで 401:** `function_app_authentication_tenant_id` のテナントに Azure CLI の対話型ユーザーでログインし、正確な識別子 URI を対象に新しいトークンを取得します。組み込み認証の背後にある Python の `/api/hello` トリガーは `anonymous` です。アクセストークンだけでは `/api/hello-key` の Function Key を代替できません。
 * **apply / 公開後に 403 または 503:** Keyless Storage と Terraform 実行 ID 用 RBAC の反映に数分かかる場合があります。待ってから再試行し、Azure ロール割り当てと Application Insights の例外を確認します。Storage の共有キーは無効です。
 * **apply 後に関数がない:** `scripts/publish_code.sh` でコードを公開します。`terraform apply` はアプリのインフラ構築のみです。
-* **タイマー / HTTP テレメトリがない:** タイマーの既定値は毎時ではなく毎分です。`timer_schedule`、公開状況、選択したサブスクリプション、ワークスペースと App Insights の出力を確認し、取り込みを待ちます。
+* **タイマー / OpenTelemetry span がない:** タイマーの既定値は毎時ではなく毎分です。`timer_schedule`、公開状況、`host.json` の `telemetryMode`、`PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY` app setting、選択したサブスクリプション、ワークスペースと App Insights の出力を確認し、取り込みを待ちます。
 * Flex の実行、Storage、Application Insights / Log Analytics の取り込みと保持には、低負荷でも費用が発生し得ます。[Flex の課金](https://learn.microsoft.com/ja-jp/azure/azure-functions/flex-consumption-plan#billing)と[Azure Monitor の価格](https://azure.microsoft.com/ja-jp/pricing/details/monitor/)を確認してください。削除時は**同じ初期化済みステート**から `terraform plan -destroy` を確認し、`terraform destroy` を実行します。リソースグループとシナリオの Entra アプリが削除されます。稼働中の別シナリオが使用するバックエンドは削除せず、削除結果とステート/バックアップの扱いを確認します。
 
 ## 一次資料
@@ -165,6 +174,7 @@ bash scripts/01_test_entra_http.sh
 * [Flex Consumption の概要と対応ランタイム](https://learn.microsoft.com/ja-jp/azure/azure-functions/flex-consumption-plan)、[Flex へのデプロイ](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#deploy-to-flex-consumption)、[Python 開発者ガイド](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-reference-python)、[タイマーの NCRONTAB](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-bindings-timer#ncrontab-expressions)。
 * [App Service 認証](https://learn.microsoft.com/ja-jp/azure/app-service/overview-authentication-authorization)、[Entra プロバイダーの許可アプリ](https://learn.microsoft.com/ja-jp/azure/app-service/configure-authentication-provider-aad)、[authsettingsV2](https://learn.microsoft.com/azure/templates/microsoft.web/sites/config-authsettingsv2)、[HTTP の認証レベル](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-bindings-http-webhook-trigger#authorization-level)、[Function Key](https://learn.microsoft.com/ja-jp/azure/azure-functions/function-keys-how-to#call-endpoints-with-access-keys)。
 * [ID ベースのホスト用 Storage](https://learn.microsoft.com/azure/azure-functions/functions-reference?tabs=blob#connecting-to-host-storage-with-an-identity)、[マネージド ID と Blob SDK](https://learn.microsoft.com/azure/storage/blobs/storage-quickstart-blobs-python)、[ワークスペース連携 Application Insights](https://learn.microsoft.com/azure/azure-monitor/app/create-workspace-resource)、[Azure CLI のトークン取得](https://learn.microsoft.com/ja-jp/cli/azure/account#az-account-get-access-token)。
+* [Azure Functions で OpenTelemetry を使用する](https://learn.microsoft.com/ja-jp/azure/azure-functions/opentelemetry-howto)、[Azure Functions OpenTelemetry 分散トレーシングのチュートリアル](https://learn.microsoft.com/ja-jp/azure/azure-functions/monitor-functions-opentelemetry-distributed-tracing)、[Python 用 Azure Monitor OpenTelemetry Distro](https://learn.microsoft.com/ja-jp/python/api/overview/azure/monitor-opentelemetry-readme)。
 * [Azure CLI の公開アプリ ID](https://learn.microsoft.com/power-platform/admin/apps-to-allow)、[Azure CLI のソースコード](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli-core/azure/cli/core/auth/constants.py)、[AzureRM プロバイダーの Flex リソース、バージョン 5.7.0](https://registry.terraform.io/providers/hashicorp/azurerm/5.7.0/docs/resources/function_app_flex_consumption)、[AzureAD アプリ事前承認](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/application_pre_authorized)。
 * 一次資料の課題/実装議論: [Flex zip デプロイの issue #29630](https://github.com/hashicorp/terraform-provider-azurerm/issues/29630)、[AzureRM Flex の ID ベース Storage 回避策（PR #29099）](https://github.com/hashicorp/terraform-provider-azurerm/pull/29099)。従来の `zip_deploy_file` が Flex で利用できるとは限りません。
 * [Azure-Samples Flex Consumption Terraform AzureRM の例、固定リビジョン `46c638a8f1053f6863f478e736290ba0646504fa`](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples/tree/46c638a8f1053f6863f478e736290ba0646504fa/IaC/terraformazurerm)。どちらも AzureRM で Flex Function App、デプロイコンテナー、Application Insights、Log Analytics ワークスペースを構築します。このシナリオではさらに AzureAD と組み込み認証を設定し、Entra トークンと Function Key を比較し、マネージド ID による Storage アクセスとテレメトリを検証し、Python コードを `scripts/publish_code.sh` で明示的に公開します。参照先サンプルのランタイム対応バージョン一覧は固定リビジョン時点のもので、このシナリオの Python 3.13 の既定値は掲載されていません。

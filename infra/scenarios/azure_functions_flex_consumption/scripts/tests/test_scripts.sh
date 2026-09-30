@@ -178,15 +178,15 @@ fi
 "$SCRIPT_DIR/05_test_http_telemetry.sh" > "$FIXTURE/stdout" || fail 'Telemetry verification failed'
 grep -q -- '--app insights-123' "$FIXTURE/az.calls" || fail 'Telemetry not scoped to app ID'
 grep -q -- '--subscription sub-123' "$FIXTURE/az.calls" || fail 'Azure operations not scoped to subscription'
-grep -q "parse_url(url).Path" "$FIXTURE/az.calls" || fail 'HTTP telemetry route not matched exactly'
-grep -q "resultCode == '200'" "$FIXTURE/az.calls" || fail 'HTTP telemetry result code not checked'
-grep -q 'datetime(' "$FIXTURE/az.calls" || fail 'HTTP telemetry not scoped to fresh probe'
+grep -q "dependencies | where timestamp" "$FIXTURE/az.calls" || fail 'OpenTelemetry dependencies not queried'
+grep -q "name == 'flex-otel-check'" "$FIXTURE/az.calls" || fail 'Named OpenTelemetry span not queried'
+grep -q 'datetime(' "$FIXTURE/az.calls" || fail 'OpenTelemetry span not scoped to fresh probe'
 
 MOCK_CASE=delayed_telemetry
 export MOCK_CASE
 "$SCRIPT_DIR/04_test_timer.sh" > "$FIXTURE/stdout" || fail 'Timer telemetry retry failed'
 rm -f "$FIXTURE/telemetry.count"
-"$SCRIPT_DIR/05_test_http_telemetry.sh" > "$FIXTURE/stdout" || fail 'HTTP telemetry retry failed'
+"$SCRIPT_DIR/05_test_http_telemetry.sh" > "$FIXTURE/stdout" || fail 'OpenTelemetry span retry failed'
 unset MOCK_CASE
 
 MOCK_CASE=wrong_subscription

@@ -92,11 +92,12 @@ run "scenario_defaults_and_outputs" {
       var.runtime_name == "python",
       var.runtime_version == "3.13",
       var.timer_schedule == "0 * * * * *",
+      local.function_app_settings["PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY"] == "true",
       module.log_analytics.name == "law-azurefuncflex-test1234",
       module.application_insights.name == "appi-azurefuncflex-test1234",
       module.functions_flex_consumption.function_app_name == "func-azurefuncflex-test1234",
     ])
-    error_message = "The default scenario must deploy monitored Python 3.13 Flex Consumption with a one-minute timer."
+    error_message = "The default scenario must deploy OpenTelemetry-enabled Python 3.13 Flex Consumption with a one-minute timer."
   }
 
   assert {

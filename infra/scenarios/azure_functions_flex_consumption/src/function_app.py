@@ -5,8 +5,10 @@ import os
 
 from azure.identity import ManagedIdentityCredential
 from azure.storage.blob import BlobServiceClient
+from opentelemetry import trace
 
 app = func.FunctionApp()
+tracer = trace.get_tracer(__name__)
 
 
 def create_hello_response(req: func.HttpRequest) -> func.HttpResponse:
@@ -45,7 +47,8 @@ def hello_world_http(req: func.HttpRequest) -> func.HttpResponse:
     """
     logging.info("HTTP trigger function processed a request.")
 
-    return create_hello_response(req)
+    with tracer.start_as_current_span("flex-otel-check"):
+        return create_hello_response(req)
 
 
 @app.route(route="hello-key", auth_level=func.AuthLevel.FUNCTION)

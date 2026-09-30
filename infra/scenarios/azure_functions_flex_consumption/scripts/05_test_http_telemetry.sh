@@ -18,15 +18,15 @@ request --header "Authorization: Be""arer $ACCESS_TOKEN" "$FUNCTION_APP_URL/api/
 expect_status 200
 [ "$(cat "$RESPONSE_FILE")" = 'Hello, Telemetry!' ] ||
   die "Unexpected telemetry probe response."
-QUERY="requests | where timestamp between (datetime('$PROBE_STARTED_AT') .. now()) | where tostring(parse_url(url).Path) == '/api/hello' and resultCode == '200' | take 1"
+QUERY="dependencies | where timestamp between (datetime('$PROBE_STARTED_AT') .. now()) | where name == 'flex-otel-check' | take 1"
 attempt=1
 while [ "$attempt" -le 6 ]; do
-  RESULT=$(query_telemetry "$QUERY") || die "HTTP telemetry query failed."
+  RESULT=$(query_telemetry "$QUERY") || die "OpenTelemetry span query failed."
   if printf '%s' "$RESULT" | has_telemetry_rows; then
-    printf 'HTTP request telemetry verified for Application Insights app %s.\n' "$APP_INSIGHTS_APP_ID"
+    printf 'OpenTelemetry span verified for Application Insights app %s.\n' "$APP_INSIGHTS_APP_ID"
     exit 0
   fi
   [ "$attempt" -eq 6 ] || sleep 10
   attempt=$((attempt + 1))
 done
-die "No successful /api/hello telemetry appeared after the probe within bounded retries."
+die "No flex-otel-check span appeared after the probe within bounded retries."
