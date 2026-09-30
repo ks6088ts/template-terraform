@@ -68,18 +68,46 @@ enable_standard_setup = true
 
 model_deployments = [
   {
-    name                   = "gpt-5.4-mini"
-    model                  = "gpt-5.4-mini"
-    version                = "2026-03-17"
-    capacity               = 100
-    version_upgrade_option = "NoAutoUpgrade"
+    name     = "gpt-6-sol"
+    model    = "gpt-6-sol"
+    version  = "2026-09-22"
+    capacity = 1000
   },
   {
-    name                   = "text-embedding-3-large"
-    model                  = "text-embedding-3-large"
-    version                = "1"
-    capacity               = 30
-    version_upgrade_option = "NoAutoUpgrade"
+    name     = "gpt-6-luna"
+    model    = "gpt-6-luna"
+    version  = "2026-09-22"
+    capacity = 1000
+  },
+  {
+    name     = "gpt-6-astra"
+    model    = "gpt-6-astra"
+    version  = "2026-09-03"
+    capacity = 1000
+  },
+  {
+    name     = "gpt-5.5"
+    model    = "gpt-5.5"
+    version  = "2026-04-24"
+    capacity = 1000
+  },
+  {
+    name     = "gpt-5.4-mini"
+    model    = "gpt-5.4-mini"
+    version  = "2026-03-17"
+    capacity = 1000
+  },
+  {
+    name     = "text-embedding-3-large"
+    model    = "text-embedding-3-large"
+    version  = "1"
+    capacity = 3000
+  },
+  {
+    name     = "text-embedding-3-small"
+    model    = "text-embedding-3-small"
+    version  = "1"
+    capacity = 3000
   },
 ]
 ```
@@ -148,8 +176,7 @@ flowchart TD
     RG["Resource group"]
     Account["Microsoft Foundry account<br/>system identity; local auth disabled"]
     Project["Foundry project<br/>system identity"]
-    Chat["gpt-5.4-mini deployment<br/>(opt-in)"]
-    Embedding["text-embedding-3-large deployment<br/>(opt-in)"]
+    Models["Model deployments<br/>(opt-in)"]
     Search["Azure AI Search<br/>(Standard setup opt-in)"]
     Storage["StorageV2 / ZRS<br/>(Standard setup opt-in)"]
     Cosmos["Cosmos DB for NoSQL<br/>(Standard setup opt-in)"]
@@ -161,8 +188,7 @@ flowchart TD
     Operator --> RG
     RG --> Account
     Account --> Project
-    Account -.-> Chat
-    Account -.-> Embedding
+    Account -.-> Models
     RG -.-> Search
     RG -.-> Storage
     RG -.-> Cosmos
@@ -176,7 +202,7 @@ flowchart TD
     Scripts -.-> Search
     Scripts -.-> Project
     Search -.-> Storage
-    Search -.-> Embedding
+    Search -.-> Models
     Project -. "traces" .-> Insights
 ```
 
@@ -187,12 +213,17 @@ versions, and transient conversations.
 
 ### Suggested sample model deployments
 
-`model_deployments` defaults to `[]`. For the optional workflow, the quick-start example uses only:
+`model_deployments` defaults to `[]`. The optional workflow quick start illustrates:
 
 | Deployment/model | Version | SKU | Capacity | Version upgrades |
 | --- | --- | --- | ---: | --- |
-| `gpt-5.4-mini` | `2026-03-17` | `GlobalStandard` | 100 | `NoAutoUpgrade` |
-| `text-embedding-3-large` | `1` | `GlobalStandard` | 30 | `NoAutoUpgrade` |
+| `gpt-6-sol` | `2026-09-22` | `GlobalStandard` | 1000 | `NoAutoUpgrade` |
+| `gpt-6-luna` | `2026-09-22` | `GlobalStandard` | 1000 | `NoAutoUpgrade` |
+| `gpt-6-astra` | `2026-09-03` | `GlobalStandard` | 1000 | `NoAutoUpgrade` |
+| `gpt-5.5` | `2026-04-24` | `GlobalStandard` | 1000 | `NoAutoUpgrade` |
+| `gpt-5.4-mini` | `2026-03-17` | `GlobalStandard` | 1000 | `NoAutoUpgrade` |
+| `text-embedding-3-large` | `1` | `GlobalStandard` | 3000 | `NoAutoUpgrade` |
+| `text-embedding-3-small` | `1` | `GlobalStandard` | 3000 | `NoAutoUpgrade` |
 
 These are examples, not implicit defaults. Model availability, allowed capacity increments, quota,
 and Agent Service compatibility vary by region and subscription. `GlobalStandard` can process
