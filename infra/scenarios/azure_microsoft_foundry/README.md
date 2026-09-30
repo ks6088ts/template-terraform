@@ -192,11 +192,11 @@ also add `--verbose` to any command:
 ./scripts/08_ask_agent.sh
 ```
 
-Environment variables customize the workflow. For example, ask the prompt agent a Japanese
+Environment variables customize the workflow. For example, ask the prompt agent a custom
 question with:
 
 ```bash
-QUESTION="ベジタリアンに向いてるレストランを教えて。" ./scripts/08_ask_agent.sh
+QUESTION="Which restaurants are suitable for vegetarians?" ./scripts/08_ask_agent.sh
 ```
 
 The backward-compatible `VERBOSE_OUTPUT=true` setting prints progress plus complete REST responses
