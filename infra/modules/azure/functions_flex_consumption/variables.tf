@@ -81,6 +81,13 @@ variable "app_settings" {
   default     = {}
 }
 
+variable "application_insights_connection_string" {
+  description = "Connection string for Application Insights telemetry (optional)"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
 variable "authentication" {
   description = "Microsoft Entra ID authentication settings for incoming requests"
   type = object({

@@ -2,3 +2,6 @@
 # The Python Worker is managed by Azure Functions platform
 #, and azure-functions-worker doesn't exist on pypi.
 azure-functions
+azure-identity==1.25.3
+azure-monitor-opentelemetry==1.8.10
+azure-storage-blob==12.30.3

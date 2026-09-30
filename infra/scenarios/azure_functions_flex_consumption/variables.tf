@@ -46,7 +46,13 @@ variable "runtime_name" {
 variable "runtime_version" {
   description = "The runtime version for your app. Depends on runtime_name."
   type        = string
-  default     = "3.11"
+  default     = "3.13"
+}
+
+variable "timer_schedule" {
+  description = "NCRONTAB schedule for the timer trigger (UTC by default)"
+  type        = string
+  default     = "0 * * * * *"
 }
 
 variable "maximum_instance_count" {
