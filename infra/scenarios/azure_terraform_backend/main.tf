@@ -44,7 +44,7 @@ module "storage" {
   tags                                 = var.tags
   account_tier                         = "Standard"
   account_replication_type             = "LRS"
-  is_hns_enabled                       = false
+  enable_hns                           = false
   public_network_access_enabled        = true
   allow_nested_items_to_be_public      = false
   https_traffic_only_enabled           = true

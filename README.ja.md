@@ -24,6 +24,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.ja.md) | Docker Hub イメージを使用し、外部アクセス可能な Azure Container App をデプロイします。 |
 | [azure_cosmosdb_playground](./infra/scenarios/azure_cosmosdb_playground/README.ja.md) | Cosmos DB NoSQL の CRUD、TTL、変更フィード、ベクトル・全文・ハイブリッド検索、Foundry を使った RAG を体験します。 |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.ja.md) | Cosmos DB、Storage、Key Vault、PostgreSQL、Monitor などの Azure データストアを、テスト用のパブリックアクセスを許可してデプロイします。 |
+| [azure_messaging](./infra/scenarios/azure_messaging/README.ja.md) | Queue Storage、Service Bus、Event Grid、Event Hubs を opt-in でデプロイし、Microsoft Entra のデータプレーン アクセスで検証します。 |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.ja.md) | Python Functions を Flex Consumption にデプロイし、Microsoft Entra 認証と Function Key 認証、マネージド ID による Storage アクセス、Application Insights 上の OpenTelemetry オブザーバビリティを検証します。 |
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.ja.md) | Foundry、Blob Storage、AI Search、MCP を使い、独自データに基づく Prompt Agent の根拠付き回答を学べます。 |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.ja.md) | Azure ハブアンドスポークアーキテクチャ用のスポークネットワークとして、VNet、Bastion、Storage のプライベートエンドポイント、VM をデプロイします。 |

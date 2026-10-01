@@ -84,6 +84,7 @@ module "storage" {
   tags                          = var.tags
   account_tier                  = var.storage_account_tier
   account_replication_type      = var.storage_account_replication_type
+  enable_hns                    = false
   public_network_access_enabled = false
   enable_identity               = false
 

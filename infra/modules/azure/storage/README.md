@@ -7,9 +7,8 @@ description: Creates an Azure Storage account with optional data services and pr
 
 This module creates an Azure Storage account with optional queue, container,
 soft-delete, managed identity, and Blob private endpoint resources. By default,
-it preserves the public storage behavior used by existing scenarios: public
-network access and a system-assigned managed identity are enabled, while the
-private endpoint is disabled.
+hierarchical namespace, public network access, and a system-assigned managed
+identity are enabled, while the private endpoint is disabled.
 
 ## Private networking
 
@@ -62,7 +61,7 @@ module "storage" {
 | `tags`                                 | `map(string)` | `{}`       | Tags applied to resources                        |
 | `account_tier`                         | `string`      | `Standard` | Storage account tier                             |
 | `account_replication_type`             | `string`      | `LRS`      | Storage replication type                         |
-| `is_hns_enabled`                       | `bool`        | `false`    | Enables hierarchical namespace                   |
+| `enable_hns`                           | `bool`        | `true`     | Enables hierarchical namespace                   |
 | `public_network_access_enabled`        | `bool`        | `true`     | Enables public network access                    |
 | `allow_nested_items_to_be_public`      | `bool`        | `false`    | Allows nested items to become public             |
 | `https_traffic_only_enabled`           | `bool`        | `true`     | Requires HTTPS traffic                           |
@@ -74,22 +73,27 @@ module "storage" {
 | `blob_soft_delete_retention_days`      | `number`      | `7`        | Deleted blob retention period in days            |
 | `container_soft_delete_retention_days` | `number`      | `7`        | Deleted container retention period in days       |
 | `create_queue`                         | `bool`        | `false`    | Creates one storage queue                        |
+| `queue_data_contributor_principal_id`  | `string`      | `null`     | Principal granted Queue data access              |
 | `create_container`                     | `bool`        | `false`    | Creates one Blob container                       |
 | `container_name`                       | `string`      | `default`  | Blob container name                              |
 | `container_access_type`                | `string`      | `private`  | Blob container access type                       |
 
 ## Outputs
 
-| Name                    | Description                                      |
-|-------------------------|--------------------------------------------------|
-| `account_id`            | Storage account ID                               |
-| `account_name`          | Storage account name                             |
-| `primary_access_key`    | Primary storage access key                       |
-| `primary_blob_endpoint` | Primary Blob endpoint                            |
-| `primary_dfs_endpoint`  | Primary Data Lake Storage endpoint               |
-| `queue_name`            | Queue name, or `null` when disabled               |
-| `container_name`        | Container name, or `null` when disabled           |
-| `container_id`          | Container ID, or `null` when disabled             |
-| `private_endpoint_id`   | Blob private endpoint ID, or `null` when disabled |
-| `private_endpoint_ip`   | Blob private IP, or `null` when disabled          |
-| `private_dns_zone_id`   | Blob private DNS zone ID, or `null` when disabled |
+| Name                                           | Description                                                             |
+|------------------------------------------------|-------------------------------------------------------------------------|
+| `account_id`                                   | Storage Account ID                                                      |
+| `account_name`                                 | Storage Account name                                                    |
+| `hns_enabled`                                  | Whether hierarchical namespace is enabled                              |
+| `primary_access_key`                           | Primary access key, or `null` when shared-key authentication is disabled |
+| `primary_blob_endpoint`                        | Primary Blob endpoint                                                   |
+| `primary_dfs_endpoint`                         | Primary Data Lake Storage endpoint                                      |
+| `primary_queue_endpoint`                       | Primary Queue endpoint                                                  |
+| `queue_name`                                   | Queue name, or `null` when disabled                                     |
+| `queue_id`                                     | Queue ID, or `null` when disabled                                       |
+| `queue_data_contributor_role_assignment_id`    | Queue data role assignment ID, or `null`                                |
+| `container_name`                               | Container name, or `null` when disabled                                 |
+| `container_id`                                 | Container ID, or `null` when disabled                                   |
+| `private_endpoint_id`                          | Blob private endpoint ID, or `null` when disabled                       |
+| `private_endpoint_ip`                          | Blob private IP, or `null` when disabled                                |
+| `private_dns_zone_id`                          | Blob private DNS zone ID, or `null` when disabled                       |

@@ -4,7 +4,7 @@ resource "azurerm_storage_account" "this" {
   location                        = var.location
   account_tier                    = var.account_tier
   account_replication_type        = var.account_replication_type
-  is_hns_enabled                  = var.is_hns_enabled
+  is_hns_enabled                  = var.enable_hns
   tags                            = var.tags
   public_network_access           = var.public_network_access_enabled ? "Enabled" : "Disabled"
   allow_nested_items_to_be_public = var.allow_nested_items_to_be_public
@@ -36,6 +36,14 @@ resource "azurerm_storage_queue" "this" {
   count              = var.create_queue ? 1 : 0
   name               = "st${var.name}-queue"
   storage_account_id = azurerm_storage_account.this.id
+}
+
+resource "azurerm_role_assignment" "queue_data_contributor" {
+  count = var.create_queue && var.queue_data_contributor_principal_id != null ? 1 : 0
+
+  scope                = azurerm_storage_account.this.id
+  role_definition_name = "Storage Queue Data Contributor"
+  principal_id         = var.queue_data_contributor_principal_id
 }
 
 resource "azurerm_storage_container" "this" {

@@ -51,10 +51,10 @@ variable "account_replication_type" {
   }
 }
 
-variable "is_hns_enabled" {
+variable "enable_hns" {
   description = "Enable hierarchical namespace (Data Lake Storage Gen2)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "public_network_access_enabled" {
@@ -139,6 +139,18 @@ variable "create_queue" {
   description = "Create a storage queue"
   type        = bool
   default     = false
+}
+
+variable "queue_data_contributor_principal_id" {
+  description = "Optional principal object ID granted Storage Queue Data Contributor when the queue is created"
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.queue_data_contributor_principal_id == null || trimspace(var.queue_data_contributor_principal_id) != ""
+    error_message = "Queue data contributor principal ID must be null or a non-empty string."
+  }
 }
 
 variable "create_container" {
