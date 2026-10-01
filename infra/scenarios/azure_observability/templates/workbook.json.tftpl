@@ -1,0 +1,56 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "name": "overview",
+      "content": {
+        "json": "# Azure observability overview\nThis workbook reads AzureActivity in the selected Log Analytics workspace. Enable Activity Log export separately and allow ingestion time. Empty results are expected before events arrive; without export the AzureActivity table may not exist. Queries cover only the last 24 hours, and recent events are limited to 100 rows. Azure Monitor workspace metrics and application telemetry are separate; no collection or scheduled queries are created by this workbook."
+      }
+    },
+    {
+      "type": 3,
+      "name": "activity-count",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Activity events (last 24 hours)",
+        "query": "AzureActivity\n| where TimeGenerated > ago(24h)\n| summarize Events = count()",
+        "size": 1,
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [${jsonencode(workspace_id)}],
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "activity-categories",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Activity by category (last 24 hours)",
+        "query": "AzureActivity\n| where TimeGenerated > ago(24h)\n| summarize Events = count() by CategoryValue\n| top 8 by Events desc",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [${jsonencode(workspace_id)}],
+        "visualization": "barchart"
+      }
+    },
+    {
+      "type": 3,
+      "name": "recent-activity",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Recent activity (up to 100 events)",
+        "query": "AzureActivity\n| where TimeGenerated > ago(24h)\n| top 100 by TimeGenerated desc\n| project TimeGenerated, CategoryValue, OperationNameValue, ActivityStatusValue, ResourceGroup",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [${jsonencode(workspace_id)}],
+        "visualization": "table"
+      }
+    }
+  ],
+  "isLocked": false,
+  "fallbackResourceIds": [${jsonencode(workspace_id)}]
+}

@@ -27,6 +27,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | [azure_messaging](./infra/scenarios/azure_messaging/README.ja.md) | Queue Storage、Service Bus、Event Grid、Event Hubs を opt-in でデプロイし、Microsoft Entra のデータプレーン アクセスで検証します。 |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.ja.md) | Python Functions を Flex Consumption にデプロイし、Microsoft Entra 認証と Function Key 認証、マネージド ID による Storage アクセス、Application Insights 上の OpenTelemetry オブザーバビリティを検証します。 |
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.ja.md) | Foundry、Blob Storage、AI Search、MCP を使い、独自データに基づく Prompt Agent の根拠付き回答を学べます。 |
+| [azure_observability](./infra/scenarios/azure_observability/README.ja.md) | Azure Monitor、Log Analytics、Application Insights、Network Watcher、Activity Log export、アラート、Action Group、Workbook を opt-in で検証します。 |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.ja.md) | Azure ハブアンドスポークアーキテクチャ用のスポークネットワークとして、VNet、Bastion、Storage のプライベートエンドポイント、VM をデプロイします。 |
 | [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.ja.md) | Azure Container Apps 上に azure_inclusive_ai_labs API と VOICEVOX を使用した音声合成サービスをデプロイします。 |
 | [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.ja.md) | 閉域構成を使用せず、コストを抑えた Azure Container Registry と Azure Kubernetes Service の環境をデプロイします。 |

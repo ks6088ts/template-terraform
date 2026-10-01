@@ -27,6 +27,7 @@ provider authentication, and remote state guidance.
 | [azure_messaging](./infra/scenarios/azure_messaging/README.md) | Deploys opt-in Queue Storage, Service Bus, Event Grid, and Event Hubs resources with Microsoft Entra data-plane access. |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.md) | Deploys Python Functions on Flex Consumption with Microsoft Entra and function-key authentication, managed-identity Storage, and OpenTelemetry observability in Application Insights. |
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Learn grounded prompt-agent responses with Foundry, Blob Storage, AI Search, and MCP. |
+| [azure_observability](./infra/scenarios/azure_observability/README.md) | Explores opt-in Azure Monitor, Log Analytics, Application Insights, Network Watcher, Activity Log export, alerts, Action Groups, and Workbooks. |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.md) | Deploys a spoke network for an Azure hub-and-spoke architecture with a VNet, Bastion, private Storage endpoint, and VM. |
 | [azure_inclusive_ai_labs](./infra/scenarios/azure_inclusive_ai_labs/README.md) | Deploys the azure_inclusive_ai_labs API and its VOICEVOX-powered speech synthesis services on Azure Container Apps. |
 | [azure_kubernetes_playground](./infra/scenarios/azure_kubernetes_playground/README.md) | Deploys a cost-conscious Azure Container Registry and Azure Kubernetes Service environment without private networking. |

@@ -126,6 +126,7 @@ jobs:
           - azure_inclusive_ai_labs
           - azure_messaging
           - azure_microsoft_foundry
+          - azure_observability
           - azure_spoke_network
           - azure_terraform_backend
     env:
@@ -154,6 +155,14 @@ jobs:
         run: |
           terraform -chdir=infra/modules/azure/microsoft_foundry init -backend=false
           terraform -chdir=infra/modules/azure/microsoft_foundry test
+      - name: Run observability module tests
+        if: matrix.scenario == 'azure_observability'
+        run: |
+          for module in log_analytics network_watcher activity_log monitor_action_group monitor_activity_log_alert monitor_workbook; do
+            terraform -chdir="infra/modules/azure/$module" init -backend=false
+            terraform -chdir="infra/modules/azure/$module" validate
+            terraform -chdir="infra/modules/azure/$module" test
+          done
 
   # Test Google scenarios (google_*)
   test-google:
