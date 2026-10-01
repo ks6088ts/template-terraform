@@ -10,7 +10,7 @@ event routing, and event streaming patterns. Every messaging service is disabled
 ## Overview
 
 | Service | Deployed resources | Default tier |
-|---------|--------------------|--------------|
+| --- | --- | --- |
 | Queue Storage | ADLS Gen2 Storage Account and one Queue | Standard_LRS + HNS |
 | Service Bus | Namespace, Queue, Topic, and Subscription | Standard |
 | Event Grid | Custom Topic | Basic |
@@ -143,7 +143,7 @@ Storage Account. Review the Terraform plan before applying this setting.
 ## Variables
 
 | Name | Description | Type | Default |
-|------|-------------|------|---------|
+| --- | --- | --- | --- |
 | `name` | Base name for resources | `string` | `"azuremessaging"` |
 | `location` | Azure region | `string` | `"japaneast"` |
 | `tags` | Tags applied to resources | `map(string)` | See `variables.tf` |
@@ -165,7 +165,7 @@ Storage Account. Review the Terraform plan before applying this setting.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| --- | --- |
 | `resource_group_id` | Resource group ID |
 | `resource_group_name` | Resource group name |
 | `operator_principal_id` | Principal granted messaging data-plane roles |

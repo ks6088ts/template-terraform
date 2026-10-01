@@ -11,7 +11,7 @@ description: Microsoft Entra のデータプレーン アクセスを使用す�
 ## 概要
 
 | サービス | デプロイするリソース | 既定の層 |
-|----------|----------------------|----------|
+| --- | --- | --- |
 | Queue Storage | ADLS Gen2 Storage Account と Queue 1 個 | Standard_LRS + HNS |
 | Service Bus | Namespace、Queue、Topic、Subscription | Standard |
 | Event Grid | Custom Topic | Basic |
@@ -145,7 +145,7 @@ Azure ロール割り当ての反映には数分かかる場合があります�
 ## 変数
 
 | 名前 | 説明 | 型 | 既定値 |
-|------|------|----|--------|
+| --- | --- | --- | --- |
 | `name` | リソースの基本名 | `string` | `"azuremessaging"` |
 | `location` | Azure リージョン | `string` | `"japaneast"` |
 | `tags` | リソースに適用するタグ | `map(string)` | `variables.tf` を参照 |
@@ -167,7 +167,7 @@ Azure ロール割り当ての反映には数分かかる場合があります�
 ## 出力
 
 | 名前 | 説明 |
-|------|------|
+| --- | --- |
 | `resource_group_id` | Resource Group ID |
 | `resource_group_name` | Resource Group 名 |
 | `operator_principal_id` | Messaging データプレーン ロールを付与したプリンシパル |

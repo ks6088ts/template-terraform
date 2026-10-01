@@ -51,48 +51,48 @@ module "storage" {
 
 ## 入力
 
-| 名前                                   | 型            | 既定値     | 説明                                           |
-|----------------------------------------|---------------|------------|------------------------------------------------|
-| `name`                                 | `string`      | 必須       | 関連リソースに使用する基本名                   |
-| `storage_account_name`                 | `string`      | 必須       | グローバルで一意な Storage Account 名          |
-| `resource_group_name`                  | `string`      | 必須       | リソース グループ名                            |
-| `location`                             | `string`      | 必須       | Azure リージョン                               |
-| `tags`                                 | `map(string)` | `{}`       | リソースに適用するタグ                         |
-| `account_tier`                         | `string`      | `Standard` | Storage Account の層                           |
-| `account_replication_type`             | `string`      | `LRS`      | ストレージのレプリケーション方式               |
-| `enable_hns`                           | `bool`        | `true`     | 階層型名前空間を有効化するかどうか             |
-| `public_network_access_enabled`        | `bool`        | `true`     | パブリック ネットワーク アクセスを有効化するか |
-| `allow_nested_items_to_be_public`      | `bool`        | `false`    | 入れ子項目のパブリック化を許可するかどうか     |
-| `https_traffic_only_enabled`           | `bool`        | `true`     | HTTPS 通信のみを許可するかどうか               |
-| `min_tls_version`                      | `string`      | `TLS1_2`   | TLS の最小バージョン                           |
-| `shared_access_key_enabled`            | `bool`        | `true`     | 共有キー認証を有効化するかどうか               |
-| `enable_identity`                      | `bool`        | `true`     | システム割り当てマネージド ID を有効化するか   |
-| `private_endpoint`                     | `object`      | `null`     | Blob プライベート エンドポイントの設定         |
-| `enable_blob_soft_delete`              | `bool`        | `false`    | Blob とコンテナーの論理削除を有効化するか      |
-| `blob_soft_delete_retention_days`      | `number`      | `7`        | 削除した Blob の保持日数                       |
-| `container_soft_delete_retention_days` | `number`      | `7`        | 削除したコンテナーの保持日数                   |
-| `create_queue`                         | `bool`        | `false`    | ストレージ キューを 1 つ作成するかどうか       |
-| `queue_data_contributor_principal_id` | `string`      | `null`     | Queue データ アクセスを付与するプリンシパル     |
-| `create_container`                     | `bool`        | `false`    | Blob コンテナーを 1 つ作成するかどうか         |
-| `container_name`                       | `string`      | `default`  | Blob コンテナー名                              |
-| `container_access_type`                | `string`      | `private`  | Blob コンテナーのアクセス種別                  |
+| 名前 | 型 | 既定値 | 説明 |
+| --- | --- | --- | --- |
+| `name` | `string` | 必須 | 関連リソースに使用する基本名 |
+| `storage_account_name` | `string` | 必須 | グローバルで一意な Storage Account 名 |
+| `resource_group_name` | `string` | 必須 | リソース グループ名 |
+| `location` | `string` | 必須 | Azure リージョン |
+| `tags` | `map(string)` | `{}` | リソースに適用するタグ |
+| `account_tier` | `string` | `Standard` | Storage Account の層 |
+| `account_replication_type` | `string` | `LRS` | ストレージのレプリケーション方式 |
+| `enable_hns` | `bool` | `true` | 階層型名前空間を有効化するかどうか |
+| `public_network_access_enabled` | `bool` | `true` | パブリック ネットワーク アクセスを有効化するか |
+| `allow_nested_items_to_be_public` | `bool` | `false` | 入れ子項目のパブリック化を許可するかどうか |
+| `https_traffic_only_enabled` | `bool` | `true` | HTTPS 通信のみを許可するかどうか |
+| `min_tls_version` | `string` | `TLS1_2` | TLS の最小バージョン |
+| `shared_access_key_enabled` | `bool` | `true` | 共有キー認証を有効化するかどうか |
+| `enable_identity` | `bool` | `true` | システム割り当てマネージド ID を有効化するか |
+| `private_endpoint` | `object` | `null` | Blob プライベート エンドポイントの設定 |
+| `enable_blob_soft_delete` | `bool` | `false` | Blob とコンテナーの論理削除を有効化するか |
+| `blob_soft_delete_retention_days` | `number` | `7` | 削除した Blob の保持日数 |
+| `container_soft_delete_retention_days` | `number` | `7` | 削除したコンテナーの保持日数 |
+| `create_queue` | `bool` | `false` | ストレージ キューを 1 つ作成するかどうか |
+| `queue_data_contributor_principal_id` | `string` | `null` | Queue データ アクセスを付与するプリンシパル |
+| `create_container` | `bool` | `false` | Blob コンテナーを 1 つ作成するかどうか |
+| `container_name` | `string` | `default` | Blob コンテナー名 |
+| `container_access_type` | `string` | `private` | Blob コンテナーのアクセス種別 |
 
 ## 出力
 
-| 名前                                           | 説明                                                          |
-|------------------------------------------------|---------------------------------------------------------------|
-| `account_id`                                   | Storage Account ID                                            |
-| `account_name`                                 | Storage Account 名                                            |
-| `hns_enabled`                                  | 階層型名前空間が有効かどうか                                  |
-| `primary_access_key`                           | プライマリ アクセス キー。共有キー認証が無効な場合は `null`   |
-| `primary_blob_endpoint`                        | プライマリ Blob エンドポイント                                |
-| `primary_dfs_endpoint`                         | プライマリ Data Lake Storage エンドポイント                   |
-| `primary_queue_endpoint`                       | プライマリ Queue エンドポイント                               |
-| `queue_name`                                   | キュー名。無効な場合は `null`                                 |
-| `queue_id`                                     | キュー ID。無効な場合は `null`                                |
-| `queue_data_contributor_role_assignment_id`    | Queue データ ロール割り当て ID。無効な場合は `null`           |
-| `container_name`                               | コンテナー名。無効な場合は `null`                             |
-| `container_id`                                 | コンテナー ID。無効な場合は `null`                            |
-| `private_endpoint_id`                          | Blob プライベート エンドポイント ID。無効な場合は `null`      |
-| `private_endpoint_ip`                          | Blob プライベート IP。無効な場合は `null`                     |
-| `private_dns_zone_id`                          | Blob プライベート DNS ゾーン ID。無効な場合は `null`          |
+| 名前 | 説明 |
+| --- | --- |
+| `account_id` | Storage Account ID |
+| `account_name` | Storage Account 名 |
+| `hns_enabled` | 階層型名前空間が有効かどうか |
+| `primary_access_key` | プライマリ アクセス キー。共有キー認証が無効な場合は `null` |
+| `primary_blob_endpoint` | プライマリ Blob エンドポイント |
+| `primary_dfs_endpoint` | プライマリ Data Lake Storage エンドポイント |
+| `primary_queue_endpoint` | プライマリ Queue エンドポイント |
+| `queue_name` | キュー名。無効な場合は `null` |
+| `queue_id` | キュー ID。無効な場合は `null` |
+| `queue_data_contributor_role_assignment_id` | Queue データ ロール割り当て ID。無効な場合は `null` |
+| `container_name` | コンテナー名。無効な場合は `null` |
+| `container_id` | コンテナー ID。無効な場合は `null` |
+| `private_endpoint_id` | Blob プライベート エンドポイント ID。無効な場合は `null` |
+| `private_endpoint_ip` | Blob プライベート IP。無効な場合は `null` |
+| `private_dns_zone_id` | Blob プライベート DNS ゾーン ID。無効な場合は `null` |
