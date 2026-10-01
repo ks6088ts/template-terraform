@@ -14,7 +14,7 @@ description: コストを抑えた既定値で Azure のオブザーバビリテ
 | `azure_monitor` | managed Prometheus 用 Azure Monitor Workspace | なし |
 | `log_analytics` | ログ用 Log Analytics Workspace | なし |
 | `application_insights` | workspace-based のアプリケーション telemetry | `log_analytics` |
-| `network_watcher` | 既存 Network Watcher の参照、または明示的な新規作成 | なし |
+| `network_watcher` | Network Watcher の新規作成、または明示的な既存参照 | なし |
 | `activity_log` | サブスクリプション Activity Log を `AzureActivity` へ export | `log_analytics` |
 | `action_group` | 0 個以上のメール通知先を持つ Action Group | なし |
 | `alert_rules` | Resource Group の Administrative Activity Log Alert | `action_group` |
@@ -55,8 +55,7 @@ flowchart LR
 ```
 
 実線はデータ・クエリ・通知の経路、点線は所属を示します。図のオブザーバビリティ機能は
-すべて任意です。既存 Network Watcher は通常、シナリオの Resource Group ではなく
-`NetworkWatcherRG` に存在します。
+すべて任意です。Network Watcher は既定でシナリオの Resource Group に作成します。
 
 ## 前提条件と初期化
 
@@ -74,17 +73,16 @@ Activity Log export には subscription scope の diagnostic settings 書き込�
 既存 Network Watcher 参照には対象リソースの読み取り権限も必要です。
 自動 provider registration は無効です。
 
-認証とサブスクリプション選択後、リポジトリ内で実行します。
+認証とサブスクリプション選択後、リポジトリルートで実行します。
 
 ```bash
-cd "$(git rev-parse --show-toplevel)/infra/scenarios/azure_observability"
 export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
-terraform init -backend=false -lockfile=readonly
-terraform validate
-terraform test
-terraform plan
+terraform -chdir=infra/scenarios/azure_observability init -backend=false -lockfile=readonly
+terraform -chdir=infra/scenarios/azure_observability validate
+terraform -chdir=infra/scenarios/azure_observability test
+terraform -chdir=infra/scenarios/azure_observability plan
 # 任意: 既定の Resource Group のみの構成を apply します。
-terraform apply
+terraform -chdir=infra/scenarios/azure_observability apply
 ```
 
 `terraform test` は mock provider と plan のみを使い、Azure 認証は不要です。
@@ -93,38 +91,19 @@ apply の承認前には必ず plan を確認してください。
 
 ## 機能の有効化
 
-同じシェルで `TF_VAR_features` を設定すると、plan、apply、destroy に同じ選択を渡せます。
-以下の各代入は、それ以前の選択を置き換えます。
+有効にする機能を Terraform CLI に直接指定します。全機能を有効にする場合:
 
 ```bash
-# 独立した機能:
-export TF_VAR_features='{"azure_monitor":true}'
-export TF_VAR_features='{"log_analytics":true}'
-export TF_VAR_features='{"network_watcher":true}'
-export TF_VAR_features='{"action_group":true}'
-
-# 依存フラグを明示する機能:
-export TF_VAR_features='{"log_analytics":true,"application_insights":true}'
-export TF_VAR_features='{"log_analytics":true,"activity_log":true}'
-export TF_VAR_features='{"log_analytics":true,"workbook":true}'
-export TF_VAR_features='{"action_group":true,"alert_rules":true}'
-
-terraform plan
-terraform apply
+terraform -chdir=infra/scenarios/azure_observability apply \
+  -var='features={azure_monitor=true,log_analytics=true,application_insights=true,network_watcher=true,activity_log=true,alert_rules=true,action_group=true,workbook=true}'
 ```
 
-全機能を検証する場合:
+Action Group の通知先を設定する場合は
+`-var='action_group_email_addresses=["operator@example.com"]'` を追加します。
+不要な機能は object から省略できます。Application Insights、Activity Log、Workbook では
+`log_analytics=true`、alert rule では `action_group=true` のように依存機能も明示してください。
 
-```bash
-export TF_VAR_features='{"azure_monitor":true,"log_analytics":true,"application_insights":true,"network_watcher":true,"activity_log":true,"alert_rules":true,"action_group":true,"workbook":true}'
-# 任意: 自分の通知先を指定します。既定では通知先なしです。
-# export TF_VAR_action_group_email_addresses='["operator@example.com"]'
-terraform plan
-terraform apply
-terraform output
-```
-
-### Network Watcher: 既存参照と新規作成
+### Network Watcher: 新規作成と既存参照
 
 Network Watcher は 1 subscription・1 region に 1 インスタンスのみ作成できます。
 有効化する前に既存インスタンスを確認してください。
@@ -133,21 +112,25 @@ Network Watcher は 1 subscription・1 region に 1 インスタンスのみ作�
 az network watcher list --query "[].{name:name,resourceGroup:resourceGroup,location:location}" -o table
 ```
 
-既定は**既存参照のみ**で、既定リージョンでは
-`NetworkWatcherRG/NetworkWatcher_japaneast`、別リージョンでは
-`NetworkWatcher_<location>` を参照します。既存インスタンスが異なる場合は上書きします。
+既定ではシナリオ所有のインスタンスをシナリオの Resource Group に作成します。
+このため、Network Watcher が自動作成されていない subscription でも追加変数なしで動作します。
+
+対象リージョンに既存インスタンスがある場合は、正確な名前と Resource Group を指定して
+明示的に参照します。
 
 ```bash
-export TF_VAR_network_watcher='{"create":false,"name":"NetworkWatcher_japaneast","resource_group_name":"NetworkWatcherRG"}'
+terraform -chdir=infra/scenarios/azure_observability apply \
+  -var='features={network_watcher=true}' \
+  -var='network_watcher={create=false,name="NetworkWatcher_japaneast",resource_group_name="NetworkWatcherRG"}'
 ```
 
 参照対象がない場合は plan が失敗し、自動で新規作成には切り替わりません。
-対象リージョンにインスタンスが存在しない場合のみ、新規作成を指定します。
+新規作成するインスタンス名を変更する場合:
 
 ```bash
-export TF_VAR_network_watcher='{"create":true}'
-terraform plan
-terraform apply
+terraform -chdir=infra/scenarios/azure_observability apply \
+  -var='features={network_watcher=true}' \
+  -var='network_watcher={create=true,name="dedicated-watcher"}'
 ```
 
 新規作成時はシナリオの Resource Group と生成名（任意で `name` を上書き可能）を使います。
@@ -162,8 +145,8 @@ connection monitor は有効化しません。destroy は参照した既存イ�
 Administrative イベントを発生させます。
 
 ```bash
-RG=$(terraform output -raw resource_group_name)
-RG_ID=$(terraform output -raw resource_group_id)
+RG=$(terraform -chdir=infra/scenarios/azure_observability output -raw resource_group_name)
+RG_ID=$(terraform -chdir=infra/scenarios/azure_observability output -raw resource_group_id)
 az tag update --resource-id "$RG_ID" --operation Merge --tags observability_probe=manual
 az monitor activity-log list --resource-group "$RG" --offset 1h --max-events 10 -o table
 az monitor diagnostic-settings subscription list -o json
@@ -175,7 +158,7 @@ Workspace の **Logs** 画面、または Azure CLI（`log-analytics` 拡張機�
 
 ```bash
 az monitor log-analytics query \
-  --workspace "$(terraform output -raw log_analytics_workspace_id)" \
+  --workspace "$(terraform -chdir=infra/scenarios/azure_observability output -raw log_analytics_workspace_id)" \
   --analytics-query 'AzureActivity | where TimeGenerated > ago(1h) | summarize Events=count() by CategoryValue' \
   -o table
 ```
@@ -191,16 +174,19 @@ AzureActivity
 | top 20 by TimeGenerated desc
 ```
 
-**Azure Monitor → Workbooks** で `terraform output -raw workbook_id` の Workbook を
+**Azure Monitor → Workbooks** で
+`terraform -chdir=infra/scenarios/azure_observability output -raw workbook_id` の Workbook を
 開きます。概要、件数、category ごとの集計、直近イベントの各セクションが、設定した
 Log Analytics Workspace を時間範囲・結果件数を制限してクエリします。
 `activity_log` なしでも Workbook は作成できますが、`AzureActivity` のクエリには別の
 export でテーブルへデータを取り込む必要があります。空・未作成テーブルは
 デプロイ失敗ではありません。
 
-**Azure Monitor → Alerts → Alert rules** で `terraform output -raw alert_rule_name` を
-確認します。Administrative category、シナリオ RG の scope/filter、
-`terraform output -raw action_group_id` の Action Group との連携を確認してください。
+**Azure Monitor → Alerts → Alert rules** で
+`terraform -chdir=infra/scenarios/azure_observability output -raw alert_rule_name` を確認します。
+Administrative category、シナリオ RG の scope/filter、
+`terraform -chdir=infra/scenarios/azure_observability output -raw action_group_id` の
+Action Group との連携を確認してください。
 ルール有効化後にタグを再変更し、発火したアラートを確認します。
 **Action groups** で通知先を確認し、メールを設定した場合は **Test** を利用します。
 通知先が空でも Action Group とルールの連携は存在しますが、**メールは送信されません**。
@@ -219,7 +205,7 @@ az tag update --resource-id "$RG_ID" --operation Delete --tags observability_pro
 | --- | --- |
 | `name`、`location`、`tags` | `observability`、`japaneast`、`{}`。リソース名は共通のランダム suffix を使用 |
 | `features` | 機能一覧の全フラグが `false` |
-| `network_watcher` | `{create=false, name=null, resource_group_name="NetworkWatcherRG"}` |
+| `network_watcher` | `{create=true, name=null, resource_group_name="NetworkWatcherRG"}` |
 | `log_analytics_sku` | `PerGB2018` |
 | `log_analytics_retention_in_days` | `30` |
 | `log_analytics_daily_quota_gb` | `0.5`。共通モジュールの既定値は従来どおり `-1`（無制限） |
@@ -245,15 +231,14 @@ telemetry のキーは公開しません。
 ありません。[Azure Monitor の料金](https://azure.microsoft.com/pricing/details/monitor/)を
 確認してください。Activity Log Alert は定期課金の Log Search 評価を行いません。
 
-同じシナリオディレクトリで、デプロイ時と**同じ機能・Network Watcher の設定**を保持して
+リポジトリルートから、デプロイ時と**同じ機能・Network Watcher の設定**を指定して
 実行します。
 
 ```bash
-terraform plan -destroy
-terraform destroy
-unset TF_VAR_features TF_VAR_network_watcher TF_VAR_action_group_email_addresses
+terraform -chdir=infra/scenarios/azure_observability destroy \
+  -var='features={azure_monitor=true,log_analytics=true,application_insights=true,network_watcher=true,activity_log=true,alert_rules=true,action_group=true,workbook=true}'
 ```
 
-destroy は管理対象リソースを削除し、この export・アラート構成を停止します。
-参照した既存 Network Watcher と Azure 標準の Activity Log は残ります。
-削除完了まで state を保持してください。
+destroy は既定のシナリオ所有 Network Watcher を含む管理対象リソースを削除し、
+この export・アラート構成を停止します。明示的に参照した既存 Network Watcher と
+Azure 標準の Activity Log は残ります。削除完了まで state を保持してください。

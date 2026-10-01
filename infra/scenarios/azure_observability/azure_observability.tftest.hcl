@@ -207,7 +207,7 @@ run "application_insights_with_workspace" {
   }
 }
 
-run "network_watcher_existing_by_default" {
+run "network_watcher_created_by_default" {
   command = plan
 
   variables {
@@ -217,10 +217,10 @@ run "network_watcher_existing_by_default" {
   assert {
     condition = alltrue([
       length(module.network_watcher) == 1,
-      output.network_watcher_name == "NetworkWatcher_japaneast",
-      output.network_watcher_id == "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/NetworkWatcher_japaneast",
-      output.network_watcher_created == false,
-      local.network_watcher_resource_group == "NetworkWatcherRG",
+      output.network_watcher_name == "nw-observability-test1234",
+      output.network_watcher_id == "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/rg-observability-test1234/providers/Microsoft.Network/networkWatchers/nw-observability-test1234",
+      output.network_watcher_created,
+      local.network_watcher_resource_group == output.resource_group_name,
       length(module.azure_monitor) == 0,
       length(module.log_analytics) == 0,
       length(module.application_insights) == 0,
@@ -229,7 +229,7 @@ run "network_watcher_existing_by_default" {
       length(module.alert_rule) == 0,
       length(module.workbook) == 0,
     ])
-    error_message = "Network Watcher must default to a non-owned regional lookup without creating other features."
+    error_message = "Network Watcher must default to a scenario-owned resource without creating other features."
   }
 }
 
@@ -402,9 +402,9 @@ run "all_features_enabled_economical_defaults" {
       var.application_insights_sampling_percentage == 25,
       var.activity_log_categories == toset(["Administrative", "Security", "ServiceHealth", "Alert", "Recommendation", "Policy", "Autoscale", "ResourceHealth"]),
       length(var.action_group_email_addresses) == 0,
-      output.network_watcher_created == false,
+      output.network_watcher_created,
     ])
-    error_message = "All-enabled must retain economical ingestion/retention/sampling defaults and reuse Network Watcher."
+    error_message = "All-enabled must retain economical ingestion/retention/sampling defaults and create Network Watcher."
   }
 }
 
@@ -476,6 +476,7 @@ run "network_watcher_existing_custom" {
   variables {
     features = { network_watcher = true }
     network_watcher = {
+      create              = false
       name                = "shared-watcher"
       resource_group_name = "shared-network"
     }

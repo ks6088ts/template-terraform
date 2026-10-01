@@ -58,9 +58,9 @@ variable "features" {
 }
 
 variable "network_watcher" {
-  description = "Reuse the regional Network Watcher by default; create=true creates one in the scenario resource group instead"
+  description = "Create a Network Watcher in the scenario resource group by default; create=false reuses an existing one"
   type = object({
-    create              = optional(bool, false)
+    create              = optional(bool, true)
     name                = optional(string)
     resource_group_name = optional(string, "NetworkWatcherRG")
   })
