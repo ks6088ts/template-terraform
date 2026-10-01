@@ -24,6 +24,7 @@ provider authentication, and remote state guidance.
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.md) | Deploys an externally accessible Azure Container App from a Docker Hub image. |
 | [azure_cosmosdb_playground](./infra/scenarios/azure_cosmosdb_playground/README.md) | Explores Cosmos DB NoSQL CRUD, TTL, change feed, vector/full-text/hybrid search, and Foundry-backed RAG. |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.md) | Deploys Azure data stores, including Cosmos DB, Storage, Key Vault, PostgreSQL, and Monitor, with public access for testing. |
+| [azure_messaging](./infra/scenarios/azure_messaging/README.md) | Deploys opt-in Queue Storage, Service Bus, Event Grid, and Event Hubs resources with Microsoft Entra data-plane access. |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.md) | Deploys Python Functions on Flex Consumption with Microsoft Entra and function-key authentication, managed-identity Storage, and OpenTelemetry observability in Application Insights. |
 | [azure_microsoft_foundry](./infra/scenarios/azure_microsoft_foundry/README.md) | Learn grounded prompt-agent responses with Foundry, Blob Storage, AI Search, and MCP. |
 | [azure_spoke_network](./infra/scenarios/azure_spoke_network/README.md) | Deploys a spoke network for an Azure hub-and-spoke architecture with a VNet, Bastion, private Storage endpoint, and VM. |

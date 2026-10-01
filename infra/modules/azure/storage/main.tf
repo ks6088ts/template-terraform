@@ -38,6 +38,14 @@ resource "azurerm_storage_queue" "this" {
   storage_account_id = azurerm_storage_account.this.id
 }
 
+resource "azurerm_role_assignment" "queue_data_contributor" {
+  count = var.create_queue && var.queue_data_contributor_principal_id != null ? 1 : 0
+
+  scope                = azurerm_storage_account.this.id
+  role_definition_name = "Storage Queue Data Contributor"
+  principal_id         = var.queue_data_contributor_principal_id
+}
+
 resource "azurerm_storage_container" "this" {
   count                 = var.create_container ? 1 : 0
   name                  = var.container_name

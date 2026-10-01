@@ -141,6 +141,18 @@ variable "create_queue" {
   default     = false
 }
 
+variable "queue_data_contributor_principal_id" {
+  description = "Optional principal object ID granted Storage Queue Data Contributor when the queue is created"
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.queue_data_contributor_principal_id == null || trimspace(var.queue_data_contributor_principal_id) != ""
+    error_message = "Queue data contributor principal ID must be null or a non-empty string."
+  }
+}
+
 variable "create_container" {
   description = "Create a storage container"
   type        = bool

@@ -72,6 +72,7 @@ module "storage" {
 | `blob_soft_delete_retention_days`      | `number`      | `7`        | 削除した Blob の保持日数                       |
 | `container_soft_delete_retention_days` | `number`      | `7`        | 削除したコンテナーの保持日数                   |
 | `create_queue`                         | `bool`        | `false`    | ストレージ キューを 1 つ作成するかどうか       |
+| `queue_data_contributor_principal_id`  | `string`      | `null`     | Queue データ アクセスを付与するプリンシパル     |
 | `create_container`                     | `bool`        | `false`    | Blob コンテナーを 1 つ作成するかどうか         |
 | `container_name`                       | `string`      | `default`  | Blob コンテナー名                              |
 | `container_access_type`                | `string`      | `private`  | Blob コンテナーのアクセス種別                  |
@@ -82,10 +83,13 @@ module "storage" {
 |-------------------------|--------------------------------------------------------|
 | `account_id`            | Storage Account ID                                     |
 | `account_name`          | Storage Account 名                                     |
-| `primary_access_key`    | プライマリ ストレージ アクセス キー                    |
+| `primary_access_key`    | プライマリ アクセス キー。共有キー認証が無効な場合は `null` |
 | `primary_blob_endpoint` | プライマリ Blob エンドポイント                        |
 | `primary_dfs_endpoint`  | プライマリ Data Lake Storage エンドポイント           |
+| `primary_queue_endpoint` | プライマリ Queue エンドポイント                       |
 | `queue_name`            | キュー名。無効な場合は `null`                          |
+| `queue_id`              | キュー ID。無効な場合は `null`                         |
+| `queue_data_contributor_role_assignment_id` | Queue データ ロール割り当て ID。無効な場合は `null` |
 | `container_name`        | コンテナー名。無効な場合は `null`                      |
 | `container_id`          | コンテナー ID。無効な場合は `null`                     |
 | `private_endpoint_id`   | Blob プライベート エンドポイント ID。無効な場合は `null` |

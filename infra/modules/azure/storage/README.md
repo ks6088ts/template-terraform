@@ -74,6 +74,7 @@ module "storage" {
 | `blob_soft_delete_retention_days`      | `number`      | `7`        | Deleted blob retention period in days            |
 | `container_soft_delete_retention_days` | `number`      | `7`        | Deleted container retention period in days       |
 | `create_queue`                         | `bool`        | `false`    | Creates one storage queue                        |
+| `queue_data_contributor_principal_id`  | `string`      | `null`     | Principal granted Queue data access              |
 | `create_container`                     | `bool`        | `false`    | Creates one Blob container                       |
 | `container_name`                       | `string`      | `default`  | Blob container name                              |
 | `container_access_type`                | `string`      | `private`  | Blob container access type                       |
@@ -84,10 +85,13 @@ module "storage" {
 |-------------------------|--------------------------------------------------|
 | `account_id`            | Storage account ID                               |
 | `account_name`          | Storage account name                             |
-| `primary_access_key`    | Primary storage access key                       |
+| `primary_access_key`    | Primary access key, or `null` when shared-key authentication is disabled |
 | `primary_blob_endpoint` | Primary Blob endpoint                            |
 | `primary_dfs_endpoint`  | Primary Data Lake Storage endpoint               |
+| `primary_queue_endpoint` | Primary Queue endpoint                           |
 | `queue_name`            | Queue name, or `null` when disabled               |
+| `queue_id`              | Queue ID, or `null` when disabled                 |
+| `queue_data_contributor_role_assignment_id` | Queue data role assignment ID, or `null` |
 | `container_name`        | Container name, or `null` when disabled           |
 | `container_id`          | Container ID, or `null` when disabled             |
 | `private_endpoint_id`   | Blob private endpoint ID, or `null` when disabled |
