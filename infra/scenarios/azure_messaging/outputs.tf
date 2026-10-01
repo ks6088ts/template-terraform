@@ -23,6 +23,16 @@ output "queue_storage_account_name" {
   value       = var.enable_queue_storage ? module.queue_storage[0].account_name : null
 }
 
+output "queue_storage_hns_enabled" {
+  description = "Whether hierarchical namespace is enabled on the Queue Storage account"
+  value       = var.enable_queue_storage ? module.queue_storage[0].hns_enabled : null
+}
+
+output "queue_storage_dfs_endpoint" {
+  description = "Data Lake Storage Gen2 DFS endpoint"
+  value       = var.enable_queue_storage ? module.queue_storage[0].primary_dfs_endpoint : null
+}
+
 output "queue_storage_endpoint" {
   description = "Queue service endpoint"
   value       = var.enable_queue_storage ? module.queue_storage[0].primary_queue_endpoint : null

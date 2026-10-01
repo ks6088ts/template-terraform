@@ -36,12 +36,13 @@ run "default_storage" {
     condition = alltrue([
       azurerm_storage_account.this.account_tier == "Standard",
       azurerm_storage_account.this.account_replication_type == "LRS",
+      output.hns_enabled,
       azurerm_storage_account.this.shared_access_key_enabled,
       length(azurerm_storage_queue.this) == 0,
       length(azurerm_role_assignment.queue_data_contributor) == 0,
       output.queue_id == null,
     ])
-    error_message = "The Storage module defaults must remain backward compatible."
+    error_message = "The Storage module defaults must enable ADLS Gen2 without creating optional data services."
   }
 }
 
@@ -54,6 +55,7 @@ run "entra_queue" {
     resource_group_name                 = "rg-test"
     location                            = "japaneast"
     create_queue                        = true
+    enable_hns                          = false
     shared_access_key_enabled           = false
     queue_data_contributor_principal_id = "00000000-0000-0000-0000-000000000006"
   }
@@ -61,6 +63,7 @@ run "entra_queue" {
   assert {
     condition = alltrue([
       !azurerm_storage_account.this.shared_access_key_enabled,
+      !output.hns_enabled,
       length(azurerm_storage_queue.this) == 1,
       azurerm_storage_queue.this[0].name == "sttest-queue",
       length(azurerm_role_assignment.queue_data_contributor) == 1,

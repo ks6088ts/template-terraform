@@ -11,7 +11,7 @@ event routing, and event streaming patterns. Every messaging service is disabled
 
 | Service | Deployed resources | Default tier |
 |---------|--------------------|--------------|
-| Queue Storage | Storage Account and one Queue | Standard_LRS |
+| Queue Storage | ADLS Gen2 Storage Account and one Queue | Standard_LRS + HNS |
 | Service Bus | Namespace, Queue, Topic, and Subscription | Standard |
 | Event Grid | Custom Topic | Basic |
 | Event Hubs | Namespace and one Event Hub | Basic, 1 throughput unit |
@@ -20,6 +20,10 @@ Service Bus uses Standard because topics and subscriptions aren't available in B
 Event Hubs uses Basic for low-volume send/receive validation with the built-in `$Default`
 consumer group. An Event Grid Custom Topic is a Basic-tier push-delivery resource and
 therefore has no separate SKU argument in AzureRM.
+
+Queue Storage enables the hierarchical namespace required by ADLS Gen2 by default while
+continuing to create only one Queue. It doesn't create a Blob container or filesystem.
+Set `queue_storage_enable_hns = false` when a conventional StorageV2 account is required.
 
 All data-plane local or shared-key authentication is disabled. The Terraform operator,
 or the principal selected with `operator_principal_id`, receives the least-privilege
@@ -41,7 +45,7 @@ flowchart TB
     Operator["Terraform operator<br/>Microsoft Entra ID"]
 
     subgraph ResourceGroup["Azure Resource Group"]
-        QueueStorage["Queue Storage<br/>Standard_LRS<br/>Queue"]
+        QueueStorage["Queue Storage<br/>Standard_LRS + ADLS Gen2<br/>Queue"]
         ServiceBus["Service Bus Standard<br/>Queue + Topic + Subscription"]
         EventGrid["Event Grid Basic<br/>Custom Topic"]
         EventHubs["Event Hubs Basic<br/>Event Hub + Default consumer group"]
@@ -64,7 +68,27 @@ Initialize the scenario:
 make init SCENARIO=azure_messaging
 ```
 
-Enable only the services needed for a test:
+Each resource flag can be controlled explicitly with Terraform CLI `-var` options. For
+example, deploy only Queue Storage with the default ADLS Gen2 hierarchical namespace:
+
+```shell
+terraform -chdir=infra/scenarios/azure_messaging plan \
+  -var='enable_queue_storage=true' \
+  -var='enable_service_bus=false' \
+  -var='enable_event_grid=false' \
+  -var='enable_event_hubs=false' \
+  -var='queue_storage_enable_hns=true'
+```
+
+To use a conventional StorageV2 account instead, change only the HNS option:
+
+```shell
+terraform -chdir=infra/scenarios/azure_messaging plan \
+  -var='enable_queue_storage=true' \
+  -var='queue_storage_enable_hns=false'
+```
+
+Enable all messaging resources:
 
 ```shell
 terraform -chdir=infra/scenarios/azure_messaging plan \
@@ -113,6 +137,9 @@ official guides show passwordless data-plane clients:
 Azure role assignments can take several minutes to propagate. Retry the data-plane
 operation if the first request receives an authorization error immediately after apply.
 
+Changing `queue_storage_enable_hns` for an existing deployment can require replacing the
+Storage Account. Review the Terraform plan before applying this setting.
+
 ## Variables
 
 | Name | Description | Type | Default |
@@ -125,6 +152,7 @@ operation if the first request receives an authorization error immediately after
 | `enable_service_bus` | Deploy Service Bus | `bool` | `false` |
 | `enable_event_grid` | Deploy an Event Grid Custom Topic | `bool` | `false` |
 | `enable_event_hubs` | Deploy Event Hubs | `bool` | `false` |
+| `queue_storage_enable_hns` | Enable the ADLS Gen2 hierarchical namespace | `bool` | `true` |
 | `queue_storage_replication_type` | Standard Storage replication type | `string` | `"LRS"` |
 | `service_bus_sku` | Service Bus SKU | `string` | `"Standard"` |
 | `service_bus_premium_capacity` | Premium messaging units when Premium is selected | `number` | `1` |
@@ -143,6 +171,8 @@ operation if the first request receives an authorization error immediately after
 | `operator_principal_id` | Principal granted messaging data-plane roles |
 | `queue_storage_account_id` | Queue Storage account ID, or `null` |
 | `queue_storage_account_name` | Queue Storage account name, or `null` |
+| `queue_storage_hns_enabled` | Whether hierarchical namespace is enabled, or `null` |
+| `queue_storage_dfs_endpoint` | ADLS Gen2 DFS endpoint, or `null` |
 | `queue_storage_endpoint` | Queue endpoint, or `null` |
 | `queue_storage_queue_id` | Storage Queue ID, or `null` |
 | `queue_storage_queue_name` | Storage Queue name, or `null` |

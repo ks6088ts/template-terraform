@@ -8,6 +8,11 @@ output "account_name" {
   value       = azurerm_storage_account.this.name
 }
 
+output "hns_enabled" {
+  description = "Whether hierarchical namespace is enabled"
+  value       = azurerm_storage_account.this.is_hns_enabled
+}
+
 output "primary_access_key" {
   description = "Primary access key of the Storage Account"
   value       = var.shared_access_key_enabled ? azurerm_storage_account.this.primary_access_key : null

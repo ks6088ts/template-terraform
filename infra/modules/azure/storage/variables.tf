@@ -51,10 +51,10 @@ variable "account_replication_type" {
   }
 }
 
-variable "is_hns_enabled" {
+variable "enable_hns" {
   description = "Enable hierarchical namespace (Data Lake Storage Gen2)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "public_network_access_enabled" {

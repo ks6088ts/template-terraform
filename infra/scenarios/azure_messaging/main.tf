@@ -38,7 +38,7 @@ module "queue_storage" {
   tags                                = var.tags
   account_tier                        = "Standard"
   account_replication_type            = var.queue_storage_replication_type
-  is_hns_enabled                      = false
+  enable_hns                          = var.queue_storage_enable_hns
   shared_access_key_enabled           = false
   enable_identity                     = false
   create_queue                        = true

@@ -7,8 +7,8 @@ description: オプションのデータサービスと Blob プライベート�
 
 このモジュールは Azure Storage Account を作成し、必要に応じてキュー、コンテナー、
 論理削除、マネージド ID、Blob プライベート エンドポイントを追加します。既定値では、
-既存シナリオが利用するパブリック構成との互換性を維持します。パブリック ネットワーク
-アクセスとシステム割り当てマネージド ID は有効で、プライベート エンドポイントは無効です。
+階層型名前空間、パブリック ネットワーク アクセス、システム割り当てマネージド ID は
+有効で、プライベート エンドポイントは無効です。
 
 ## プライベート ネットワーク
 
@@ -60,7 +60,7 @@ module "storage" {
 | `tags`                                 | `map(string)` | `{}`       | リソースに適用するタグ                         |
 | `account_tier`                         | `string`      | `Standard` | Storage Account の層                           |
 | `account_replication_type`             | `string`      | `LRS`      | ストレージのレプリケーション方式               |
-| `is_hns_enabled`                       | `bool`        | `false`    | 階層型名前空間を有効化するかどうか             |
+| `enable_hns`                           | `bool`        | `true`     | 階層型名前空間を有効化するかどうか             |
 | `public_network_access_enabled`        | `bool`        | `true`     | パブリック ネットワーク アクセスを有効化するか |
 | `allow_nested_items_to_be_public`      | `bool`        | `false`    | 入れ子項目のパブリック化を許可するかどうか     |
 | `https_traffic_only_enabled`           | `bool`        | `true`     | HTTPS 通信のみを許可するかどうか               |
@@ -72,26 +72,27 @@ module "storage" {
 | `blob_soft_delete_retention_days`      | `number`      | `7`        | 削除した Blob の保持日数                       |
 | `container_soft_delete_retention_days` | `number`      | `7`        | 削除したコンテナーの保持日数                   |
 | `create_queue`                         | `bool`        | `false`    | ストレージ キューを 1 つ作成するかどうか       |
-| `queue_data_contributor_principal_id`  | `string`      | `null`     | Queue データ アクセスを付与するプリンシパル     |
+| `queue_data_contributor_principal_id` | `string`      | `null`     | Queue データ アクセスを付与するプリンシパル     |
 | `create_container`                     | `bool`        | `false`    | Blob コンテナーを 1 つ作成するかどうか         |
 | `container_name`                       | `string`      | `default`  | Blob コンテナー名                              |
 | `container_access_type`                | `string`      | `private`  | Blob コンテナーのアクセス種別                  |
 
 ## 出力
 
-| 名前                    | 説明                                                   |
-|-------------------------|--------------------------------------------------------|
-| `account_id`            | Storage Account ID                                     |
-| `account_name`          | Storage Account 名                                     |
-| `primary_access_key`    | プライマリ アクセス キー。共有キー認証が無効な場合は `null` |
-| `primary_blob_endpoint` | プライマリ Blob エンドポイント                        |
-| `primary_dfs_endpoint`  | プライマリ Data Lake Storage エンドポイント           |
-| `primary_queue_endpoint` | プライマリ Queue エンドポイント                       |
-| `queue_name`            | キュー名。無効な場合は `null`                          |
-| `queue_id`              | キュー ID。無効な場合は `null`                         |
-| `queue_data_contributor_role_assignment_id` | Queue データ ロール割り当て ID。無効な場合は `null` |
-| `container_name`        | コンテナー名。無効な場合は `null`                      |
-| `container_id`          | コンテナー ID。無効な場合は `null`                     |
-| `private_endpoint_id`   | Blob プライベート エンドポイント ID。無効な場合は `null` |
-| `private_endpoint_ip`   | Blob プライベート IP。無効な場合は `null`              |
-| `private_dns_zone_id`   | Blob プライベート DNS ゾーン ID。無効な場合は `null`   |
+| 名前                                           | 説明                                                          |
+|------------------------------------------------|---------------------------------------------------------------|
+| `account_id`                                   | Storage Account ID                                            |
+| `account_name`                                 | Storage Account 名                                            |
+| `hns_enabled`                                  | 階層型名前空間が有効かどうか                                  |
+| `primary_access_key`                           | プライマリ アクセス キー。共有キー認証が無効な場合は `null`   |
+| `primary_blob_endpoint`                        | プライマリ Blob エンドポイント                                |
+| `primary_dfs_endpoint`                         | プライマリ Data Lake Storage エンドポイント                   |
+| `primary_queue_endpoint`                       | プライマリ Queue エンドポイント                               |
+| `queue_name`                                   | キュー名。無効な場合は `null`                                 |
+| `queue_id`                                     | キュー ID。無効な場合は `null`                                |
+| `queue_data_contributor_role_assignment_id`    | Queue データ ロール割り当て ID。無効な場合は `null`           |
+| `container_name`                               | コンテナー名。無効な場合は `null`                             |
+| `container_id`                                 | コンテナー ID。無効な場合は `null`                            |
+| `private_endpoint_id`                          | Blob プライベート エンドポイント ID。無効な場合は `null`      |
+| `private_endpoint_ip`                          | Blob プライベート IP。無効な場合は `null`                     |
+| `private_dns_zone_id`                          | Blob プライベート DNS ゾーン ID。無効な場合は `null`          |

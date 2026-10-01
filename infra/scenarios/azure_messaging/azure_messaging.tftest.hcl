@@ -19,6 +19,7 @@ mock_provider "azurerm" {
   mock_resource "azurerm_storage_account" {
     defaults = {
       id                     = "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/rg-azuremessag-test1234/providers/Microsoft.Storage/storageAccounts/stazuremessagtest1234"
+      primary_dfs_endpoint   = "https://stazuremessagtest1234.dfs.core.windows.net/"
       primary_queue_endpoint = "https://stazuremessagtest1234.queue.core.windows.net/"
     }
   }
@@ -101,6 +102,8 @@ run "all_services_disabled_by_default" {
       length(module.event_grid) == 0,
       length(module.event_hubs) == 0,
       output.queue_storage_account_id == null,
+      output.queue_storage_hns_enabled == null,
+      output.queue_storage_dfs_endpoint == null,
       output.service_bus_namespace_id == null,
       output.event_grid_topic_id == null,
       output.event_hubs_namespace_id == null,
@@ -123,6 +126,7 @@ run "all_services_enabled" {
     condition = alltrue([
       length(module.queue_storage) == 1,
       module.queue_storage[0].account_name == "stazuremessagingtest1234",
+      module.queue_storage[0].hns_enabled,
       module.queue_storage[0].queue_name == "stazuremessaging-test1234-queue",
       length(module.service_bus) == 1,
       module.service_bus[0].namespace_name == "sb-azuremessaging-test1234",
@@ -142,6 +146,8 @@ run "all_services_enabled" {
   assert {
     condition = alltrue([
       output.operator_principal_id == "00000000-0000-0000-0000-000000000002",
+      output.queue_storage_hns_enabled,
+      output.queue_storage_dfs_endpoint == "https://stazuremessagtest1234.dfs.core.windows.net/",
       output.queue_storage_endpoint == "https://stazuremessagtest1234.queue.core.windows.net/",
       output.service_bus_namespace_fqdn == "sb-azuremessaging-test1234.servicebus.windows.net",
       output.event_grid_topic_endpoint == "https://egt-azuremessag-test1234.japaneast-1.eventgrid.azure.net/api/events",
@@ -149,6 +155,23 @@ run "all_services_enabled" {
       output.event_hub_consumer_group_name == "$Default",
     ])
     error_message = "Scenario outputs must expose nonsecret endpoints and entity names for Entra-authenticated validation."
+  }
+}
+
+run "queue_storage_hns_override" {
+  command = plan
+
+  variables {
+    enable_queue_storage     = true
+    queue_storage_enable_hns = false
+  }
+
+  assert {
+    condition = alltrue([
+      !module.queue_storage[0].hns_enabled,
+      !output.queue_storage_hns_enabled,
+    ])
+    error_message = "The Queue Storage hierarchical namespace must be configurable."
   }
 }
 

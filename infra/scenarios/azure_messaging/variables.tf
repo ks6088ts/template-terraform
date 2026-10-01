@@ -62,6 +62,12 @@ variable "enable_event_hubs" {
   default     = false
 }
 
+variable "queue_storage_enable_hns" {
+  description = "Enable the hierarchical namespace required for Azure Data Lake Storage Gen2"
+  type        = bool
+  default     = true
+}
+
 variable "queue_storage_replication_type" {
   description = "Replication type for the Standard Queue Storage account"
   type        = string

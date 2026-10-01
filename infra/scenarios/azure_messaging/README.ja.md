@@ -12,7 +12,7 @@ description: Microsoft Entra のデータプレーン アクセスを使用す�
 
 | サービス | デプロイするリソース | 既定の層 |
 |----------|----------------------|----------|
-| Queue Storage | Storage Account と Queue 1 個 | Standard_LRS |
+| Queue Storage | ADLS Gen2 Storage Account と Queue 1 個 | Standard_LRS + HNS |
 | Service Bus | Namespace、Queue、Topic、Subscription | Standard |
 | Event Grid | Custom Topic | Basic |
 | Event Hubs | Namespace と Event Hub 1 個 | Basic、1 throughput unit |
@@ -21,6 +21,10 @@ Service Bus は Basic で利用できない Topic と Subscription を検証す�
 Event Hubs は低量の送受信を組み込みの `$Default` consumer group で検証できる Basic を使います。
 Event Grid Custom Topic は Basic tier の push-delivery リソースであり、AzureRM に個別の
 SKU 引数はありません。
+
+Queue Storage は ADLS Gen2 に必要な階層型名前空間を既定で有効にしますが、作成する
+データサービスは Queue 1 個だけです。Blob container や filesystem は作成しません。
+通常の StorageV2 Account が必要な場合は `queue_storage_enable_hns = false` を指定します。
 
 すべてのデータプレーンで local/shared-key authentication を無効化します。Terraform の
 実行主体、または `operator_principal_id` で指定したプリンシパルに、検証に必要な最小限の
@@ -43,7 +47,7 @@ flowchart TB
     Operator["Terraform operator<br/>Microsoft Entra ID"]
 
     subgraph ResourceGroup["Azure Resource Group"]
-        QueueStorage["Queue Storage<br/>Standard_LRS<br/>Queue"]
+        QueueStorage["Queue Storage<br/>Standard_LRS + ADLS Gen2<br/>Queue"]
         ServiceBus["Service Bus Standard<br/>Queue + Topic + Subscription"]
         EventGrid["Event Grid Basic<br/>Custom Topic"]
         EventHubs["Event Hubs Basic<br/>Event Hub + Default consumer group"]
@@ -66,7 +70,27 @@ flowchart TB
 make init SCENARIO=azure_messaging
 ```
 
-検証に必要なサービスだけを有効化します。
+各リソース フラグは Terraform CLI の `-var` オプションで明示的に true/false を指定できます。
+次の例では、既定の ADLS Gen2 階層型名前空間を使用する Queue Storage だけをデプロイします。
+
+```shell
+terraform -chdir=infra/scenarios/azure_messaging plan \
+  -var='enable_queue_storage=true' \
+  -var='enable_service_bus=false' \
+  -var='enable_event_grid=false' \
+  -var='enable_event_hubs=false' \
+  -var='queue_storage_enable_hns=true'
+```
+
+通常の StorageV2 Account を使用する場合は、HNS オプションだけを変更します。
+
+```shell
+terraform -chdir=infra/scenarios/azure_messaging plan \
+  -var='enable_queue_storage=true' \
+  -var='queue_storage_enable_hns=false'
+```
+
+すべての Messaging リソースを有効化します。
 
 ```shell
 terraform -chdir=infra/scenarios/azure_messaging plan \
@@ -115,6 +139,9 @@ terraform -chdir=infra/scenarios/azure_messaging output
 Azure ロール割り当ての反映には数分かかる場合があります。apply 直後のデータプレーン操作で
 認可エラーが発生した場合は、少し待ってから再試行してください。
 
+既存デプロイで `queue_storage_enable_hns` を変更すると、Storage Account の再作成が
+必要になる場合があります。適用前に Terraform plan を確認してください。
+
 ## 変数
 
 | 名前 | 説明 | 型 | 既定値 |
@@ -127,6 +154,7 @@ Azure ロール割り当ての反映には数分かかる場合があります�
 | `enable_service_bus` | Service Bus をデプロイする | `bool` | `false` |
 | `enable_event_grid` | Event Grid Custom Topic をデプロイする | `bool` | `false` |
 | `enable_event_hubs` | Event Hubs をデプロイする | `bool` | `false` |
+| `queue_storage_enable_hns` | ADLS Gen2 の階層型名前空間を有効化する | `bool` | `true` |
 | `queue_storage_replication_type` | Standard Storage のレプリケーション方式 | `string` | `"LRS"` |
 | `service_bus_sku` | Service Bus SKU | `string` | `"Standard"` |
 | `service_bus_premium_capacity` | Premium 選択時の messaging units | `number` | `1` |
@@ -145,6 +173,8 @@ Azure ロール割り当ての反映には数分かかる場合があります�
 | `operator_principal_id` | Messaging データプレーン ロールを付与したプリンシパル |
 | `queue_storage_account_id` | Queue Storage Account ID。無効時は `null` |
 | `queue_storage_account_name` | Queue Storage Account 名。無効時は `null` |
+| `queue_storage_hns_enabled` | 階層型名前空間が有効かどうか。無効時は `null` |
+| `queue_storage_dfs_endpoint` | ADLS Gen2 DFS endpoint。無効時は `null` |
 | `queue_storage_endpoint` | Queue endpoint。無効時は `null` |
 | `queue_storage_queue_id` | Storage Queue ID。無効時は `null` |
 | `queue_storage_queue_name` | Storage Queue 名。無効時は `null` |
