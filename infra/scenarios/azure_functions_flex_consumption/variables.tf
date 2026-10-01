@@ -10,6 +10,12 @@ variable "location" {
   default     = "japaneast"
 }
 
+variable "enable_authentication" {
+  description = "Whether to enable Microsoft Entra ID authentication for incoming Function App requests"
+  type        = bool
+  default     = false
+}
+
 variable "azure_cli_client_id" {
   description = "Client ID of the Microsoft Azure CLI public client application used for interactive user authentication"
   type        = string

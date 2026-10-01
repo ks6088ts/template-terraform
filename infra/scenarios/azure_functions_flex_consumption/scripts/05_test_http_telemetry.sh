@@ -9,12 +9,15 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 load_outputs
 require_output "$WORKSPACE_ID" log_analytics_workspace_customer_id
 require_output "$FUNCTION_APP_URL" function_app_url
-require_output "$AUTH_IDENTIFIER_URI" function_app_authentication_identifier_uri
 require_command curl
 init_response_file
-access_token
 PROBE_STARTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-request --header "Authorization: Be""arer $ACCESS_TOKEN" "$FUNCTION_APP_URL/api/hello?name=Telemetry"
+if [ -n "$AUTH_IDENTIFIER_URI" ]; then
+  access_token
+  request --header "Authorization: Be""arer $ACCESS_TOKEN" "$FUNCTION_APP_URL/api/hello?name=Telemetry"
+else
+  request "$FUNCTION_APP_URL/api/hello?name=Telemetry"
+fi
 expect_status 200
 [ "$(cat "$RESPONSE_FILE")" = 'Hello, Telemetry!' ] ||
   die "Unexpected telemetry probe response."

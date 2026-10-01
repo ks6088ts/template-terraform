@@ -7,9 +7,12 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 [ "$#" -eq 0 ] || die "Usage: 01_test_entra_http.sh"
 load_outputs
+[ -n "$AUTH_IDENTIFIER_URI" ] || {
+  printf 'Easy Auth check skipped because authentication is disabled.\n'
+  exit 0
+}
 require_command curl
 require_output "$FUNCTION_APP_URL" function_app_url
-require_output "$AUTH_IDENTIFIER_URI" function_app_authentication_identifier_uri
 init_response_file
 request "$FUNCTION_APP_URL/api/hello?name=Azure"
 expect_status 401

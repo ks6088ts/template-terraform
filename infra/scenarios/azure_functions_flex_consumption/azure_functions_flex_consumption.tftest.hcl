@@ -89,6 +89,7 @@ run "scenario_defaults_and_outputs" {
 
   assert {
     condition = alltrue([
+      !var.enable_authentication,
       var.runtime_name == "python",
       var.runtime_version == "3.13",
       var.timer_schedule == "0 * * * * *",
@@ -102,13 +103,14 @@ run "scenario_defaults_and_outputs" {
 
   assert {
     condition = alltrue([
-      azuread_application_pre_authorized.azure_cli.authorized_client_id == var.azure_cli_client_id,
-      azuread_application_identifier_uri.function_app.identifier_uri == "api://${azuread_application.function_app.client_id}",
-      output.function_app_authentication_client_id == azuread_application.function_app.client_id,
-      output.function_app_authentication_tenant_id == data.azuread_client_config.current.tenant_id,
+      length(azuread_application.function_app) == 0,
+      length(azuread_service_principal.function_app) == 0,
+      output.function_app_authentication_client_id == null,
+      output.function_app_authentication_identifier_uri == null,
+      output.function_app_authentication_tenant_id == null,
       output.function_app_url == "https://func-test.azurewebsites.net",
     ])
-    error_message = "The existing Entra authentication and Function App URL contract must remain intact."
+    error_message = "The default scenario must omit Entra authentication resources and return null authentication outputs."
   }
 
   assert {
@@ -123,6 +125,27 @@ run "scenario_defaults_and_outputs" {
       output.timer_schedule == var.timer_schedule,
     ])
     error_message = "Subscription, monitoring, and Storage probe outputs must reference the deployed resources."
+  }
+}
+
+run "scenario_authentication_enabled" {
+  command = plan
+
+  variables {
+    enable_authentication = true
+  }
+
+  assert {
+    condition = alltrue([
+      length(azuread_application.function_app) == 1,
+      length(azuread_service_principal.function_app) == 1,
+      azuread_application_pre_authorized.azure_cli[0].authorized_client_id == var.azure_cli_client_id,
+      azuread_application_identifier_uri.function_app[0].identifier_uri == "api://${azuread_application.function_app[0].client_id}",
+      output.function_app_authentication_client_id == azuread_application.function_app[0].client_id,
+      output.function_app_authentication_identifier_uri == azuread_application_identifier_uri.function_app[0].identifier_uri,
+      output.function_app_authentication_tenant_id == data.azuread_client_config.current[0].tenant_id,
+    ])
+    error_message = "Enabling authentication must provision and expose the existing Entra authentication contract."
   }
 }
 

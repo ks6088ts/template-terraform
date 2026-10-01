@@ -1,23 +1,23 @@
 ---
-description: Hands-on Python Azure Functions Flex Consumption with Entra authentication, identity-based Storage, and OpenTelemetry observability
+description: Hands-on Python Azure Functions Flex Consumption with optional Entra authentication, identity-based Storage, and OpenTelemetry observability
 ---
 
 # Azure Functions Flex Consumption (Python)
 
-Deploy a Linux FC1 Flex Consumption Function App, explicitly publish the Python sample, then verify two HTTP authorization paths, managed-identity Storage access, a timer, and OpenTelemetry traces. Terraform provisions infrastructure **only**; a successful apply does not publish functions.
+Deploy a Linux FC1 Flex Consumption Function App, explicitly publish the Python sample, then verify HTTP authorization, managed-identity Storage access, a timer, and OpenTelemetry traces. Microsoft Entra built-in authentication is disabled by default and can be enabled with `enable_authentication = true`. Terraform provisions infrastructure **only**; a successful apply does not publish functions.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  User["Interactive Azure CLI user"] -->|Access token for API URI| Entra["Microsoft Entra ID<br/>API app + service principal<br/>Azure CLI pre-authorized"]
-  User -->|User access token| Auth
-  Entra -.->|Issuer, audience, client validation| Auth
-  Key["Function-key client"] -->|/api/hello-key bypasses Easy Auth<br/>Functions host validates x-functions-key| App
+  User["Interactive Azure CLI user"] -.->|When enabled: access token for API URI| Entra["Optional Microsoft Entra ID<br/>API app + service principal<br/>Azure CLI pre-authorized"]
+  User -.->|When enabled: user access token| Auth
+  Entra -.->|When enabled: issuer, audience, client validation| Auth
+  Key["Function-key client"] -->|Functions host validates x-functions-key| App
   subgraph RG["Azure resource group"]
-    Auth["App Service Easy Auth<br/>401 without token"]
+    Auth["Optional App Service Easy Auth<br/>401 without token when enabled"]
     Plan["Linux FC1 plan"] --> App["Python Function App<br/>/api/hello<br/>/api/hello-key<br/>/api/storage-check<br/>timer"]
-    Auth -->|/api/hello and /api/storage-check| App
+    Auth -.->|When enabled: /api/hello and /api/storage-check| App
     App -->|System-assigned identity<br/>Blob Owner; Queue/Table Contributor| Storage["Storage Account<br/>private deployment container<br/>host Blob/Queue/Table"]
     App -->|OpenTelemetry host and Python worker| AI["Application Insights"]
     AI --> LA["Log Analytics workspace"]
@@ -26,16 +26,16 @@ flowchart LR
   Publisher["scripts/publish_code.sh<br/>Functions Core Tools"] -->|One Deploy| App
 ```
 
-Easy Auth protects `/api/hello` and `/api/storage-check` before the Python runtime. `/api/hello-key` is excluded from Easy Auth deliberately: the Functions host enforces its `function` authorization level instead. The Python timer runs according to the `TIMER_SCHEDULE` app setting. The Storage probe reads the deployment container via `ManagedIdentityCredential`, using the `STORAGE_ACCOUNT_BLOB_ENDPOINT` (Blob service URI) and `STORAGE_CONTAINER_NAME` (deployment container) app settings; it does not expose blobs. The Functions host exports telemetry with `telemetryMode: OpenTelemetry`; `PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY=true` makes the Python worker initialize the Azure Monitor OpenTelemetry Distro, and `/api/hello` emits a `flex-otel-check` span. The Application Insights connection string carries telemetry only; Storage access uses managed identity, not that connection string.
+By default, `/api/hello` and `/api/storage-check` reach the Python runtime without App Service authentication. When `enable_authentication = true`, Easy Auth protects them before the Python runtime and `/api/hello-key` is deliberately excluded because the Functions host enforces its `function` authorization level instead. The Python timer runs according to the `TIMER_SCHEDULE` app setting. The Storage probe reads the deployment container via `ManagedIdentityCredential`, using the `STORAGE_ACCOUNT_BLOB_ENDPOINT` (Blob service URI) and `STORAGE_CONTAINER_NAME` (deployment container) app settings; it does not expose blobs. The Functions host exports telemetry with `telemetryMode: OpenTelemetry`; `PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY=true` makes the Python worker initialize the Azure Monitor OpenTelemetry Distro, and `/api/hello` emits a `flex-otel-check` span. The Application Insights connection string carries telemetry only; Storage access uses managed identity, not that connection string.
 
 ## Prerequisites
 
 * Azure subscription and Microsoft Entra tenant in Azure Public; use a region that supports **Linux Flex Consumption** and the selected Python runtime (default `japaneast`, Python `3.13`). Check [regional support](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#regional-subscription-quotas) and subscription quota before applying.
 * Terraform **1.7+** for the `mock_provider` plan-only tests (the scenario's [`versions.tf`](versions.tf) accepts **1.6+** for deployment), Azure CLI **2.x** (`az`), Azure Functions Core Tools **4.x** (`func`), Python **3.13** for local work, `curl`, and `jq`; `bash` runs the scripts. Provider constraints are in `versions.tf` and pinned selections in [`.terraform.lock.hcl`](.terraform.lock.hcl). Install Core Tools using the [official instructions](https://learn.microsoft.com/azure/azure-functions/functions-run-local#install-the-azure-functions-core-tools). Verify with `terraform version`, `az version`, `func --version`, `python3 --version`, `jq --version`.
-* Sign in interactively with `az login`, select the intended subscription with `az account set --subscription <subscription-id>`, and confirm `az account show`. Direct Terraform CLI invocation needs `ARM_SUBSCRIPTION_ID` set below. The identity running Terraform needs permission to create the resource group, plan, storage, monitoring resources, and role assignments (`Microsoft.Authorization/roleAssignments/write`, e.g. Owner or Contributor **plus** Role Based Access Control Administrator at the target scope), and to register the resource providers listed in [`providers.tf`](providers.tf) if not already registered. Entra app registration, service principal creation, and Azure CLI pre-authorization need directory permissions; Application Administrator or Global Administrator may be required by tenant policy. The publisher needs permission to deploy to the Function App. Check the [provider authentication guide](../../../docs/tips/provider-authentication.md).
+* Sign in interactively with `az login`, select the intended subscription with `az account set --subscription <subscription-id>`, and confirm `az account show`. Direct Terraform CLI invocation needs `ARM_SUBSCRIPTION_ID` set below. The identity running Terraform needs permission to create the resource group, plan, storage, monitoring resources, and role assignments (`Microsoft.Authorization/roleAssignments/write`, e.g. Owner or Contributor **plus** Role Based Access Control Administrator at the target scope), and to register the resource providers listed in [`providers.tf`](providers.tf) if not already registered. With `enable_authentication = true`, Entra app registration, service principal creation, and Azure CLI pre-authorization additionally need directory permissions; Application Administrator or Global Administrator may be required by tenant policy. The publisher needs permission to deploy to the Function App. Check the [provider authentication guide](../../../docs/tips/provider-authentication.md).
 * Storage uses `shared_access_key_enabled = false`: the Terraform executor is granted Storage Blob Data Contributor on the scenario storage account and the Function App receives Storage Blob Data Owner, Storage Queue Data Contributor, and Storage Table Data Contributor. RBAC propagation can take several minutes. The state backend, if used, is a **separate** storage account: follow the [Azure Blob backend guide](../../../docs/tips/azure-blob-backend.md), including its separate data-plane role.
 
-This example accepts access tokens for the Azure CLI **interactive public client**; service-principal CLI login is not supported for invoking the Entra-protected endpoint.
+When authentication is enabled, this example accepts access tokens for the Azure CLI **interactive public client**; service-principal CLI login is not supported for invoking the Entra-protected endpoint.
 
 ## Deploy and publish
 
@@ -70,6 +70,8 @@ rm -f .terraform/flex-plan.tfplan
 terraform output -raw function_app_name
 ```
 
+The commands above use the default unauthenticated configuration. To opt in to built-in authentication, add `-var='enable_authentication=true'` to `terraform plan`; the saved plan carries that setting into `terraform apply`.
+
 Confirm the selected subscription and check the **saved** plan for unexpected replacements, especially when moving Python 3.11 to 3.13; apply only that reviewed plan. `.terraform/` is gitignored and is created by `terraform init`, so the plan never appears as an unignored root-level `tfplan`. The plan can contain secrets: keep it private and remove it even if apply fails or is cancelled. The tracked `.terraform.lock.hcl` pins provider versions, including AzureRM **5.7.0**; `terraform init` reuses it when constraints match, without imposing `-lockfile=readonly` on a fresh checkout. Query only the non-secret output you need; the verification scripts parse JSON outputs internally without displaying the complete output set. Do not print or publish the full state or all outputs. For remote state, configure the backend as described above *before* `terraform init` and retain the same backend across operations. For a plan-only evaluation without a saved artifact, run `terraform plan` and stop before apply. See the [standard workflow](../../../docs/tips/terraform-workflow.md) for Makefile usage (`SCENARIO=azure_functions_flex_consumption`).
 
 After apply, **publish the Python code separately** from this scenario directory:
@@ -93,20 +95,20 @@ bash scripts/04_test_timer.sh
 bash scripts/05_test_http_telemetry.sh
 ```
 
-Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_validate_prerequisites.sh` checks `az`, `curl`, `terraform`, `jq`, required Terraform outputs, and that the **active default** Azure CLI subscription matches `subscription_id`; it does not check Core Tools or local Python. Publish the Python code before running the remaining scripts. `run_all.sh` runs the checks in sequence without publishing code. Test scripts exit nonzero when an assertion fails; the OpenTelemetry span and timer checks may need a wait for execution/ingestion. The Storage endpoint's JSON response (`{"status":"ok","container":"deploymentpackage"}` by default) confirms the **Function App's** managed identity can reach its deployment container; a 503 indicates the probe failed (inspect telemetry and role propagation). Verification scripts report a summary, not the response JSON, on stdout.
+Alternatively, run all six checks once with `bash scripts/run_all.sh`. `00_validate_prerequisites.sh` checks `az`, `curl`, `terraform`, `jq`, required Terraform outputs, and that the **active default** Azure CLI subscription matches `subscription_id`; it does not check Core Tools or local Python. Publish the Python code before running the remaining scripts. `run_all.sh` runs the checks in sequence without publishing code. When authentication is disabled, the dedicated Entra check reports that it was skipped; the Storage and HTTP telemetry probes run anonymously. When authentication is enabled, those probes retain their bearer-token checks. Test scripts exit nonzero when an assertion fails; the OpenTelemetry span and timer checks may need a wait for execution/ingestion. The Storage endpoint's JSON response (`{"status":"ok","container":"deploymentpackage"}` by default) confirms the **Function App's** managed identity can reach its deployment container; a 503 indicates the probe failed (inspect telemetry and role propagation). Verification scripts report a summary, not the response JSON, on stdout.
 
 Telemetry queries use `az rest` with the Application Insights Query API, so the optional Azure CLI `application-insights` extension is not required.
 
 | Check | Credential and expected result |
 | --- | --- |
-| `/api/hello` without token | HTTP **401** from Easy Auth |
-| `/api/hello?name=Azure` with an Azure CLI access token for `function_app_authentication_identifier_uri` | HTTP **200**, body `Hello, Azure!`; no Function key |
-| `/api/hello` POST with `{"name":"World"}` and bearer token | HTTP **200**, body `Hello, World!` |
-| `/api/hello-key` without a Function key (even with a bearer token) | HTTP **401** from Functions host |
+| `/api/hello` without token | Default: HTTP **200**. With authentication enabled: HTTP **401** from Easy Auth |
+| `/api/hello?name=Azure` with an Azure CLI access token for `function_app_authentication_identifier_uri` | With authentication enabled: HTTP **200**, body `Hello, Azure!`; the dedicated check is skipped otherwise |
+| `/api/hello` POST with `{"name":"World"}` and bearer token | With authentication enabled: HTTP **200**, body `Hello, World!` |
+| `/api/hello-key` without a Function key (including with a bearer token when authentication is enabled) | HTTP **401** from Functions host |
 | `/api/hello-key?name=Azure` with `x-functions-key` | HTTP **200**, body `Hello, Azure!` |
-| `/api/storage-check` without token / with valid bearer token | HTTP **401** / HTTP **200** with JSON `status: "ok"` and container name |
+| `/api/storage-check` | Default: anonymous HTTP **200**. With authentication enabled: HTTP **401** without a token / HTTP **200** with a valid bearer token. Success returns JSON `status: "ok"` and the container name |
 | Timer | Default `0 * * * * *`: every minute at second zero (UTC by default). The script checks the deployed `%TIMER_SCHEDULE%` binding, the app setting against the Terraform output, and an app-scoped `flex-timer-check: completed` trace from the last 24 hours. Wait for the first run and telemetry ingestion; the query retries for up to 1 minute. |
-| OpenTelemetry span | The script sends an authenticated `/api/hello?name=Telemetry` request (HTTP **200**, `Hello, Telemetry!`), then queries the Application Insights `dependencies` table for a `flex-otel-check` span **since that probe**, retrying for up to 1 minute. The span inherits the Functions invocation trace context so correlation and sampling remain consistent with the host-generated request. This verifies telemetry emitted by the Python worker, not only host-generated request telemetry. |
+| OpenTelemetry span | The script sends `/api/hello?name=Telemetry` anonymously by default or with a bearer token when authentication is enabled (HTTP **200**, `Hello, Telemetry!`), then queries the Application Insights `dependencies` table for a `flex-otel-check` span **since that probe**, retrying for up to 1 minute. The span inherits the Functions invocation trace context so correlation and sampling remain consistent with the host-generated request. This verifies telemetry emitted by the Python worker, not only host-generated request telemetry. |
 
 A successful OpenTelemetry check prints `OpenTelemetry span verified for Application Insights app ...`. To inspect the same worker span manually in **Application Insights > Logs**, run:
 
@@ -117,7 +119,7 @@ dependencies
 | order by timestamp desc
 ```
 
-The Entra verification script acquires a token for the **exact** Terraform output URI. You can inspect the audience without printing a token:
+With authentication enabled, the Entra verification script acquires a token for the **exact** Terraform output URI. You can inspect the audience without printing a token:
 
 ```bash
 terraform output -raw function_app_authentication_identifier_uri
@@ -134,7 +136,8 @@ Refresh expired tokens with `az account get-access-token`. The key endpoint inte
 | --- | --- | --- |
 | `name` | `"azurefuncflex"` | Resource base name (a stable random suffix is held in state) |
 | `location` | `"japaneast"` | Azure region; confirm Flex/runtime availability |
-| `azure_cli_client_id` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | Allowed interactive Azure CLI public client |
+| `enable_authentication` | `false` | Create the Entra application and enable App Service built-in authentication |
+| `azure_cli_client_id` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | Allowed interactive Azure CLI public client when authentication is enabled |
 | `runtime_name` / `runtime_version` | `"python"` / `"3.13"` | Infrastructure runtime; included sample is Python only |
 | `timer_schedule` | `"0 * * * * *"` | Six-field NCRONTAB schedule (second, minute, hour, day, month, weekday) |
 | `maximum_instance_count` / `instance_memory_in_mb` | `100` / `2048` | Flex scale limit / memory (512, 2048, or 4096 MiB) |
@@ -145,7 +148,7 @@ Refresh expired tokens with `az account get-access-token`. The key endpoint inte
 | --- | --- |
 | `subscription_id`, `resource_group_name` | Target subscription and resource group |
 | `function_app_name`, `function_app_id`, `function_app_url`, `function_app_default_hostname`, `function_app_principal_id` | App identity and HTTPS endpoint |
-| `function_app_authentication_client_id`, `function_app_authentication_identifier_uri`, `function_app_authentication_tenant_id` | Entra API registration, access-token audience, and tenant |
+| `function_app_authentication_client_id`, `function_app_authentication_identifier_uri`, `function_app_authentication_tenant_id` | Entra API registration, access-token audience, and tenant; `null` when authentication is disabled |
 | `storage_account_name`, `storage_account_id`, `deployment_container_name` | Identity-protected storage and private deployment container |
 | `log_analytics_workspace_customer_id`, `log_analytics_workspace_id`, `log_analytics_workspace_name` | Workspace identifier, Azure resource ID, and name |
 | `application_insights_app_id`, `application_insights_id`, `application_insights_name` | Application Insights application ID, Azure resource ID, and name |
@@ -157,7 +160,11 @@ Refresh expired tokens with `az account get-access-token`. The key endpoint inte
 
 The default `04b07795-8ddb-461a-bbee-02f9e1bf7b46` is the Microsoft-published Azure CLI application ID. It is **not** generated per tenant, subscription, workstation, or Function App. Azure CLI uses this public client ID for interactive user authentication; Easy Auth compares the access token's `azp` or `appid` claim with the configured allowed application.
 
-Change `azure_cli_client_id` only for a different calling public client. Automatic discovery would make plans depend on the workstation's current login method. Supporting a service principal also requires an application permission and app-role design; changing the ID alone is insufficient. The ID is not tenant-specific, but the configured issuer is `login.microsoftonline.com` (Azure Public); sovereign clouds also need the appropriate authority and provider environment.
+The value is used only when `enable_authentication = true`. Change `azure_cli_client_id` only for a different calling public client. Automatic discovery would make plans depend on the workstation's current login method. Supporting a service principal also requires an application permission and app-role design; changing the ID alone is insufficient. The ID is not tenant-specific, but the configured issuer is `login.microsoftonline.com` (Azure Public); sovereign clouds also need the appropriate authority and provider environment.
+
+### Migrating an existing authenticated deployment
+
+Authentication is now opt-in. To retain the existing Entra application and built-in authentication, set `enable_authentication = true` before planning. Leaving the new default unchanged proposes removal of the scenario-managed Entra resources and removes `auth_settings_v2` from the Function App. Review the saved plan before applying.
 
 ### Migrating an existing Python 3.11 deployment
 

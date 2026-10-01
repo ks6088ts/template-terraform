@@ -1,23 +1,23 @@
 ---
-description: Entra 認証、ID ベースの Storage アクセス、OpenTelemetry オブザーバビリティを備えた Python Azure Functions Flex Consumption のハンズオン
+description: 任意の Entra 認証、ID ベースの Storage アクセス、OpenTelemetry オブザーバビリティを備えた Python Azure Functions Flex Consumption のハンズオン
 ---
 
 # Azure Functions Flex Consumption（Python）
 
-Linux FC1 Flex Consumption の Function App を構築し、Python サンプルを明示的に公開して、2 種類の HTTP 認証、マネージド ID での Storage アクセス、タイマー、OpenTelemetry トレースを検証します。Terraform が構築するのは**インフラのみ**です。apply だけでは関数コードは公開されません。
+Linux FC1 Flex Consumption の Function App を構築し、Python サンプルを明示的に公開して、HTTP 認証、マネージド ID での Storage アクセス、タイマー、OpenTelemetry トレースを検証します。Microsoft Entra 組み込み認証は既定で無効で、`enable_authentication = true` により有効化できます。Terraform が構築するのは**インフラのみ**です。apply だけでは関数コードは公開されません。
 
 ## アーキテクチャ
 
 ```mermaid
 flowchart LR
-  User["対話型 Azure CLI ユーザー"] -->|API URI 用アクセストークン取得| Entra["Microsoft Entra ID<br/>API アプリとサービスプリンシパル<br/>Azure CLI を事前承認"]
-  User -->|ユーザーアクセストークン| Auth
-  Entra -.->|issuer、audience、client を検証| Auth
-  Key["Function Key クライアント"] -->|/api/hello-key は組み込み認証の対象外<br/>Functions ホストが x-functions-key を検証| App
+  User["対話型 Azure CLI ユーザー"] -.->|有効時: API URI 用アクセストークン取得| Entra["任意の Microsoft Entra ID<br/>API アプリとサービスプリンシパル<br/>Azure CLI を事前承認"]
+  User -.->|有効時: ユーザーアクセストークン| Auth
+  Entra -.->|有効時: issuer、audience、client を検証| Auth
+  Key["Function Key クライアント"] -->|Functions ホストが x-functions-key を検証| App
   subgraph RG["Azure リソースグループ"]
-    Auth["App Service 組み込み認証<br/>トークンなしは 401"]
+    Auth["任意の App Service 組み込み認証<br/>有効時はトークンなしで 401"]
     Plan["Linux FC1 プラン"] --> App["Python Function App<br/>/api/hello<br/>/api/hello-key<br/>/api/storage-check<br/>タイマー"]
-    Auth -->|/api/hello と /api/storage-check| App
+    Auth -.->|有効時: /api/hello と /api/storage-check| App
     App -->|システム割り当て ID<br/>Blob Owner、Queue/Table Contributor| Storage["Storage Account<br/>プライベートなデプロイコンテナー<br/>ホスト用 Blob/Queue/Table"]
     App -->|OpenTelemetry host と Python worker| AI["Application Insights"]
     AI --> LA["Log Analytics ワークスペース"]
@@ -26,16 +26,16 @@ flowchart LR
   Publisher["scripts/publish_code.sh<br/>Functions Core Tools"] -->|One Deploy| App
 ```
 
-組み込み認証は Python ランタイムに到達する前に `/api/hello` と `/api/storage-check` を保護します。`/api/hello-key` は認証方式の比較のため対象外とし、Functions ホストが `function` 認証レベルを強制します。Python タイマーは `TIMER_SCHEDULE` アプリ設定に従います。Storage プローブは `STORAGE_ACCOUNT_BLOB_ENDPOINT`（Blob サービスの URI）と `STORAGE_CONTAINER_NAME`（デプロイコンテナー）のアプリ設定を使用し、`ManagedIdentityCredential` でコンテナーの属性を読み取ります。Blob の内容は公開しません。Functions ホストは `telemetryMode: OpenTelemetry` でテレメトリを送信し、`PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY=true` により Python worker が Azure Monitor OpenTelemetry Distro を初期化します。`/api/hello` は `flex-otel-check` span を生成します。Application Insights の接続文字列はテレメトリ専用です。Storage には接続文字列ではなくマネージド ID でアクセスします。
+既定では `/api/hello` と `/api/storage-check` は App Service 認証なしで Python ランタイムに到達します。`enable_authentication = true` の場合、組み込み認証は Python ランタイムに到達する前にこれらを保護し、`/api/hello-key` は Functions ホストが `function` 認証レベルを強制するため意図的に対象外とします。Python タイマーは `TIMER_SCHEDULE` アプリ設定に従います。Storage プローブは `STORAGE_ACCOUNT_BLOB_ENDPOINT`（Blob サービスの URI）と `STORAGE_CONTAINER_NAME`（デプロイコンテナー）のアプリ設定を使用し、`ManagedIdentityCredential` でコンテナーの属性を読み取ります。Blob の内容は公開しません。Functions ホストは `telemetryMode: OpenTelemetry` でテレメトリを送信し、`PYTHON_APPLICATIONINSIGHTS_ENABLE_TELEMETRY=true` により Python worker が Azure Monitor OpenTelemetry Distro を初期化します。`/api/hello` は `flex-otel-check` span を生成します。Application Insights の接続文字列はテレメトリ専用です。Storage には接続文字列ではなくマネージド ID でアクセスします。
 
 ## 前提条件
 
 * Azure Public のサブスクリプションと Microsoft Entra テナント。**Linux Flex Consumption** と選択する Python ランタイムに対応したリージョン（既定値は `japaneast`、Python `3.13`）を使用します。[リージョン対応状況](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#regional-subscription-quotas)とサブスクリプションのクォータを確認してください。
 * `mock_provider` を使うプランのみのテストには Terraform **1.7+**（シナリオの [`versions.tf`](versions.tf) ではデプロイ用に **1.6+** を許可）、Azure CLI **2.x** (`az`)、Azure Functions Core Tools **4.x** (`func`)、ローカル作業用 Python **3.13**、`curl`、`jq`、スクリプト実行用 `bash`。プロバイダーの制約は `versions.tf`、ロック済みバージョンは [`.terraform.lock.hcl`](.terraform.lock.hcl) を参照してください。Core Tools は[公式手順](https://learn.microsoft.com/ja-jp/azure/azure-functions/functions-run-local#install-the-azure-functions-core-tools)で導入し、`terraform version`、`az version`、`func --version`、`python3 --version`、`jq --version` で確認します。
-* `az login` で対話的にサインインし、`az account set --subscription <subscription-id>` で対象を選択して `az account show` で確認します。Terraform CLI を直接使う場合は以下の `ARM_SUBSCRIPTION_ID` を設定します。Terraform 実行 ID には、リソースグループ、プラン、ストレージ、監視リソース、ロール割り当てを作成する権限（対象スコープの `Microsoft.Authorization/roleAssignments/write`、例: Owner または Contributor と Role Based Access Control Administrator）、および [`providers.tf`](providers.tf) に列挙された未登録リソースプロバイダーを登録する権限が必要です。Entra アプリ登録、サービスプリンシパル作成、Azure CLI の事前承認にはディレクトリ権限が必要です。テナントのポリシーによっては Application Administrator または Global Administrator が必要です。公開担当者には Function App へのデプロイ権限が必要です。[プロバイダー認証ガイド](../../../docs/tips/provider-authentication.ja.md)も参照してください。
+* `az login` で対話的にサインインし、`az account set --subscription <subscription-id>` で対象を選択して `az account show` で確認します。Terraform CLI を直接使う場合は以下の `ARM_SUBSCRIPTION_ID` を設定します。Terraform 実行 ID には、リソースグループ、プラン、ストレージ、監視リソース、ロール割り当てを作成する権限（対象スコープの `Microsoft.Authorization/roleAssignments/write`、例: Owner または Contributor と Role Based Access Control Administrator）、および [`providers.tf`](providers.tf) に列挙された未登録リソースプロバイダーを登録する権限が必要です。`enable_authentication = true` の場合は、Entra アプリ登録、サービスプリンシパル作成、Azure CLI の事前承認用のディレクトリ権限も必要です。テナントのポリシーによっては Application Administrator または Global Administrator が必要です。公開担当者には Function App へのデプロイ権限が必要です。[プロバイダー認証ガイド](../../../docs/tips/provider-authentication.ja.md)も参照してください。
 * Storage は `shared_access_key_enabled = false` です。Terraform 実行 ID にはシナリオのストレージアカウントに対する Storage Blob Data Contributor、Function App には Storage Blob Data Owner、Storage Queue Data Contributor、Storage Table Data Contributor が付与されます。RBAC の反映には数分かかることがあります。使用する場合、ステート用バックエンドは**別の**ストレージアカウントにします。バックエンド固有のデータプレーン権限を含め、[Azure Blob バックエンドガイド](../../../docs/tips/azure-blob-backend.ja.md)を参照してください。
 
-この例で許可するのは、Azure CLI の**対話型パブリッククライアント**向けのアクセストークンです。サービスプリンシパルで Azure CLI にログインしても Entra 保護エンドポイントの呼び出しには使えません。
+認証を有効にした場合、この例で許可するのは Azure CLI の**対話型パブリッククライアント**向けのアクセストークンです。サービスプリンシパルで Azure CLI にログインしても Entra 保護エンドポイントの呼び出しには使えません。
 
 ## 構築とコード公開
 
@@ -70,6 +70,8 @@ rm -f .terraform/flex-plan.tfplan
 terraform output -raw function_app_name
 ```
 
+上記コマンドは認証なしの既定構成を使用します。組み込み認証を opt-in するには `terraform plan` に `-var='enable_authentication=true'` を追加します。保存済み plan により、その設定が `terraform apply` に引き継がれます。
+
 選択したサブスクリプションを確認し、特に Python 3.11 から 3.13 へ変更するときは、**保存した**プランに予期しないリソースの置換がないか確認します。確認済みのプランだけを適用してください。`.terraform/` は gitignore 対象で `terraform init` が作成するため、ルートに無視対象外の `tfplan` ファイルを残しません。プランには機密情報が含まれ得ます。厳重に保管し、apply の失敗や中断時にも削除してください。追跡対象の `.terraform.lock.hcl` には AzureRM **5.7.0** を含むプロバイダーバージョンが固定されています。制約に一致すれば `terraform init` はロックファイルを再利用し、新規チェックアウトで `-lockfile=readonly` を強制しません。必要な機密情報ではない出力のみを個別に取得してください。検証スクリプトは JSON 出力を内部で解析しますが、出力全体は表示しません。ステートや全出力を画面に表示・公開しないでください。リモートステートを使用する場合は上記ガイドに従い `terraform init` **前に**バックエンドを設定し、以降も同じバックエンドを使用します。成果物を保存しないプランのみの確認は `terraform plan` を実行して適用せずに停止します。Makefile の手順（`SCENARIO=azure_functions_flex_consumption`）は[共通ワークフロー](../../../docs/tips/terraform-workflow.ja.md)を参照してください。
 
 apply 後、このシナリオディレクトリから Python コードを**別途公開**します。
@@ -93,20 +95,20 @@ bash scripts/04_test_timer.sh
 bash scripts/05_test_http_telemetry.sh
 ```
 
-6 件を一度に確認する場合は、代わりに `bash scripts/run_all.sh` を実行します。`00_validate_prerequisites.sh` は `az`、`curl`、`terraform`、`jq`、必要な Terraform 出力、および Azure CLI の**現在の既定サブスクリプション**が `subscription_id` と一致することを確認します。Core Tools やローカル Python は確認しません。残りのスクリプトを実行する前に Python コードを公開してください。`run_all.sh` はコードを公開せず、各検証を順番に実行します。アサーション失敗時、スクリプトはゼロ以外で終了します。OpenTelemetry span とタイマーの確認には実行や取り込みの待ち時間が必要な場合があります。Storage エンドポイントの JSON 応答（既定では `{"status":"ok","container":"deploymentpackage"}`）は **Function App の**マネージド ID でデプロイコンテナーにアクセスできることを示します。503 はプローブ失敗を意味します（テレメトリと RBAC の反映を調べてください）。検証スクリプトの標準出力には応答 JSON ではなく結果概要が表示されます。
+6 件を一度に確認する場合は、代わりに `bash scripts/run_all.sh` を実行します。`00_validate_prerequisites.sh` は `az`、`curl`、`terraform`、`jq`、必要な Terraform 出力、および Azure CLI の**現在の既定サブスクリプション**が `subscription_id` と一致することを確認します。Core Tools やローカル Python は確認しません。残りのスクリプトを実行する前に Python コードを公開してください。`run_all.sh` はコードを公開せず、各検証を順番に実行します。認証が無効な場合、Entra 専用テストはスキップを報告し、Storage と HTTP テレメトリーのプローブは匿名で実行します。認証が有効な場合、これらのプローブは従来どおり bearer token を検証します。アサーション失敗時、スクリプトはゼロ以外で終了します。OpenTelemetry span とタイマーの確認には実行や取り込みの待ち時間が必要な場合があります。Storage エンドポイントの JSON 応答（既定では `{"status":"ok","container":"deploymentpackage"}`）は **Function App の**マネージド ID でデプロイコンテナーにアクセスできることを示します。503 はプローブ失敗を意味します（テレメトリと RBAC の反映を調べてください）。検証スクリプトの標準出力には応答 JSON ではなく結果概要が表示されます。
 
 テレメトリ照会は Application Insights Query API を `az rest` で呼び出すため、任意導入の Azure CLI `application-insights` 拡張機能は不要です。
 
 | 検証 | 認証情報と期待結果 |
 | --- | --- |
-| `/api/hello`、トークンなし | 組み込み認証による HTTP **401** |
-| `/api/hello?name=Azure`、`function_app_authentication_identifier_uri` 用の Azure CLI アクセストークン | Function Key なしで HTTP **200**、本文 `Hello, Azure!` |
-| `/api/hello`、`{"name":"World"}` の POST とアクセストークン | HTTP **200**、本文 `Hello, World!` |
-| `/api/hello-key`、Function Key なし（アクセストークンのみを含む） | Functions ホストによる HTTP **401** |
+| `/api/hello`、トークンなし | 既定: HTTP **200**。認証有効時: 組み込み認証による HTTP **401** |
+| `/api/hello?name=Azure`、`function_app_authentication_identifier_uri` 用の Azure CLI アクセストークン | 認証有効時: Function Key なしで HTTP **200**、本文 `Hello, Azure!`。それ以外は専用テストをスキップ |
+| `/api/hello`、`{"name":"World"}` の POST とアクセストークン | 認証有効時: HTTP **200**、本文 `Hello, World!` |
+| `/api/hello-key`、Function Key なし（認証有効時のアクセストークンのみを含む場合も同じ） | Functions ホストによる HTTP **401** |
 | `/api/hello-key?name=Azure`、`x-functions-key` | HTTP **200**、本文 `Hello, Azure!` |
-| `/api/storage-check`、トークンなし / 有効なアクセストークンあり | HTTP **401** / HTTP **200** と `status: "ok"` とコンテナー名の JSON |
+| `/api/storage-check` | 既定: 匿名で HTTP **200**。認証有効時: トークンなしで HTTP **401** / 有効な bearer token で HTTP **200**。成功時は `status: "ok"` とコンテナー名の JSON |
 | タイマー | 既定値 `0 * * * * *` は毎分 0 秒（既定で UTC）。スクリプトはデプロイ済みの `%TIMER_SCHEDULE%` バインディング、Terraform 出力と一致するアプリ設定、過去 24 時間の対象アプリの `flex-timer-check: completed` トレースを検証します。初回実行とテレメトリの取り込みを待ってください。クエリは最大 1 分間再試行します。 |
-| OpenTelemetry span | スクリプトは認証付き `/api/hello?name=Telemetry` を呼び出し（HTTP **200**、`Hello, Telemetry!`）、**この呼び出し以降**の `flex-otel-check` span を Application Insights の `dependencies` テーブルで確認します。span は Functions invocation の trace context を継承するため、相関と sampling decision がホスト生成 request と一致します。取り込みを最大 1 分間再試行し、ホスト生成 request telemetry だけでなく Python worker が生成したテレメトリを検証します。 |
+| OpenTelemetry span | スクリプトは既定では匿名、認証有効時は bearer token 付きで `/api/hello?name=Telemetry` を呼び出し（HTTP **200**、`Hello, Telemetry!`）、**この呼び出し以降**の `flex-otel-check` span を Application Insights の `dependencies` テーブルで確認します。span は Functions invocation の trace context を継承するため、相関と sampling decision がホスト生成 request と一致します。取り込みを最大 1 分間再試行し、ホスト生成 request telemetry だけでなく Python worker が生成したテレメトリを検証します。 |
 
 OpenTelemetry の確認に成功すると `OpenTelemetry span verified for Application Insights app ...` と表示されます。同じ worker span を **Application Insights > ログ**から手動確認する場合は、次の KQL を実行します。
 
@@ -117,7 +119,7 @@ dependencies
 | order by timestamp desc
 ```
 
-Entra 検証スクリプトは Terraform 出力の**正確な** URI を対象にトークンを取得します。トークンを出力せずに audience を確認する方法:
+認証有効時、Entra 検証スクリプトは Terraform 出力の**正確な** URI を対象にトークンを取得します。トークンを出力せずに audience を確認する方法:
 
 ```bash
 terraform output -raw function_app_authentication_identifier_uri
@@ -134,7 +136,8 @@ bash scripts/01_test_entra_http.sh
 | --- | --- | --- |
 | `name` | `"azurefuncflex"` | リソース名のベース（ランダムなサフィックスをステートに保持） |
 | `location` | `"japaneast"` | Azure リージョン。Flex とランタイムの対応を確認 |
-| `azure_cli_client_id` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | 許可する対話型 Azure CLI パブリッククライアント |
+| `enable_authentication` | `false` | Entra アプリを作成し、App Service 組み込み認証を有効化 |
+| `azure_cli_client_id` | `"04b07795-8ddb-461a-bbee-02f9e1bf7b46"` | 認証有効時に許可する対話型 Azure CLI パブリッククライアント |
 | `runtime_name` / `runtime_version` | `"python"` / `"3.13"` | インフラのランタイム。付属サンプルは Python のみ |
 | `timer_schedule` | `"0 * * * * *"` | 6 フィールド NCRONTAB（秒、分、時、日、月、曜日） |
 | `maximum_instance_count` / `instance_memory_in_mb` | `100` / `2048` | Flex の最大スケール / メモリ（512、2048、4096 MiB） |
@@ -145,7 +148,7 @@ bash scripts/01_test_entra_http.sh
 | --- | --- |
 | `subscription_id`, `resource_group_name` | 対象サブスクリプションとリソースグループ |
 | `function_app_name`, `function_app_id`, `function_app_url`, `function_app_default_hostname`, `function_app_principal_id` | Function App の識別子と HTTPS エンドポイント |
-| `function_app_authentication_client_id`, `function_app_authentication_identifier_uri`, `function_app_authentication_tenant_id` | Entra API アプリ、トークンの audience、テナント |
+| `function_app_authentication_client_id`, `function_app_authentication_identifier_uri`, `function_app_authentication_tenant_id` | Entra API アプリ、トークンの audience、テナント。認証無効時は `null` |
 | `storage_account_name`, `storage_account_id`, `deployment_container_name` | ID 保護された Storage と非公開デプロイコンテナー |
 | `log_analytics_workspace_customer_id`, `log_analytics_workspace_id`, `log_analytics_workspace_name` | ワークスペース ID、Azure リソース ID、名前 |
 | `application_insights_app_id`, `application_insights_id`, `application_insights_name` | Application Insights のアプリ ID、Azure リソース ID、名前 |
@@ -157,7 +160,11 @@ bash scripts/01_test_entra_http.sh
 
 既定値 `04b07795-8ddb-461a-bbee-02f9e1bf7b46` は Microsoft が公開する Azure CLI のアプリケーション ID です。テナント、サブスクリプション、端末、Function App ごとに生成される値では**ありません**。Azure CLI は対話型ユーザー認証にこのパブリッククライアント ID を使用し、組み込み認証はアクセストークンの `azp` または `appid` クレームを許可されたアプリと照合します。
 
-別のパブリッククライアントから呼ぶ場合にのみ `azure_cli_client_id` を変更してください。自動検出を行うと端末のログイン方法によって Terraform plan が変わります。サービスプリンシパルへの対応にはアプリケーション権限とアプリロールの設計も必要で、ID の変更だけでは不十分です。この ID はテナント固有ではありませんが、設定した issuer は `login.microsoftonline.com`（Azure Public）です。Sovereign Cloud では対応する authority とプロバイダー環境も必要です。
+この値は `enable_authentication = true` の場合にのみ使用します。別のパブリッククライアントから呼ぶ場合にのみ `azure_cli_client_id` を変更してください。自動検出を行うと端末のログイン方法によって Terraform plan が変わります。サービスプリンシパルへの対応にはアプリケーション権限とアプリロールの設計も必要で、ID の変更だけでは不十分です。この ID はテナント固有ではありませんが、設定した issuer は `login.microsoftonline.com`（Azure Public）です。Sovereign Cloud では対応する authority とプロバイダー環境も必要です。
+
+### 既存の認証済みデプロイからの移行
+
+認証は opt-in になりました。既存の Entra アプリと組み込み認証を維持するには、plan 前に `enable_authentication = true` を設定してください。新しい既定値のままにすると、シナリオが管理する Entra リソースの削除と Function App からの `auth_settings_v2` の削除が提案されます。apply 前に保存済み plan を確認してください。
 
 ### 既存の Python 3.11 デプロイからの移行
 

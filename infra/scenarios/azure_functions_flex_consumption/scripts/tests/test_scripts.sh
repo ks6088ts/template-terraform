@@ -15,8 +15,10 @@ export PATH
 cat > "$FIXTURE/bin/terraform" <<'EOF'
 #!/bin/sh
 [ "$2" = output ] && [ "$3" = -json ] || exit 1
-cat <<'JSON'
-{"subscription_id":{"value":"sub-123"},"resource_group_name":{"value":"rg-example"},"function_app_name":{"value":"func-example"},"function_app_id":{"value":"/subscriptions/sub-123/resourceGroups/rg-example/providers/Microsoft.Web/sites/func-example"},"function_app_url":{"value":"https://func.example.test"},"function_app_authentication_identifier_uri":{"value":"api://app-123"},"storage_account_name":{"value":"stexample"},"deployment_container_name":{"value":"deployments"},"log_analytics_workspace_customer_id":{"value":"workspace-123"},"application_insights_app_id":{"value":"insights-123"},"timer_schedule":{"value":"0 * * * * *"}}
+auth_identifier_uri='"api://app-123"'
+[ "${MOCK_AUTH_ENABLED:-yes}" != no ] || auth_identifier_uri=null
+cat <<JSON
+{"subscription_id":{"value":"sub-123"},"resource_group_name":{"value":"rg-example"},"function_app_name":{"value":"func-example"},"function_app_id":{"value":"/subscriptions/sub-123/resourceGroups/rg-example/providers/Microsoft.Web/sites/func-example"},"function_app_url":{"value":"https://func.example.test"},"function_app_authentication_identifier_uri":{"value":$auth_identifier_uri},"storage_account_name":{"value":"stexample"},"deployment_container_name":{"value":"deployments"},"log_analytics_workspace_customer_id":{"value":"workspace-123"},"application_insights_app_id":{"value":"insights-123"},"timer_schedule":{"value":"0 * * * * *"}}
 JSON
 EOF
 cat > "$FIXTURE/bin/az" <<'EOF'
@@ -115,9 +117,19 @@ case "$url" in
           *) body='Hello, Azure!' ;;
         esac
       fi
+    elif [ "${MOCK_AUTH_ENABLED:-yes}" = no ]; then
+      status=200
+      if [ "$method" = POST ]; then
+        body='Hello, World!'
+      else
+        case "$url" in
+          *'name=Telemetry') body='Hello, Telemetry!' ;;
+          *) body='Hello, Azure!' ;;
+        esac
+      fi
     else status=401; body='Unauthorized'; fi ;;
   */api/storage-check)
-    if [ "$auth" = yes ]; then
+    if [ "$auth" = yes ] || [ "${MOCK_AUTH_ENABLED:-yes}" = no ]; then
       status=200
       if [ "${MOCK_CASE:-}" = storage_unavailable ]; then
         status=503
@@ -192,6 +204,22 @@ grep -q "(datetime(.*) - 5s)" "$FIXTURE/az.calls" || fail 'OpenTelemetry query l
 grep -q "timestamp <= datetime(" "$FIXTURE/az.calls" || fail 'Telemetry query lacks a concrete upper time bound'
 grep -q "name == 'flex-otel-check'" "$FIXTURE/az.calls" || fail 'Named OpenTelemetry span not queried'
 grep -q 'datetime(' "$FIXTURE/az.calls" || fail 'OpenTelemetry span not scoped to fresh probe'
+
+MOCK_AUTH_ENABLED=no
+export MOCK_AUTH_ENABLED
+"$SCRIPT_DIR/00_validate_prerequisites.sh" > "$FIXTURE/stdout" ||
+  fail 'Prerequisites verification failed with authentication disabled'
+"$SCRIPT_DIR/01_test_entra_http.sh" > "$FIXTURE/stdout" ||
+  fail 'Easy Auth check did not skip with authentication disabled'
+grep -q 'skipped because authentication is disabled' "$FIXTURE/stdout" ||
+  fail 'Easy Auth check did not report the disabled authentication skip'
+"$SCRIPT_DIR/02_test_function_key.sh" > "$FIXTURE/stdout" ||
+  fail 'Key verification failed with authentication disabled'
+"$SCRIPT_DIR/03_test_storage_identity.sh" > "$FIXTURE/stdout" ||
+  fail 'Anonymous Storage verification failed with authentication disabled'
+"$SCRIPT_DIR/05_test_http_telemetry.sh" > "$FIXTURE/stdout" ||
+  fail 'Anonymous telemetry verification failed with authentication disabled'
+unset MOCK_AUTH_ENABLED
 
 MOCK_CASE=delayed_telemetry
 export MOCK_CASE
