@@ -25,31 +25,85 @@ description: 最小構成の Azure ハブ スポーク ネットワークを作�
 
 ## 構成
 
-実線は既定で作成し、破線と破線の要素は任意で作成します。
+青色の要素は既定で作成します。オレンジ色の破線要素は、ラベルに記載した
+feature flag を有効にした場合だけ作成します。
 
 ```mermaid
-flowchart LR
-    subgraph Hub["Hub VNet<br/>10.0.0.0/16"]
-        Shared["将来の共有サービス"]
+flowchart TB
+    subgraph RG["Azure Resource Group"]
+        direction LR
+
+        subgraph Hub["Hub VNet<br/>10.0.0.0/16"]
+            HubExtension["共有サービスの拡張ポイント<br/>既定ではリソースなし"]
+        end
+
+        subgraph Spoke["Spoke VNet<br/>10.1.0.0/16"]
+            direction TB
+
+            subgraph PESubnet["snet-private-endpoints<br/>10.1.1.0/24"]
+                PE["Blob Private Endpoint"]
+            end
+
+            subgraph WorkloadSubnet["snet-workload<br/>10.1.2.0/24"]
+                NSG["Network Security Group"]
+                VM["検証用 Linux VM<br/>Public IP なし"]
+                NSG --> VM
+            end
+
+            subgraph BastionSubnet["AzureBastionSubnet<br/>10.1.0.0/26"]
+                Bastion["Azure Bastion"]
+            end
+        end
+
+        Storage[("Storage Account<br/>Blob<br/>Public network: Disabled")]
+        PrivateDNS["Private DNS zone<br/>privatelink.blob.core.windows.net"]
+        BastionPIP["Bastion Public IP"]
+        NAT["NAT Gateway"]
+        NATPIP["NAT Public IP"]
     end
 
-    subgraph Spoke["Spoke VNet<br/>10.1.0.0/16"]
-        PE["Private Endpoint subnet<br/>任意"]
-        VM["検証用 VM subnet<br/>任意"]
-        Bastion["AzureBastionSubnet<br/>任意"]
-    end
-
-    Blob[("Blob Storage<br/>パブリック アクセス無効")]
-    DNS["privatelink.blob.core.windows.net"]
     Internet["Internet"]
 
-    Hub <-. "enable_hub_spoke_peering" .-> Spoke
-    PE -. "enable_private_endpoint_example" .-> Blob
-    DNS -. "VNet link" .-> Spoke
-    VM -. "private DNS + HTTPS" .-> PE
-    Bastion -. "enable_bastion" .-> VM
-    VM -. "enable_nat_gateway" .-> Internet
+    Hub <-. "双方向 VNet peering<br/>enable_hub_spoke_peering" .-> Spoke
+
+    PE -->|"Private Link"| Storage
+    PE -. "DNS zone group" .-> PrivateDNS
+    PrivateDNS -. "VNet link" .-> Spoke
+    VM -->|"Private DNS で名前解決<br/>HTTPS"| PE
+
+    BastionPIP --> Bastion
+    Bastion -->|"SSH"| VM
+
+    VM --> NAT
+    NATPIP --> NAT
+    NAT --> Internet
+
+    classDef defaultResource fill:#e8f3ff,stroke:#2563eb,stroke-width:2px,color:#111;
+    classDef optionalResource fill:#fff4e5,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5,color:#111;
+    classDef externalResource fill:#f3f4f6,stroke:#6b7280,stroke-width:1px,color:#111;
+
+    class HubExtension defaultResource;
+    class PE,NSG,VM,Bastion,Storage,PrivateDNS,BastionPIP,NAT,NATPIP optionalResource;
+    class Internet externalResource;
+
+    style Hub fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
+    style Spoke fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
+    style PESubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
+    style WorkloadSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
+    style BastionSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
 ```
+
+- `enable_private_endpoint_example`: Private Endpoint subnet、Storage Account、
+  Private Endpoint、Private DNS zone と VNet link をまとめて追加します。
+- `enable_test_vm`: Workload subnet、NSG、Public IP を持たない検証用 VM を追加します。
+- `enable_bastion`: Bastion subnet、Bastion、専用 Public IP を追加し、VM への SSH
+  経路を作ります。
+- `enable_nat_gateway`: NAT Gateway と専用 Public IP を追加し、VM の outbound
+  インターネット経路を作ります。
+
+Private Endpoint を有効にしても、Storage Account 自体が VNet 内へ移動するわけでは
+ありません。VNet 内の Private Endpoint が、Azure Private Link を介して Storage
+Account へ接続します。
 
 ## 前提条件
 

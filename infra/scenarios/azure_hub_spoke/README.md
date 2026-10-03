@@ -25,31 +25,86 @@ spoke VNet. Peering and resources that add cost or deployment time are opt-in.
 
 ## Architecture
 
-Solid lines are created by default. Dashed lines and boxes are optional.
+Blue elements are created by default. Orange elements with dashed borders are
+created only when the feature flag shown in the diagram is enabled.
 
 ```mermaid
-flowchart LR
-    subgraph Hub["Hub VNet<br/>10.0.0.0/16"]
-        Shared["Future shared services"]
+flowchart TB
+    subgraph RG["Azure Resource Group"]
+        direction LR
+
+        subgraph Hub["Hub VNet<br/>10.0.0.0/16"]
+            HubExtension["Shared-services extension point<br/>No resources by default"]
+        end
+
+        subgraph Spoke["Spoke VNet<br/>10.1.0.0/16"]
+            direction TB
+
+            subgraph PESubnet["snet-private-endpoints<br/>10.1.1.0/24"]
+                PE["Blob Private Endpoint"]
+            end
+
+            subgraph WorkloadSubnet["snet-workload<br/>10.1.2.0/24"]
+                NSG["Network Security Group"]
+                VM["Test Linux VM<br/>No public IP"]
+                NSG --> VM
+            end
+
+            subgraph BastionSubnet["AzureBastionSubnet<br/>10.1.0.0/26"]
+                Bastion["Azure Bastion"]
+            end
+        end
+
+        Storage[("Storage Account<br/>Blob<br/>Public network: Disabled")]
+        PrivateDNS["Private DNS zone<br/>privatelink.blob.core.windows.net"]
+        BastionPIP["Bastion public IP"]
+        NAT["NAT Gateway"]
+        NATPIP["NAT public IP"]
     end
 
-    subgraph Spoke["Spoke VNet<br/>10.1.0.0/16"]
-        PE["Private Endpoint subnet<br/>optional"]
-        VM["Test VM subnet<br/>optional"]
-        Bastion["AzureBastionSubnet<br/>optional"]
-    end
-
-    Blob[("Blob Storage<br/>public access disabled")]
-    DNS["privatelink.blob.core.windows.net"]
     Internet["Internet"]
 
-    Hub <-. "enable_hub_spoke_peering" .-> Spoke
-    PE -. "enable_private_endpoint_example" .-> Blob
-    DNS -. "VNet link" .-> Spoke
-    VM -. "private DNS + HTTPS" .-> PE
-    Bastion -. "enable_bastion" .-> VM
-    VM -. "enable_nat_gateway" .-> Internet
+    Hub <-. "Two-way VNet peering<br/>enable_hub_spoke_peering" .-> Spoke
+
+    PE -->|"Private Link"| Storage
+    PE -. "DNS zone group" .-> PrivateDNS
+    PrivateDNS -. "VNet link" .-> Spoke
+    VM -->|"Private DNS resolution<br/>HTTPS"| PE
+
+    BastionPIP --> Bastion
+    Bastion -->|"SSH"| VM
+
+    VM --> NAT
+    NATPIP --> NAT
+    NAT --> Internet
+
+    classDef defaultResource fill:#e8f3ff,stroke:#2563eb,stroke-width:2px,color:#111;
+    classDef optionalResource fill:#fff4e5,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5,color:#111;
+    classDef externalResource fill:#f3f4f6,stroke:#6b7280,stroke-width:1px,color:#111;
+
+    class HubExtension defaultResource;
+    class PE,NSG,VM,Bastion,Storage,PrivateDNS,BastionPIP,NAT,NATPIP optionalResource;
+    class Internet externalResource;
+
+    style Hub fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
+    style Spoke fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
+    style PESubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
+    style WorkloadSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
+    style BastionSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
 ```
+
+- `enable_private_endpoint_example` adds the Private Endpoint subnet, Storage
+  account, Private Endpoint, Private DNS zone, and VNet link together.
+- `enable_test_vm` adds the workload subnet, NSG, and a test VM without a
+  public IP.
+- `enable_bastion` adds the Bastion subnet, Bastion, and its public IP to
+  provide an SSH path to the VM.
+- `enable_nat_gateway` adds the NAT Gateway and its public IP to provide VM
+  outbound internet connectivity.
+
+Enabling the Private Endpoint does not move the Storage account into the VNet.
+The Private Endpoint inside the VNet connects to the Storage account through
+Azure Private Link.
 
 ## Prerequisites
 
