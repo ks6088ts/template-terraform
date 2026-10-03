@@ -1,0 +1,21 @@
+module "storage" {
+  count  = var.enable_private_endpoint_example ? 1 : 0
+  source = "../../modules/azure/storage"
+
+  name                          = local.resource_name
+  storage_account_name          = local.storage_account_name
+  resource_group_name           = module.resource_group.name
+  location                      = module.resource_group.location
+  tags                          = var.tags
+  account_tier                  = var.storage_account_tier
+  account_replication_type      = var.storage_account_replication_type
+  enable_hns                    = false
+  public_network_access_enabled = false
+  shared_access_key_enabled     = false
+  enable_identity               = false
+
+  private_endpoint = {
+    subnet_id          = module.spoke_virtual_network.subnet_ids["snet-private-endpoints"]
+    virtual_network_id = module.spoke_virtual_network.vnet_id
+  }
+}

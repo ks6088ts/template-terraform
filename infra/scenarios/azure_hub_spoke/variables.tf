@@ -1,7 +1,12 @@
 variable "name" {
-  description = "Specifies the base name for resources"
+  description = "Base name used for Azure resources"
   type        = string
-  default     = "azurespokenetwork"
+  default     = "azurehubspoke"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]{3,35}$", var.name))
+    error_message = "Name must contain 3 to 35 lowercase letters, numbers, or hyphens."
+  }
 }
 
 variable "location" {
@@ -14,44 +19,78 @@ variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
   default = {
-    scenario        = "azure_spoke_network"
+    scenario        = "azure_hub_spoke"
     owner           = "ks6088ts"
     SecurityControl = "Ignore"
     CostControl     = "Ignore"
   }
 }
 
-# -------------------------------------------------------------------
-# Network Configuration
-# -------------------------------------------------------------------
+variable "enable_hub_spoke_peering" {
+  description = "Create both directions of VNet peering between the hub and spoke"
+  type        = bool
+  default     = false
+}
 
-variable "vnet_address_space" {
-  description = "Address space for the spoke VNet"
+variable "enable_private_endpoint_example" {
+  description = "Create the private Blob Storage connectivity example in the spoke"
+  type        = bool
+  default     = false
+}
+
+variable "enable_test_vm" {
+  description = "Create a private VM for connectivity checks"
+  type        = bool
+  default     = false
+}
+
+variable "enable_bastion" {
+  description = "Create Azure Bastion for the test VM; enable_test_vm must also be true"
+  type        = bool
+  default     = false
+}
+
+variable "enable_nat_gateway" {
+  description = "Create a NAT Gateway for test VM outbound internet access; enable_test_vm must also be true"
+  type        = bool
+  default     = false
+}
+
+variable "hub_vnet_address_space" {
+  description = "Address space for the hub VNet"
+  type        = list(string)
+  default     = ["10.0.0.0/16"]
+}
+
+variable "spoke_vnet_address_space" {
+  description = "Address space for the spoke VNet; it must not overlap the hub"
   type        = list(string)
   default     = ["10.1.0.0/16"]
 }
 
-variable "subnet_bastion_address_prefixes" {
-  description = "Address prefixes for the Bastion subnet (must be /26 or larger)"
-  type        = list(string)
-  default     = ["10.1.0.0/26"]
-}
-
-variable "subnet_paas_address_prefixes" {
-  description = "Address prefixes for the PaaS (Private Endpoint) subnet"
+variable "private_endpoint_subnet_address_prefixes" {
+  description = "Address prefixes for the optional Private Endpoint subnet"
   type        = list(string)
   default     = ["10.1.1.0/24"]
 }
 
-variable "subnet_vm_address_prefixes" {
-  description = "Address prefixes for the VM subnet"
+variable "workload_subnet_address_prefixes" {
+  description = "Address prefixes for the optional test VM subnet"
   type        = list(string)
   default     = ["10.1.2.0/24"]
 }
 
-# -------------------------------------------------------------------
-# Storage Account Configuration
-# -------------------------------------------------------------------
+variable "bastion_subnet_address_prefixes" {
+  description = "Address prefixes for AzureBastionSubnet; Azure requires /26 or larger"
+  type        = list(string)
+  default     = ["10.1.0.0/26"]
+}
+
+variable "allow_forwarded_traffic" {
+  description = "Allow forwarded traffic across both peerings; keep false until a hub router or firewall is added"
+  type        = bool
+  default     = false
+}
 
 variable "storage_account_tier" {
   description = "Storage account tier"
@@ -74,10 +113,6 @@ variable "storage_account_replication_type" {
     error_message = "Storage account replication type must be one of: LRS, GRS, RAGRS, ZRS, GZRS, RAGZRS."
   }
 }
-
-# -------------------------------------------------------------------
-# VM Configuration
-# -------------------------------------------------------------------
 
 variable "vm_size" {
   description = "Size of the virtual machine"
@@ -124,10 +159,6 @@ variable "vm_identity_enabled" {
   default     = true
 }
 
-# -------------------------------------------------------------------
-# Bastion Configuration
-# -------------------------------------------------------------------
-
 variable "bastion_sku" {
   description = "SKU for Azure Bastion"
   type        = string
@@ -137,16 +168,6 @@ variable "bastion_sku" {
     condition     = contains(["Basic", "Standard", "Premium"], var.bastion_sku)
     error_message = "Bastion SKU must be Basic, Standard, or Premium."
   }
-}
-
-# -------------------------------------------------------------------
-# NAT Gateway Configuration
-# -------------------------------------------------------------------
-
-variable "enable_nat_gateway" {
-  description = "Enable NAT Gateway for outbound internet connectivity from VMs"
-  type        = bool
-  default     = false
 }
 
 variable "nat_gateway_idle_timeout_in_minutes" {

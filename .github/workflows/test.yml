@@ -127,7 +127,7 @@ jobs:
           - azure_messaging
           - azure_microsoft_foundry
           - azure_observability
-          - azure_spoke_network
+          - azure_hub_spoke
           - azure_terraform_backend
     env:
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
