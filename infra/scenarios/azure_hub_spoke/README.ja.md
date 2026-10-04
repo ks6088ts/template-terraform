@@ -526,12 +526,20 @@ terraform -chdir="$SCENARIO_DIR" destroy \
 ## 別の PaaS Private Endpoint を追加する
 
 [private_endpoint.tf](./private_endpoint.tf) が Blob の動作例です。
-`azurerm_private_endpoint` だけを追加せず、次のパターンをまとめて適用します。
+Storage Account は `module.storage`、プライベート接続は
+`module.private_endpoint_blob` が管理し、両方を `enable_private_endpoint_example` で
+制御します。後者は汎用の [Private Endpoint モジュール](../../modules/azure/private_endpoint/README.ja.md)
+を呼び出します。Storage モジュール自体は Endpoint や DNS を作成しません。
+
+リソース定義をコピーせず、接続モジュールを再利用してください。
 
 1. PaaS リソースを追加し、パブリック ネットワーク アクセスを無効にする。
-2. 正しい `subresource_names` を使う Private Endpoint を追加する。
-3. 対応する Private DNS zone と zone group を追加する。
-4. プライベート名を解決するすべての VNet に zone をリンクする。
+2. 接続先リソース ID、Endpoint のサブネット ID、正しい `subresource_names` を
+   Private Endpoint モジュールに渡す。
+3. 新規 zone には `private_dns_zone_name` と `virtual_network_links` を指定する。
+   共有 zone には `create_private_dns_zone = false` と `private_dns_zone_ids` を指定し、
+   VNet link はモジュール外で管理する。
+4. 各クライアント VNet に link または適切な DNS 転送を用意する。
 5. nullable output と、新しい feature flag の mock plan test を追加する。
 6. 必要な Azure resource provider を [providers.tf](./providers.tf) に登録する。
 
@@ -554,8 +562,6 @@ terraform -chdir="$SCENARIO_DIR" destroy \
   転送を提供しません。
 - 要件が生じた場合だけ Azure Firewall または NVA、route table、
   VPN/ExpressRoute Gateway、Azure DNS Private Resolver を追加してください。
-- 旧 `azure_spoke_network` からの変更は意図的な破壊的変更です。旧コードで先に
-  destroy するか、state を手動で移行してください。
 
 ## リソースを削除する
 

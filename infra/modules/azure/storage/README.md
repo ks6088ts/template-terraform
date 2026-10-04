@@ -1,37 +1,21 @@
 ---
 title: Azure Storage module
-description: Creates an Azure Storage account with optional data services and private Blob connectivity
+description: Creates an Azure Storage account with optional data services
 ---
 
 ## Overview
 
 This module creates an Azure Storage account with optional queue, container,
-soft-delete, managed identity, and Blob private endpoint resources. By default,
+soft-delete, and managed identity resources. By default,
 hierarchical namespace, public network access, and a system-assigned managed
-identity are enabled, while the private endpoint is disabled.
+identity are enabled. Private connectivity is configured separately.
 
 ## Private networking
 
-Set `private_endpoint` to create a Blob private endpoint. Its fields have the
-following behavior:
-
-* `subnet_id` identifies the subnet that hosts the private endpoint
-* `create_private_dns_zone` defaults to `true` and controls whether the module
-  owns the Blob private DNS zone and virtual network link
-* `virtual_network_id` is required when `create_private_dns_zone` is `true`
-* `private_dns_zone_id` is required when `create_private_dns_zone` is `false`;
-  the caller then owns the zone and its virtual network links
-
-The module creates `privatelink.blob.core.windows.net` and links it to the
-specified virtual network when `create_private_dns_zone` is `true`. Set
-`public_network_access_enabled = false` separately when the storage account
-must be private-only.
-
-> [!IMPORTANT]
-> A resource group can contain only one private DNS zone with the name
-> `privatelink.blob.core.windows.net`. For additional storage module instances
-> in the same resource group, pass the existing zone ID and manage its virtual
-> network links outside this module.
+Call the separate [Private Endpoint module](../private_endpoint/README.md)
+alongside Storage. Storage owns the account and its network access policy;
+the connection module owns the endpoint and DNS configuration. Set
+`public_network_access_enabled = false` for a private-only account.
 
 ```hcl
 module "storage" {
@@ -43,12 +27,30 @@ module "storage" {
   location                      = module.resource_group.location
   public_network_access_enabled = false
 
-  private_endpoint = {
-    subnet_id          = module.virtual_network.subnet_ids["snet-private-endpoints"]
-    virtual_network_id = module.virtual_network.vnet_id
+}
+
+module "private_endpoint_blob" {
+  source = "../../modules/azure/private_endpoint"
+
+  name                           = "blob-example"
+  resource_group_name            = module.resource_group.name
+  location                       = module.resource_group.location
+  private_connection_resource_id = module.storage.account_id
+  subnet_id                      = module.virtual_network.subnet_ids["snet-private-endpoints"]
+  subresource_names              = ["blob"]
+  private_dns_zone_name           = "privatelink.blob.core.windows.net"
+  virtual_network_links = {
+    spoke = {
+      name               = "link-blob-example"
+      virtual_network_id = module.virtual_network.vnet_id
+    }
   }
 }
 ```
+
+Read `id`, `private_ip_address`, and `private_dns_zone_ids` from the connection
+module.
+For shared DNS, use the connection module's existing-zone mode.
 
 ## Inputs
 
@@ -68,7 +70,6 @@ module "storage" {
 | `min_tls_version`                      | `string`      | `TLS1_2`   | Minimum TLS version                              |
 | `shared_access_key_enabled`            | `bool`        | `true`     | Enables shared key authorization                 |
 | `enable_identity`                      | `bool`        | `true`     | Enables a system-assigned managed identity       |
-| `private_endpoint`                     | `object`      | `null`     | Optional Blob private endpoint configuration     |
 | `enable_blob_soft_delete`              | `bool`        | `false`    | Enables blob and container soft delete           |
 | `blob_soft_delete_retention_days`      | `number`      | `7`        | Deleted blob retention period in days            |
 | `container_soft_delete_retention_days` | `number`      | `7`        | Deleted container retention period in days       |
@@ -94,6 +95,3 @@ module "storage" {
 | `queue_data_contributor_role_assignment_id`    | Queue data role assignment ID, or `null`                                |
 | `container_name`                               | Container name, or `null` when disabled                                 |
 | `container_id`                                 | Container ID, or `null` when disabled                                   |
-| `private_endpoint_id`                          | Blob private endpoint ID, or `null` when disabled                       |
-| `private_endpoint_ip`                          | Blob private IP, or `null` when disabled                                |
-| `private_dns_zone_id`                          | Blob private DNS zone ID, or `null` when disabled                       |

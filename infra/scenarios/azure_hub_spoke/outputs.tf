@@ -65,12 +65,12 @@ output "storage_account_name" {
 
 output "private_endpoint_blob_id" {
   description = "ID of the Blob private endpoint, or null when disabled"
-  value       = var.enable_private_endpoint_example ? module.storage[0].private_endpoint_id : null
+  value       = var.enable_private_endpoint_example ? module.private_endpoint_blob[0].id : null
 }
 
 output "private_endpoint_blob_ip" {
   description = "Private IP address of the Blob private endpoint, or null when disabled"
-  value       = var.enable_private_endpoint_example ? module.storage[0].private_endpoint_ip : null
+  value       = var.enable_private_endpoint_example ? module.private_endpoint_blob[0].private_ip_address : null
 }
 
 output "vm_id" {

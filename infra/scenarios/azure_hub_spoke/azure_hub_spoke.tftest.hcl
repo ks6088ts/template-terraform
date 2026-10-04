@@ -26,6 +26,15 @@ mock_provider "azurerm" {
   mock_resource "azurerm_private_endpoint" {
     defaults = {
       id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/privateEndpoints/pe-test"
+      private_service_connection = {
+        private_ip_address = "10.1.1.4"
+      }
+    }
+  }
+
+  mock_resource "azurerm_private_dns_zone" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
     }
   }
 }
@@ -52,6 +61,7 @@ run "default_is_two_vnets_only" {
       length(azurerm_virtual_network_peering.hub_to_spoke) == 0,
       length(azurerm_virtual_network_peering.spoke_to_hub) == 0,
       length(module.storage) == 0,
+      length(module.private_endpoint_blob) == 0,
       length(module.linux_vm) == 0,
       length(module.bastion) == 0,
       length(azurerm_nat_gateway.this) == 0,
@@ -67,6 +77,8 @@ run "default_is_two_vnets_only" {
       output.spoke_vnet_id == module.spoke_virtual_network.vnet_id,
       output.hub_to_spoke_peering_id == null,
       output.storage_account_id == null,
+      output.private_endpoint_blob_id == null,
+      output.private_endpoint_blob_ip == null,
       output.vm_id == null,
       output.bastion_id == null,
       output.nat_gateway_id == null,
@@ -106,7 +118,10 @@ run "private_endpoint_example_is_private" {
     condition = alltrue([
       length(module.storage) == 1,
       contains(keys(module.spoke_virtual_network.subnet_ids), "snet-private-endpoints"),
-      module.storage[0].private_endpoint_id != null,
+      length(module.private_endpoint_blob) == 1,
+      module.private_endpoint_blob[0].id != null,
+      output.private_endpoint_blob_id == module.private_endpoint_blob[0].id,
+      output.private_endpoint_blob_ip == "10.1.1.4",
       output.storage_account_id == module.storage[0].account_id,
     ])
     error_message = "The example must add the dedicated subnet, private Storage account, and Blob private endpoint."

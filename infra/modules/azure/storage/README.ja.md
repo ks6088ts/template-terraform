@@ -1,36 +1,21 @@
 ---
 title: Azure Storage モジュール
-description: オプションのデータサービスと Blob プライベート接続を備えた Azure Storage Account を作成する
+description: オプションのデータサービスを備えた Azure Storage Account を作成する
 ---
 
 ## 概要
 
 このモジュールは Azure Storage Account を作成し、必要に応じてキュー、コンテナー、
-論理削除、マネージド ID、Blob プライベート エンドポイントを追加します。既定値では、
+論理削除、マネージド ID を追加します。既定値では、
 階層型名前空間、パブリック ネットワーク アクセス、システム割り当てマネージド ID は
-有効で、プライベート エンドポイントは無効です。
+有効です。プライベート接続は別途構成します。
 
 ## プライベート ネットワーク
 
-`private_endpoint` を設定すると、Blob プライベート エンドポイントを作成します。
-各フィールドの動作は次のとおりです。
-
-* `subnet_id` はプライベート エンドポイントを配置するサブネットを指定します
-* `create_private_dns_zone` の既定値は `true` です。Blob プライベート DNS ゾーンと
-  仮想ネットワーク リンクをこのモジュールで管理するかどうかを指定します
-* `virtual_network_id` は `create_private_dns_zone` が `true` の場合に必須です
-* `private_dns_zone_id` は `create_private_dns_zone` が `false` の場合に必須です。この場合、
-  呼び出し側が DNS ゾーンと仮想ネットワーク リンクを管理します
-
-`create_private_dns_zone` が `true` の場合、モジュールは
-`privatelink.blob.core.windows.net` を作成し、指定された仮想ネットワークへリンクします。
-Storage Account をプライベート接続のみに制限する場合は、別途
+独立した [Private Endpoint モジュール](../private_endpoint/README.ja.md)を Storage と
+並べて呼び出します。Storage はアカウントとネットワーク アクセス設定を、接続モジュールは
+Endpoint と DNS 設定を管理します。プライベート接続のみに制限する場合は
 `public_network_access_enabled = false` を設定します。
-
-> [!IMPORTANT]
-> 1 つのリソース グループには、`privatelink.blob.core.windows.net` という名前の
-> プライベート DNS ゾーンを 1 つだけ作成できます。同じリソース グループでこのモジュールを
-> 複数回使用する場合は、既存ゾーンの ID を渡し、仮想ネットワーク リンクをモジュール外で管理します。
 
 ```hcl
 module "storage" {
@@ -42,12 +27,29 @@ module "storage" {
   location                      = module.resource_group.location
   public_network_access_enabled = false
 
-  private_endpoint = {
-    subnet_id          = module.virtual_network.subnet_ids["snet-private-endpoints"]
-    virtual_network_id = module.virtual_network.vnet_id
+}
+
+module "private_endpoint_blob" {
+  source = "../../modules/azure/private_endpoint"
+
+  name                           = "blob-example"
+  resource_group_name            = module.resource_group.name
+  location                       = module.resource_group.location
+  private_connection_resource_id = module.storage.account_id
+  subnet_id                      = module.virtual_network.subnet_ids["snet-private-endpoints"]
+  subresource_names              = ["blob"]
+  private_dns_zone_name           = "privatelink.blob.core.windows.net"
+  virtual_network_links = {
+    spoke = {
+      name               = "link-blob-example"
+      virtual_network_id = module.virtual_network.vnet_id
+    }
   }
 }
 ```
+
+接続情報は接続モジュールの `id`、`private_ip_address`、`private_dns_zone_ids` を
+参照してください。DNS を共有する場合は接続モジュールの既存 zone 方式を使います。
 
 ## 入力
 
@@ -67,7 +69,6 @@ module "storage" {
 | `min_tls_version` | `string` | `TLS1_2` | TLS の最小バージョン |
 | `shared_access_key_enabled` | `bool` | `true` | 共有キー認証を有効化するかどうか |
 | `enable_identity` | `bool` | `true` | システム割り当てマネージド ID を有効化するか |
-| `private_endpoint` | `object` | `null` | Blob プライベート エンドポイントの設定 |
 | `enable_blob_soft_delete` | `bool` | `false` | Blob とコンテナーの論理削除を有効化するか |
 | `blob_soft_delete_retention_days` | `number` | `7` | 削除した Blob の保持日数 |
 | `container_soft_delete_retention_days` | `number` | `7` | 削除したコンテナーの保持日数 |
@@ -93,6 +94,3 @@ module "storage" {
 | `queue_data_contributor_role_assignment_id` | Queue データ ロール割り当て ID。無効な場合は `null` |
 | `container_name` | コンテナー名。無効な場合は `null` |
 | `container_id` | コンテナー ID。無効な場合は `null` |
-| `private_endpoint_id` | Blob プライベート エンドポイント ID。無効な場合は `null` |
-| `private_endpoint_ip` | Blob プライベート IP。無効な場合は `null` |
-| `private_dns_zone_id` | Blob プライベート DNS ゾーン ID。無効な場合は `null` |

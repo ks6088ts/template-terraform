@@ -538,12 +538,20 @@ network.
 ## Add another PaaS Private Endpoint
 
 [private_endpoint.tf](./private_endpoint.tf) is the concrete Blob example.
-Copy its pattern rather than only adding an `azurerm_private_endpoint`:
+It calls `module.storage` for the account and `module.private_endpoint_blob`
+for private connectivity, both controlled by `enable_private_endpoint_example`.
+The latter uses the reusable [Private Endpoint module](../../modules/azure/private_endpoint/README.md);
+the Storage module manages the account, not endpoints or DNS resources.
+
+Reuse the connection module rather than copying resource definitions:
 
 1. Add the PaaS resource with public network access disabled.
-2. Add its Private Endpoint and correct `subresource_names`.
-3. Add the matching Private DNS zone and zone group.
-4. Link the zone to every VNet that must resolve the private name.
+2. Call the Private Endpoint module with its resource ID, endpoint subnet ID,
+   and correct `subresource_names`.
+3. Pass `private_dns_zone_name` and `virtual_network_links` for a new zone.
+   For a shared zone, set `create_private_dns_zone = false` and pass
+   `private_dns_zone_ids`; manage its VNet links outside the module.
+4. Ensure every client VNet has a link or appropriate DNS forwarding.
 5. Add nullable outputs and a mock plan test for the new feature flag.
 6. Register any additional Azure resource provider in
    [providers.tf](./providers.tf).
@@ -567,9 +575,6 @@ before implementation; some services require multiple endpoints or zones.
   connectivity, or custom DNS forwarding.
 - Add Azure Firewall or an NVA, route tables, VPN/ExpressRoute Gateway, and
   Azure DNS Private Resolver only when those requirements exist.
-- Changing from the former `azure_spoke_network` scenario is intentionally
-  breaking. Destroy resources with the old code first or migrate state
-  manually.
 
 ## Remove the resources
 
