@@ -1,21 +1,86 @@
 ---
 title: Terraform ワークフロー
 description: GNU Make または Terraform CLI を使用してリポジトリのシナリオを実行する
-ms.date: 2026-08-13
+ms.date: 2026-10-04
 ms.topic: how-to
 ---
 
 ## 前提条件
 
-対象シナリオに必要なツールをインストールしてから、関連する
-[プロバイダー認証](provider-authentication.ja.md)を構成します。リポジトリのルートで、
-使用中のマシンから利用できる開発コマンドを確認します。
+### ローカル端末のツール
+
+| ツール | 必要な場合 | 確認方法 |
+|---|---|---|
+| Git | リポジトリの取得・更新 | `git --version` |
+| Terraform CLI | すべてのシナリオ | `terraform version` |
+| GNU Make | `make` の手順を使用する場合 | `make --version` |
+| Bash | README の Bash コマンドや検証スクリプトを実行する場合 | `bash --version` |
+| Azure CLI | Azure CLI 認証や `az` による状態確認を行う場合 | `az version` |
+| その他の CLI・ツール | 対象シナリオの README に記載されている場合 | 各シナリオの手順を参照 |
+
+Terraform の必要バージョンは、対象シナリオの `versions.tf` の `required_version`
+を確認してください。テストの構文には追加のバージョン要件がある場合があるため、
+開発・テストでは [CI](../../.github/workflows/test.yml) の `TERRAFORM_VERSION` を
+基準にします。provider の制約と `.terraform.lock.hcl` はリポジトリの設定を使用します。
+GNU Make は Terraform CLI を直接実行する場合には不要です。
+
+未インストールの場合は、[Terraform CLI](https://developer.hashicorp.com/terraform/install)、
+[Git](https://git-scm.com/downloads)、[GNU Make](https://www.gnu.org/software/make/)、
+[Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) の公式案内に従ってください。
+シェルの手順は Bash で実行します。Windows では WSL などの Bash 環境を用意し、
+その環境から必要なツールを実行できることを確認してください。
+
+### 認証と権限
+
+関連する [プロバイダー認証](provider-authentication.ja.md)を構成し、意図した
+アカウント・サブスクリプション・プロジェクトを選択します。Azure CLI 認証では、
+認証後に次を実行し、対象サブスクリプションと `state=Enabled` を確認します。
+
+```bash
+az account show --query '{subscription:id,name:name,tenant:tenantId,state:state}' -o table
+```
+
+認証成功だけではデプロイ権限を確認できません。少なくとも次の条件が必要です。
+
+- 対象スコープで、シナリオのリソースを作成・参照・更新・削除できること。
+  Azure で Resource Group 自体を作る場合は、その作成権限も必要です。
+- シナリオが使用する Azure リソースプロバイダーが登録済み、またはその登録権限が
+  あること。必要な名前空間は対象の `providers.tf` を確認します。
+- ロール割り当て、Entra ID 操作、診断取得などを行うシナリオでは、それぞれの追加
+  権限があること。リソースの管理権限だけでデータプレーンの読み書きは保証されません。
+- 共有 backend を使う場合は、state 保存先へのアクセス権限があること。
+  [Azure Blob Storage バックエンド](azure-blob-backend.ja.md)は個別の認可要件を持ちます。
+
+組織ポリシーで必要なリソースが禁止されている場合は、対応する構成を選んでください。
+ポリシーの無効化や、未承認の権限・機能登録を前提にしないでください。
+
+### ネットワーク・容量・ステート
+
+- ローカル端末から Terraform Registry、provider の配布先、利用するクラウド API
+  への DNS 解決と HTTPS 接続ができること。proxy や証明書の制約がある場合は、
+  組織の手順に従って構成します。TLS 証明書検証を無効にしないでください。
+- リージョンでサービス・SKU が利用でき、サブスクリプションの quota と空き容量が
+  足りること。SKU の一覧に載っていても、実際の割り当てが成功する保証ではありません。
+- ワークロードからの通信要件は、シナリオの README で個別に確認すること。
+  ローカル端末のインターネット接続と VM の outbound 接続は別の要件です。
+- 作成時の課金を確認し、plan をレビューできること。認証や plan の成功だけで、
+  デプロイや実通信の成功とは判断しないでください。
+- ローカル state を使用する場合は、作業ディレクトリを安全に保持できること。
+  state・plan・資格情報には機密値が含まれる場合があります。Git やログに公開しないでください。
+
+### 開発用ツールの確認
+
+リポジトリ全体の開発・lint・コスト見積もりを行う場合は、リポジトリルートで
+次を実行します。
 
 ```bash
 make install-deps-dev
 ```
 
-このコマンドは不足しているツールを報告し、必要なツールがない場合は失敗します。
+このコマンドは `terraform`、`az`、`gh`、`tflint`、`trivy`、`infracost`、
+`actionlint` の存在を確認します。不足を報告して失敗しますが、インストールは
+行いません。これらすべてが、個々のシナリオのデプロイに必要なわけではありません。
+シナリオ固有の追加条件は各 README の「前提条件」を優先してください。
 
 ## GNU Make を使用したシナリオの実行
 

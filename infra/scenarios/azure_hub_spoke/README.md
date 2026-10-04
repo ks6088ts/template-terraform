@@ -64,6 +64,9 @@ flowchart TB
 
 ## Prerequisites
 
+Check the [shared prerequisites](../../../docs/tips/terraform-workflow.md#prerequisites)
+first. This scenario also requires the following:
+
 - Azure subscription and authenticated Azure CLI.
 - Terraform and Bash on the local workstation.
 - Permission to create the scenario resources and read VM boot diagnostics,

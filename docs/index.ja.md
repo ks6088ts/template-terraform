@@ -1,7 +1,7 @@
 ---
 title: ドキュメント
 description: 共通の Terraform ガイダンスとデプロイ可能なシナリオのエントリーポイント
-ms.date: 2026-08-23
+ms.date: 2026-10-04
 ms.topic: overview
 ---
 
@@ -11,12 +11,15 @@ ms.topic: overview
 デプロイおよび破棄します。[リポジトリの README](../README.ja.md) からシナリオを選択し、
 プロバイダーの資格情報を構成して、GNU Make または Terraform CLI で実行します。
 
-すべてのシナリオに共通する手順については、[Terraform のヒント](tips/index.ja.md) から
-始めてください。各シナリオの README には、リソース固有の入力、コマンドのオーバーライド、
+まず [共通の前提条件](tips/terraform-workflow.ja.md#前提条件)でツール、権限、
+ネットワーク要件を確認してください。共通の操作手順は
+[Terraform のヒント](tips/index.ja.md)にまとめています。
+各シナリオの README には、リソース固有の入力、コマンドのオーバーライド、
 検証、デプロイ後の操作が記載されています。
 
 ## 共通ガイド
 
+* [前提条件](tips/terraform-workflow.ja.md#前提条件)
 * [Terraform ワークフロー](tips/terraform-workflow.ja.md)
 * [プロバイダー認証](tips/provider-authentication.ja.md)
 * [Azure Blob Storage バックエンド](tips/azure-blob-backend.ja.md)

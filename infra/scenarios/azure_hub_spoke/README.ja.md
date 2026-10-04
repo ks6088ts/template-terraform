@@ -64,6 +64,9 @@ flowchart TB
 
 ## 前提条件
 
+まず [共通の前提条件](../../../docs/tips/terraform-workflow.ja.md#前提条件)を
+確認してください。このシナリオでは、さらに次の条件が必要です。
+
 - Azure サブスクリプションと認証済みの Azure CLI。
 - ローカル端末の Terraform と Bash。
 - リソース作成権限と VM の Boot Diagnostics 読み取り権限。

@@ -1,7 +1,7 @@
 ---
 title: Terraform Tips
 description: Shared Terraform workflows, provider authentication, and remote state guidance for every scenario
-ms.date: 2026-08-23
+ms.date: 2026-10-04
 ms.topic: overview
 ---
 
@@ -9,6 +9,7 @@ ms.topic: overview
 
 Use these guides for setup and operations that are shared across scenarios:
 
+* [Prerequisites](terraform-workflow.md#prerequisites)
 * [Terraform workflow](terraform-workflow.md)
 * [Provider authentication](provider-authentication.md)
 * [Azure Blob Storage backend](azure-blob-backend.md)
