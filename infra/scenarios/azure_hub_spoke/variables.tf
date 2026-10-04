@@ -117,7 +117,7 @@ variable "storage_account_replication_type" {
 variable "vm_size" {
   description = "Size of the virtual machine"
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_B2s_v2"
 }
 
 variable "vm_admin_username" {
