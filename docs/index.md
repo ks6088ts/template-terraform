@@ -1,7 +1,7 @@
 ---
 title: Documentation
 description: Entry point for shared Terraform guidance and deployable scenarios
-ms.date: 2026-08-23
+ms.date: 2026-10-04
 ms.topic: overview
 ---
 
@@ -12,12 +12,15 @@ This repository deploys and destroys the Terraform root modules under
 [repository README](../README.md), configure its provider credentials, and run
 it with GNU Make or the Terraform CLI.
 
-Start with the [Terraform Tips](tips/index.md) for procedures shared by every
-scenario. Scenario READMEs contain resource-specific inputs, command overrides,
+Start with the [shared prerequisites](tips/terraform-workflow.md#prerequisites)
+to check tools, permissions, and network requirements. [Terraform Tips](tips/index.md)
+contains procedures shared by every scenario.
+Scenario READMEs contain resource-specific inputs, command overrides,
 validation, and post-deployment operations.
 
 ## Shared guides
 
+* [Prerequisites](tips/terraform-workflow.md#prerequisites)
 * [Terraform workflow](tips/terraform-workflow.md)
 * [Provider authentication](tips/provider-authentication.md)
 * [Azure Blob Storage backend](tips/azure-blob-backend.md)

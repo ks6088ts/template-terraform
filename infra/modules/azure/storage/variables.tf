@@ -93,30 +93,6 @@ variable "enable_identity" {
   default     = true
 }
 
-variable "private_endpoint" {
-  description = "Blob private endpoint configuration; set to null to disable it"
-  type = object({
-    subnet_id               = string
-    create_private_dns_zone = optional(bool, true)
-    virtual_network_id      = optional(string)
-    private_dns_zone_id     = optional(string)
-  })
-  default = null
-
-  validation {
-    condition = var.private_endpoint == null || (
-      trimspace(var.private_endpoint.subnet_id) != "" &&
-      (
-        var.private_endpoint.create_private_dns_zone ? (
-          var.private_endpoint.private_dns_zone_id == null &&
-          trimspace(coalesce(var.private_endpoint.virtual_network_id, "")) != ""
-        ) : trimspace(coalesce(var.private_endpoint.private_dns_zone_id, "")) != ""
-      )
-    )
-    error_message = "Private endpoint subnet_id is required. Set virtual_network_id when create_private_dns_zone is true, or set private_dns_zone_id when it is false."
-  }
-}
-
 variable "enable_blob_soft_delete" {
   description = "Enable soft delete for blobs"
   type        = bool

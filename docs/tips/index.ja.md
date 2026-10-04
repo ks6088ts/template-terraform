@@ -1,7 +1,7 @@
 ---
 title: Terraform のヒント
 description: すべてのシナリオに共通する Terraform ワークフロー、プロバイダー認証、リモートステートのガイダンス
-ms.date: 2026-08-23
+ms.date: 2026-10-04
 ms.topic: overview
 ---
 
@@ -9,6 +9,7 @@ ms.topic: overview
 
 シナリオ間で共通するセットアップと運用には、次のガイドを使用してください。
 
+* [前提条件](terraform-workflow.ja.md#前提条件)
 * [Terraform ワークフロー](terraform-workflow.ja.md)
 * [プロバイダー認証](provider-authentication.ja.md)
 * [Azure Blob Storage バックエンド](azure-blob-backend.ja.md)

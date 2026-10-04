@@ -1,21 +1,94 @@
 ---
 title: Terraform Workflow
 description: Run repository scenarios with GNU Make or the Terraform CLI
-ms.date: 2026-08-13
+ms.date: 2026-10-04
 ms.topic: how-to
 ---
 
 ## Prerequisites
 
-Install the tools required by the target scenario, then configure the relevant
-[provider authentication](provider-authentication.md). Check the development
-commands available on your machine from the repository root:
+### Local workstation tools
+
+| Tool | When needed | Check |
+|---|---|---|
+| Git | Obtaining and updating the repository | `git --version` |
+| Terraform CLI | Every scenario | `terraform version` |
+| GNU Make | Following the `make` procedures | `make --version` |
+| Bash | Running Bash commands or validation scripts from the README | `bash --version` |
+| Azure CLI | Using Azure CLI authentication or inspecting resources with `az` | `az version` |
+| Other CLIs and tools | When listed in the target scenario README | Follow the scenario instructions |
+
+Check `required_version` in the target scenario's `versions.tf` for the
+Terraform requirement. Test syntax can have additional version requirements;
+use `TERRAFORM_VERSION` in [CI](../../.github/workflows/test.yml) as the baseline
+for development and testing. Use the repository's provider constraints and
+`.terraform.lock.hcl`. GNU Make is not required when using Terraform CLI directly.
+
+For missing tools, follow the official installation guidance for
+[Terraform CLI](https://developer.hashicorp.com/terraform/install),
+[Git](https://git-scm.com/downloads), [GNU Make](https://www.gnu.org/software/make/),
+and [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli).
+Run the shell procedures in Bash. On Windows, use a Bash environment such as
+WSL and ensure the required tools are executable from that environment.
+
+### Authentication and permissions
+
+Configure the relevant [provider authentication](provider-authentication.md)
+and select the intended account, subscription, or project. After Azure CLI
+authentication, check the subscription and confirm `state=Enabled`:
+
+```bash
+az account show --query '{subscription:id,name:name,tenant:tenantId,state:state}' -o table
+```
+
+Successful authentication does not prove deployment permissions. At minimum:
+
+- You must be able to create, read, update, and delete the scenario resources
+  at the target scope. Creating an Azure Resource Group also requires permission
+  to create that group.
+- Required Azure resource providers must be registered, or you must have
+  permission to register them. Check the scenario's `providers.tf` for namespaces.
+- Scenarios involving role assignments, Entra ID operations, or diagnostic
+  retrieval require their additional permissions. Resource management permissions
+  alone do not guarantee data-plane read/write access.
+- A shared backend requires access to the state location.
+  [Azure Blob Storage backend](azure-blob-backend.md) has separate authorization
+  requirements.
+
+If organizational policies prohibit required resources, choose a supported
+configuration. Do not assume policies can be disabled or permissions and
+features registered without approval.
+
+### Network, capacity, and state
+
+- The workstation must resolve DNS and reach Terraform Registry, provider
+  distribution endpoints, and the relevant cloud APIs over HTTPS. Configure
+  proxies and certificate requirements according to organizational guidance.
+  Do not disable TLS certificate verification.
+- Services and SKUs must be available in the selected region with sufficient
+  subscription quotas and capacity. A listed SKU does not guarantee successful
+  allocation.
+- Check workload connectivity requirements in the scenario README. Workstation
+  internet access and VM outbound connectivity are separate requirements.
+- Review charges and the plan before provisioning. Successful authentication or
+  planning does not establish deployment or data-plane connectivity success.
+- If using local state, preserve the working directory securely. State, plans,
+  and credentials can contain secrets; do not expose them in Git or logs.
+
+### Development tool checks
+
+For repository-wide development, linting, and cost estimation, run from the
+repository root:
 
 ```bash
 make install-deps-dev
 ```
 
-The command reports missing tools and fails when any required tool is unavailable.
+This command checks for `terraform`, `az`, `gh`, `tflint`, `trivy`, `infracost`,
+and `actionlint`. It reports missing tools and fails, but does not install them.
+Not all of these tools are required to deploy an individual scenario.
+Follow the scenario README's prerequisites for additional scenario-specific
+requirements.
 
 ## Run a scenario with GNU Make
 

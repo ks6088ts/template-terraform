@@ -92,3 +92,15 @@ variable "identity_enabled" {
   type        = bool
   default     = false
 }
+
+variable "custom_data" {
+  description = "Base64-encoded cloud-init configuration without secrets"
+  type        = string
+  default     = null
+}
+
+variable "boot_diagnostics_enabled" {
+  description = "Enable boot diagnostics using Azure-managed storage"
+  type        = bool
+  default     = false
+}

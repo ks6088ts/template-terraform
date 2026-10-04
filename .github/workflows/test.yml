@@ -127,7 +127,7 @@ jobs:
           - azure_messaging
           - azure_microsoft_foundry
           - azure_observability
-          - azure_spoke_network
+          - azure_hub_spoke
           - azure_terraform_backend
     env:
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
@@ -147,6 +147,17 @@ jobs:
         run: |
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
+      - name: Run private connectivity module tests
+        if: matrix.scenario == 'azure_hub_spoke'
+        run: |
+          for module in private_endpoint storage; do
+            terraform -chdir="infra/modules/azure/$module" init -backend=false
+            terraform -chdir="infra/modules/azure/$module" validate
+            terraform -chdir="infra/modules/azure/$module" test
+          done
+      - name: Run private Blob validation script tests
+        if: matrix.scenario == 'azure_hub_spoke'
+        run: bash infra/scenarios/azure_hub_spoke/scripts/tests/test_validation.sh
       - name: Run Microsoft Foundry offline script tests
         if: matrix.scenario == 'azure_microsoft_foundry'
         run: sh infra/scenarios/azure_microsoft_foundry/scripts/tests/test_scripts.sh

@@ -75,3 +75,30 @@ run "entra_queue" {
     error_message = "An Entra-only queue must create the Queue data-plane role and suppress the shared key output."
   }
 }
+
+run "private_account_without_embedded_endpoint" {
+  command = plan
+
+  variables {
+    name                          = "test"
+    storage_account_name          = "sttest1234"
+    resource_group_name           = "rg-test"
+    location                      = "japaneast"
+    public_network_access_enabled = false
+    shared_access_key_enabled     = false
+    enable_identity               = false
+    enable_hns                    = false
+  }
+
+  assert {
+    condition = alltrue([
+      azurerm_storage_account.this.public_network_access == "Disabled",
+      !azurerm_storage_account.this.shared_access_key_enabled,
+      !azurerm_storage_account.this.is_hns_enabled,
+      length(azurerm_storage_account.this.identity) == 0,
+      output.primary_access_key == null,
+      output.account_id == azurerm_storage_account.this.id,
+    ])
+    error_message = "A private account must disable public access, shared keys, HNS, and managed identity as configured."
+  }
+}

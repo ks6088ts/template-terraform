@@ -75,7 +75,6 @@ module "blob_storage" {
   min_tls_version                 = "TLS1_2"
   shared_access_key_enabled       = false
   enable_identity                 = false
-  private_endpoint                = null
   enable_blob_soft_delete         = false
   create_queue                    = false
   create_container                = false
