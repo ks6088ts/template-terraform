@@ -30,6 +30,7 @@ variable "subnets" {
     name                              = string
     address_prefixes                  = list(string)
     private_endpoint_network_policies = optional(string)
+    default_outbound_access_enabled   = optional(bool)
   }))
   default = []
 }

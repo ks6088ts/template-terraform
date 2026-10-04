@@ -155,6 +155,9 @@ jobs:
             terraform -chdir="infra/modules/azure/$module" validate
             terraform -chdir="infra/modules/azure/$module" test
           done
+      - name: Run private Blob validation script tests
+        if: matrix.scenario == 'azure_hub_spoke'
+        run: bash infra/scenarios/azure_hub_spoke/scripts/tests/test_validation.sh
       - name: Run Microsoft Foundry offline script tests
         if: matrix.scenario == 'azure_microsoft_foundry'
         run: sh infra/scenarios/azure_microsoft_foundry/scripts/tests/test_scripts.sh

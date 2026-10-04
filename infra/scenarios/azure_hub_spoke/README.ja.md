@@ -1,222 +1,142 @@
 ---
-description: 最小構成の Azure ハブ スポーク ネットワークを作り、プライベート接続を段階的に追加する
+description: Azure ハブ スポークを段階的に学び、VM の Boot Diagnostics で Blob のプライベート接続を検証する
 ---
 
 # Azure Hub-Spoke
 
-このシナリオは Azure の
-[ハブ スポーク ネットワーク トポロジ](https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke)
-を学ぶための小さな scaffolding です。既定では、リソース グループ、ハブ VNet、
-スポーク VNet だけを作成します。ピアリングや、コストまたはデプロイ時間を増やす
-リソースは opt-in です。
+最小構成の Resource Group、Hub VNet、Spoke VNet を作成し、ピアリング、
+Blob Private Endpoint、プライベートな検証 VM を段階的に追加します。
+Public IP、Bastion、NAT Gateway、Firewall、VPN Gateway は作成しません。
+組織ポリシーの変更も必要ありません。
 
-## 各要素の役割
-
-- **ハブ VNet**: 将来、共有サービスとルーティングを配置する境界です。この
-  scaffolding には Firewall、Gateway、DNS Resolver を含めません。
-- **スポーク VNet**: ワークロードの境界です。任意の例を有効にした場合だけ、
-  対応するサブネットを追加します。
-- **双方向 VNet ピアリング**: ハブとスポークを接続します。Azure のピアリングは
-  推移的ではないため、両方向が必要です。
-- **Blob Private Endpoint の例**: PaaS のプライベート接続に必要な 3 要素である
-  Private Endpoint、サービス固有の Private DNS zone、VNet link を示します。
-- **検証用 VM、Bastion、NAT Gateway**: 任意のトラブルシューティング用リソースです。
-  最小デプロイには含まれません。
+VM は起動するたびに `getent` と `curl` を自動実行し、結果をシリアルコンソールへ
+出力します。Managed Boot Diagnostics からその結果を読み取ります。
+SSH、VM Run Command、外部の IP 確認サービス、パッケージのダウンロード、
+VM からの一般的なインターネット送信は検証に不要です。
 
 ## 構成
 
-青色の要素は既定で作成します。オレンジ色の破線要素は、ラベルに記載した
-feature flag を有効にした場合だけ作成します。
+青色は既定の要素、オレンジ色は opt-in の要素です。
 
 ```mermaid
 flowchart TB
-    subgraph RG["Azure Resource Group"]
-        direction LR
-
-        subgraph Hub["Hub VNet<br/>10.0.0.0/16"]
-            HubExtension["共有サービスの拡張ポイント<br/>既定ではリソースなし"]
+    subgraph RG["Resource Group"]
+        Hub["Hub VNet<br/>10.0.0.0/16<br/>subnet・検証先 host なし"]
+        subgraph Spoke["Spoke VNet 10.1.0.0/16"]
+            PESubnet["snet-private-endpoints<br/>10.1.1.0/24"]
+            PE["Blob Private Endpoint"]
+            Workload["snet-workload<br/>10.1.2.0/24<br/>Default outbound access 無効"]
+            NSG["Workload NSG"]
+            VM["Ubuntu 検証 VM<br/>Private IP のみ"]
+            PESubnet --> PE
+            Workload --> VM
+            NSG --> Workload
         end
-
-        subgraph Spoke["Spoke VNet<br/>10.1.0.0/16"]
-            direction TB
-
-            subgraph PESubnet["snet-private-endpoints<br/>10.1.1.0/24"]
-                PE["Blob Private Endpoint"]
-            end
-
-            subgraph WorkloadSubnet["snet-workload<br/>10.1.2.0/24"]
-                NSG["Network Security Group"]
-                VM["検証用 Linux VM<br/>Public IP なし"]
-                NSG --> VM
-            end
-
-            subgraph BastionSubnet["AzureBastionSubnet<br/>10.1.0.0/26"]
-                Bastion["Azure Bastion"]
-            end
-        end
-
-        Storage[("Storage Account<br/>Blob<br/>Public network: Disabled")]
-        PrivateDNS["Private DNS zone<br/>privatelink.blob.core.windows.net"]
-        BastionPIP["Bastion Public IP"]
-        NAT["NAT Gateway"]
-        NATPIP["NAT Public IP"]
+        Storage[("Storage Account<br/>公開ネットワーク・共有キー無効")]
+        DNS["privatelink.blob.core.windows.net"]
     end
-
-    Internet["Internet"]
-
-    Hub <-. "双方向 VNet peering<br/>enable_hub_spoke_peering" .-> Spoke
-
+    Diagnostics["Azure 管理の Boot Diagnostics"]
+    CLI["ローカル Azure CLI"]
+    Hub <-. "enable_hub_spoke_peering" .-> Spoke
+    DNS -. "VNet link" .-> Spoke
+    PE -. "DNS zone group" .-> DNS
     PE -->|"Private Link"| Storage
-    PE -. "DNS zone group" .-> PrivateDNS
-    PrivateDNS -. "VNet link" .-> Spoke
-    VM -->|"Private DNS で名前解決<br/>HTTPS"| PE
+    VM -->|"Private DNS・HTTPS"| PE
+    VM -->|"シリアル出力を Azure platform が収集"| Diagnostics
+    CLI -->|"Boot log を取得"| Diagnostics
 
-    BastionPIP --> Bastion
-    Bastion -->|"SSH"| VM
-
-    VM --> NAT
-    NATPIP --> NAT
-    NAT --> Internet
-
-    classDef defaultResource fill:#e8f3ff,stroke:#2563eb,stroke-width:2px,color:#111;
-    classDef optionalResource fill:#fff4e5,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5,color:#111;
-    classDef externalResource fill:#f3f4f6,stroke:#6b7280,stroke-width:1px,color:#111;
-
-    class HubExtension defaultResource;
-    class PE,NSG,VM,Bastion,Storage,PrivateDNS,BastionPIP,NAT,NATPIP optionalResource;
-    class Internet externalResource;
-
-    style Hub fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
-    style Spoke fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
-    style PESubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
-    style WorkloadSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
-    style BastionSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
+    classDef defaultResource fill:#e8f3ff,stroke:#2563eb,color:#111;
+    classDef optionalResource fill:#fff4e5,stroke:#d97706,stroke-dasharray:5 5,color:#111;
+    class Hub defaultResource;
+    class PESubnet,PE,Workload,NSG,VM,Storage,DNS,Diagnostics optionalResource;
 ```
 
-- `enable_private_endpoint_example`: Private Endpoint subnet、Storage Account、
-  Private Endpoint、Private DNS zone と VNet link をまとめて追加します。
-- `enable_test_vm`: Workload subnet、NSG、Public IP を持たない検証用 VM を追加します。
-- `enable_bastion`: Bastion subnet、Bastion、専用 Public IP を追加し、VM への SSH
-  経路を作ります。
-- `enable_nat_gateway`: NAT Gateway と専用 Public IP を追加し、VM の outbound
-  インターネット経路を作ります。
-
-Private Endpoint を有効にしても、Storage Account 自体が VNet 内へ移動するわけでは
-ありません。VNet 内の Private Endpoint が、Azure Private Link を介して Storage
-Account へ接続します。
+- **Hub**: 共有サービス用のアドレス空間です。ルーターや検証先 host はありません。
+- **Peering**: 両方向を作成します。転送通信と gateway transit は無効です。
+  Peering を作っても Private DNS zone は自動でリンクされません。
+- **Private Endpoint**: Spoke から Blob Storage への接続口です。Storage 自体は
+  VNet 内に配置されません。Private DNS zone は Spoke だけにリンクします。
+- **検証 VM**: Private Endpoint の例が必要です。cloud-init で systemd service を
+  設定し、起動するたびに Blob のプライベート接続を確認します。
+- **Boot Diagnostics**: Azure 管理の Storage を使用し、検証対象の Blob とは
+  別です。Azure platform がシリアル出力を収集するため、VM がインターネット
+  経由でログをアップロードする必要はありません。
 
 ## 前提条件
 
-- Azure サブスクリプション
-- Azure CLI、または AzureRM provider が対応する別の認証方法
+- Azure サブスクリプションと認証済みの Azure CLI。
+- ローカル端末の Terraform と Bash。
+- リソース作成権限と VM の Boot Diagnostics 読み取り権限。
+  `Microsoft.Compute/virtualMachines/retrieveBootDiagnosticsData/action` を含みます。
+- ローカル端末から Azure Resource Manager と診断用 Storage endpoint への接続。
+- 対象リージョンで利用可能な Ubuntu 対応 VM SKU。
 
 共通の [Azure 認証](../../../docs/tips/provider-authentication.ja.md)と
 [Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)に従ってください。
-リポジトリの Makefile では `SCENARIO=azure_hub_spoke` を指定します。
+既定はローカル backend です。共有 state については
+[Azure Blob backend ガイド](../../../docs/tips/azure-blob-backend.ja.md)を参照してください。
+VM モジュールの SSH 秘密鍵は、このシナリオの output に公開しなくても state に
+含まれます。state、診断用 SAS URL、秘密情報を共有しないでください。
 
-初期化に既存 Storage Account を要求しないように、既定ではローカル Terraform state
-を使用します。共同作業を始める前に、
-[Azure Blob Storage backend ガイド](../../../docs/tips/azure-blob-backend.ja.md)
-に従って `azurerm` backend を追加してください。`-backend-config` は既存の backend
-block を設定するものであり、ローカル backend を単独で Azure backend に変更する
-ものではありません。
+## デプロイと動作確認を段階的に進める
 
-## 小さな手順でデプロイする
+すべての **ローカル** コマンドを、リポジトリルートの同じ Bash セッションで
+実行します。コマンドが失敗したら、空の変数のまま続行せず原因を解消してください。
+Terraform はコマンドラインの `-var` を保持しません。後続の plan/apply にも、
+有効にするすべての flag と独自の値を指定するか、commit しない `.tfvars` を使います。
 
-リポジトリ ルートからコマンドを実行します。
-
-Terraform はコマンド間で `-var` の値を保持しません。後続の `apply` では、有効な
-状態を維持するすべての feature flag を指定するか、commit しない独自の `.tfvars`
-ファイルへ値を保存してください。
-
-### 1. ハブとスポークの VNet だけを作る
+### 1. 2 つの VNet の境界を作る
 
 ```bash
+export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+SCENARIO_DIR=infra/scenarios/azure_hub_spoke
 make init SCENARIO=azure_hub_spoke
 make plan SCENARIO=azure_hub_spoke
-make deploy SCENARIO=azure_hub_spoke
-```
+terraform -chdir="$SCENARIO_DIR" apply
 
-最も短時間かつ低コストで開始できる構成です。ピアリングや、時間単位で課金される
-Gateway リソースは作成しません。
-
-Azure CLI で Resource Group と 2 つの VNet のアドレス空間を確認します。後続の
-ステップでも使用するため、shell 変数は保持してください。
-
-```bash
-SCENARIO_DIR=infra/scenarios/azure_hub_spoke
 RG="$(terraform -chdir="$SCENARIO_DIR" output -raw resource_group_name)"
 HUB="$(terraform -chdir="$SCENARIO_DIR" output -raw hub_vnet_name)"
 SPOKE="$(terraform -chdir="$SCENARIO_DIR" output -raw spoke_vnet_name)"
-
 az group show -n "$RG" --query properties.provisioningState -o tsv
 az network vnet show -g "$RG" -n "$HUB" \
-  --query '{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
+  --query '{addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
 az network vnet show -g "$RG" -n "$SPOKE" \
-  --query '{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
+  --query '{addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
 az network vnet peering list -g "$RG" --vnet-name "$HUB" -o table
 az network vnet peering list -g "$RG" --vnet-name "$SPOKE" -o table
 ```
 
-Resource Group が `Succeeded`、既定の Hub と Spoke のアドレス空間がそれぞれ
-`10.0.0.0/16` と `10.1.0.0/16` であることを確認します。両方の peering 一覧は
-空であることが正しい結果です。このステップでは VNet の境界だけを作るため、
-subnet が空であることも意図した状態です。
+**期待値:** Resource Group が `Succeeded`、既定のアドレス空間が
+`10.0.0.0/16` と `10.1.0.0/16`、subnet と peering の一覧が空です。
+VNet の境界だけでは host は存在せず、2 つのネットワークも接続されません。
 
-### 2. ハブとスポークを接続する
+### 2. Hub と Spoke を接続する
 
 ```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
+terraform -chdir="$SCENARIO_DIR" apply \
   -var='enable_hub_spoke_peering=true'
+
+az network vnet peering list -g "$RG" --vnet-name "$HUB" \
+  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
+az network vnet peering list -g "$RG" --vnet-name "$SPOKE" \
+  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
 ```
 
-この flag は必ず両方向のピアリングを作成します。この scaffolding には Firewall や
-Network Virtual Appliance がないため、`allow_forwarded_traffic` の既定値は `false`
-です。ルーティング コンポーネントと route table を追加した後にだけ有効にします。
+**期待値:** 各方向に 1 つの peering があり、両方が `Connected` /
+`FullyInSync`、`access=true`、`forwarded=false`、remote ID が相手 VNet です。
+これはコントロールプレーンの確認で、Hub 宛の TCP 疎通ではありません。
+Hub には検証先 host がありません。
 
-各方向を個別に確認します。
-
-```bash
-az network vnet peering show -g "$RG" --vnet-name "$HUB" \
-  -n peer-hub-to-spoke \
-  --query '{state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
-az network vnet peering show -g "$RG" --vnet-name "$SPOKE" \
-  -n peer-spoke-to-hub \
-  --query '{state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
-```
-
-両方向が `state=Connected`、`sync=FullyInSync`、`access=true` であることを
-確認します。このシナリオでは `forwarded=false` が正しい状態です。これは
-peering のコントロール プレーン設定を確認する手順です。Hub には subnet も
-検証先 host もないため、まだデータ プレーンの疎通を証明するものではありません。
-
-### 3. Blob Private Endpoint の例を追加する
+### 3. Blob のプライベート接続を追加する
 
 ```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
+terraform -chdir="$SCENARIO_DIR" apply \
   -var='enable_hub_spoke_peering=true' \
   -var='enable_private_endpoint_example=true'
-```
 
-Storage Account のパブリック ネットワーク アクセスと共有キー認証は無効です。
-この例は次の要素を作成します。
-
-1. スポーク内の `snet-private-endpoints`
-2. サブネット内の Blob Private Endpoint
-3. `privatelink.blob.core.windows.net`
-4. スポークへの Private DNS VNet link
-
-プライベート名を解決する必要がある別の VNet にも、同じ Private DNS zone を
-リンクしてください。大規模な環境では、スポークごとに zone を作るのではなく、
-ハブで zone と DNS 解決を集中管理します。
-
-このステップで作成した 4 つの要素を確認します。
-
-```bash
 STORAGE="$(terraform -chdir="$SCENARIO_DIR" output -raw storage_account_name)"
 PE_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_id)"
 PE_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_ip)"
-
 az storage account show -g "$RG" -n "$STORAGE" \
   --query '{state:provisioningState,publicNetworkAccess:publicNetworkAccess,sharedKey:allowSharedKeyAccess}' -o json
 az network private-endpoint show --ids "$PE_ID" \
@@ -227,498 +147,193 @@ az network private-dns link vnet list -g "$RG" \
 az network private-dns record-set a show -g "$RG" \
   -z privatelink.blob.core.windows.net -n "$STORAGE" \
   --query 'aRecords[].ipv4Address' -o tsv
-curl -sS -o /dev/null -w 'public endpoint HTTP %{http_code}\n' \
-  "https://$STORAGE.blob.core.windows.net/"
+printf 'Expected private IP: %s\n' "$PE_IP"
 ```
 
-Storage が `Succeeded`、`publicNetworkAccess=Disabled`、`sharedKey=false`、
-Private Endpoint が `Succeeded` / `Approved`、DNS link が `Completed` であることを
-確認します。A record は `PE_IP` と一致する必要があります。ローカルの `curl` は
-通常 HTTP `403` となり、公開 endpoint を使用できないことを確認できます。ただし、
-これは Private Endpoint の検証ではありません。Private DNS と HTTPS は、次の
-ステップで VM を追加した後に、link 済みの Spoke VNet 内から確認します。
+**期待値:** Storage が `Succeeded`、公開ネットワークが `Disabled`、共有キーが
+`false`、PE が `snet-private-endpoints` 内で `Succeeded` / `Approved`、
+Spoke DNS link が `Completed`、A record が `PE_IP` と一致します。
+ここまでは設定の確認です。Spoke 外のローカル端末で実行した `curl` は、
+プライベート経路の疎通を証明しません。
 
-### 4. 必要なときだけ検証用リソースを追加する
+### 4. プライベートな検証 VM を作る
 
-```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true'
-```
-
-VM SKU の利用可否はリージョンとサブスクリプションによって異なります。この
-シナリオの既定値は `Standard_B2s_v2` です。VM 作成時に `SkuNotAvailable` が
-返された場合は、location 単位の制限を確認し、利用可能な SKU で `vm_size` を
-上書きします。
+作成前に既定 SKU の利用可否を確認します。
 
 ```bash
 LOCATION="$(az group show -n "$RG" --query location -o tsv)"
 az vm list-skus --location "$LOCATION" --resource-type virtualMachines --all \
-  --query "[?name=='Standard_B2s_v2'].{name:name,locationRestrictions:restrictions[?type=='Location'].reasonCode}" \
-  -o table
+  --query "[?name=='Standard_B2s_v2'].{name:name,restrictions:restrictions}" -o json
 ```
 
-`LocationRestrictions` が空であれば、その location では利用可能です。この VM は
-Availability Zone を固定しないため、zone だけの制限は影響しません。location
-制限がある場合は、たとえば `-var='vm_size=Standard_D2s_v5'` のように利用可能な
-size を指定して `apply` を再実行してください。
-
-VM にパブリック IP はありません。対話的な SSH 接続が必要な場合だけ Bastion を
-追加します。
-
-最初に、ローカル shell から VM と NIC を確認します。
+`Location` 制限がある SKU は、そのサブスクリプションの対象リージョンで利用できません。
+この VM は zone を指定しませんが、制限一覧が空でも実際の空き容量は保証されません。
+`SkuNotAvailable` の場合は、各 plan/apply に `-var='vm_size=<available-size>'`
+を追加し、利用可能な size を指定してください。
 
 ```bash
+terraform -chdir="$SCENARIO_DIR" plan \
+  -var='enable_hub_spoke_peering=true' \
+  -var='enable_private_endpoint_example=true' \
+  -var='enable_test_vm=true'
+terraform -chdir="$SCENARIO_DIR" apply \
+  -var='enable_hub_spoke_peering=true' \
+  -var='enable_private_endpoint_example=true' \
+  -var='enable_test_vm=true'
+
 VM="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_name)"
 VM_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_private_ip)"
-NIC_ID="$(az vm show -g "$RG" -n "$VM" --query 'networkProfile.networkInterfaces[0].id' -o tsv)"
-
+NIC_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_network_interface_id)"
+WORKLOAD_SUBNET_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw workload_subnet_id)"
 az vm get-instance-view -g "$RG" -n "$VM" \
   --query '{vm:instanceView.statuses,agent:instanceView.vmAgent.statuses}' -o json
+az vm show -g "$RG" -n "$VM" --query diagnosticsProfile.bootDiagnostics -o json
 az network nic show --ids "$NIC_ID" \
   --query 'ipConfigurations[].{private:privateIPAddress,public:publicIPAddress.id}' -o json
-```
-
-VM が `PowerState/running`、VM Agent が Ready、`private` が `VM_IP` と一致し、
-`public=null` であることを確認します。Public IP が null のため、インターネット
-から直接 SSH 接続することはできません。
-
-Bastion を追加します。
-
-```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true'
-```
-
-```bash
-BASTION="$(terraform -chdir="$SCENARIO_DIR" output -raw bastion_name)"
-az network bastion show -g "$RG" -n "$BASTION" \
-  --query '{state:provisioningState,sku:sku.name}' -o json
-```
-
-`state=Succeeded` であることを確認します。Azure Portal で VM を開き、
-**接続 > Bastion** を選択し、Terraform output の `vm_admin_username` と SSH
-秘密鍵を使ってログインします。ログインに必要な場合を除き、機密扱いの秘密鍵を
-表示したり共有したりしないでください。
-
-VM から一般的なインターネット向け通信が必要な場合だけ NAT Gateway を追加します。
-Bastion と NAT Gateway を使うには `enable_test_vm=true` が必要です。これまでの
-すべての flag を維持してください。
-
-```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true' \
-  -var='enable_nat_gateway=true'
-
-NAT_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw nat_gateway_id)"
-NAT_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw nat_gateway_public_ip)"
-WORKLOAD_SUBNET_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw workload_subnet_id)"
-az network nat gateway show --ids "$NAT_ID" \
-  --query '{state:provisioningState,publicIps:publicIpAddresses[].id}' -o json
 az network vnet subnet show --ids "$WORKLOAD_SUBNET_ID" \
-  --query '{nat:natGateway.id,nsg:networkSecurityGroup.id}' -o json
+  --query '{defaultOutbound:defaultOutboundAccess,nat:natGateway.id,nsg:networkSecurityGroup.id}' -o json
 ```
 
-NAT Gateway が `Succeeded` で、workload subnet に NAT Gateway と NSG の両方の
-ID が表示されることを確認します。ローカルで shell 変数の代入文を出力し、表示
-された 3 行を Bastion の SSH セッションへコピーします。
+**期待値:** VM が `PowerState/running`、VM Agent が ready、Boot Diagnostics が
+`enabled=true` で独自の Storage URI なし、NIC の Private IP が `VM_IP` と一致し
+`public=null`、subnet が `defaultOutbound=false`、`nat=null` で NSG ID あり。
+VM 作成の成功だけでは疎通確認は完了していません。
+
+### 5. DNS と HTTPS の実通信結果を読む
 
 ```bash
-printf "STORAGE='%s'\nPE_IP='%s'\nNAT_IP='%s'\n" "$STORAGE" "$PE_IP" "$NAT_IP"
+az vm boot-diagnostics get-boot-log -g "$RG" -n "$VM"
 ```
 
-その後、VM から実際の経路を確認します。
+cloud-init がスクリプトを配置し、`validate-private-blob.service` を有効化します。
+service が VM 内で実行する確認は次のとおりです。
 
 ```bash
-getent ahostsv4 "$STORAGE.blob.core.windows.net"
-curl -sS -o /dev/null -w 'remote=%{remote_ip} HTTP=%{http_code}\n' \
-  "https://$STORAGE.blob.core.windows.net/"
-curl -sS https://api.ipify.org; echo
-```
-
-Blob のアドレスと `remote` IP が `PE_IP` と一致することを確認します。HTTP の
-認証エラーが返る場合でも、Private DNS、TCP、TLS の接続確認には成功しています。
-`api.ipify.org` が返す IP は `NAT_IP` と一致し、VM のインターネット送信が
-NAT Gateway を通過したことを証明します。
-
-## すべての機能を有効にした構成の動作確認
-
-### 1. 全機能を有効にしてデプロイする
-
-リポジトリ ルートの Bash で実行します。ローカルでは Terraform と認証済みの
-Azure CLI、VM では標準的な `curl`、`getent`、`ip` を使用します。`jq`、追加の
-ネットワーク検証パッケージ、VM への Azure CLI インストールは不要です。
-VM 内のツールが不足していた場合は、そのエラーを解消してから続行してください。
-
-```bash
-export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-make init SCENARIO=azure_hub_spoke
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true' \
-  -var='enable_nat_gateway=true'
-```
-
-`allow_forwarded_traffic` は `false` のままにします。「全機能」は 5 個の
-`enable_*` flag を指し、Firewall やルーターのない構成で転送通信を有効にする
-意味ではありません。Bastion と NAT Gateway は検証中も課金されます。
-
-以降の **ローカル** コマンドは同じ Bash セッションで実行します。実際の値は
-state から取得し、既定のアドレスをハードコードしません。
-
-```bash
-SCENARIO_DIR=infra/scenarios/azure_hub_spoke
-RG="$(terraform -chdir="$SCENARIO_DIR" output -raw resource_group_name)"
-HUB="$(terraform -chdir="$SCENARIO_DIR" output -raw hub_vnet_name)"
-SPOKE="$(terraform -chdir="$SCENARIO_DIR" output -raw spoke_vnet_name)"
-VM="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_name)"
-VM_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_private_ip)"
-BASTION="$(terraform -chdir="$SCENARIO_DIR" output -raw bastion_name)"
-STORAGE="$(terraform -chdir="$SCENARIO_DIR" output -raw storage_account_name)"
-PE_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_id)"
-PE_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_ip)"
-NAT_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw nat_gateway_public_ip)"
-WORKLOAD_SUBNET_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw workload_subnet_id)"
-NIC_ID="$(az vm show -g "$RG" -n "$VM" --query 'networkProfile.networkInterfaces[0].id' -o tsv)"
-NIC="${NIC_ID##*/}"
-BLOB_HOST="$STORAGE.blob.core.windows.net"
-printf 'VM=%s\nBlob=%s\nPE=%s\nNAT=%s\n' "$VM_IP" "$BLOB_HOST" "$PE_IP" "$NAT_IP"
-```
-
-output 取得が失敗した場合は続行せず、全 flag を指定した apply と対象 state を
-確認してください。`terraform output -json` を共有しないでください。機密扱いの
-VM SSH 秘密鍵も含まれます。
-
-### 2. 検証する経路と合格条件
-
-| 検証対象 | 疎通経路 | 合格条件・確認範囲 |
-|---|---|---|
-| Bastion SSH | ブラウザー → Bastion Public IP:443 → Spoke 内の VM:22 | Portal の SSH セッションで VM にログインできる |
-| Blob DNS / HTTPS | Spoke VM → Azure DNS → Private DNS zone、VM → Spoke 内の PE:443 → Storage | DNS と `curl` の接続先 IP が `PE_IP` と一致し、TLS 検証付きで HTTP 応答が返る |
-| インターネット送信 | Spoke VM → workload subnet の NAT Gateway → インターネット:443 | 外部サービスが観測する送信元 IP が `NAT_IP` と一致する |
-| Hub-Spoke | Spoke VM の NIC → VNet peering → Hub アドレス空間 | 両方向 `Connected` / `FullyInSync`、Hub 宛の有効ルートが `VNetPeering` |
-| 公開経路の制限 | インターネット → Storage 公開 endpoint / VM | Storage の public access が `Disabled`、VM NIC に Public IP がない |
-
-**Blob と NAT の成功は Hub 経由の通信を証明しません。** Bastion、VM、PE、
-NAT の接続先サブネットはすべて Spoke 内です。Hub にはサブネットも検証先も
-作成しないため、既存構成だけでは Hub 宛の TCP 疎通や逆方向の実通信を
-検証できません。後述の追加検証と区別して記録してください。
-
-### 3. リソースの状態と接続設定を確認する（ローカル）
-
-```bash
-az vm get-instance-view -g "$RG" -n "$VM" \
-  --query '{vm:instanceView.statuses,agent:instanceView.vmAgent.statuses}' -o json
-az network bastion show -g "$RG" -n "$BASTION" \
-  --query '{state:provisioningState,sku:sku.name}' -o json
-az network nic show --ids "$NIC_ID" \
-  --query 'ipConfigurations[].{private:privateIPAddress,public:publicIPAddress.id}' -o json
-az network private-endpoint show --ids "$PE_ID" \
-  --query '{state:provisioningState,connections:privateLinkServiceConnections[].privateLinkServiceConnectionState.status}' -o json
-az storage account show -g "$RG" -n "$STORAGE" \
-  --query '{publicNetworkAccess:publicNetworkAccess,sharedKey:allowSharedKeyAccess}' -o json
-az network vnet subnet show --ids "$WORKLOAD_SUBNET_ID" \
-  --query '{nat:natGateway.id,nsg:networkSecurityGroup.id,routeTable:routeTable.id}' -o json
-az network private-dns link vnet list -g "$RG" \
-  -z privatelink.blob.core.windows.net \
-  --query '[].{vnet:virtualNetwork.id,state:virtualNetworkLinkState}' -o json
-az network private-dns record-set a show -g "$RG" \
-  -z privatelink.blob.core.windows.net -n "$STORAGE" \
-  --query 'aRecords[].ipv4Address' -o tsv
-```
-
-期待値は VM が `PowerState/running`、VM Agent が Ready、Bastion が
-`Succeeded` / `Basic`（SKU を変更した場合は指定値）、
-NIC の `public` が `null`、PE が `Succeeded` / `Approved`、Storage が
-`Disabled` / `false` です。workload subnet の NAT と NSG が設定され、
-route table は `null`、DNS link は Spoke 向けに `Completed`、A レコードは
-`PE_IP` と一致します。Hub 向け DNS link は既定ではありません。
-
-### 4. VM から DNS・Private Link・NAT を確認する
-
-対話的 SSH なしで検証する場合、次の **ローカル** コマンドを実行します。
-Azure CLI の Run Command が VM 内でスクリプトを実行します。VM Agent、
-Azure 向け outbound HTTPS と `Microsoft.Compute/virtualMachines/runCommands/write`
-権限が必要です。Run Command は Bastion を経由しないため、Bastion の合格判定は
-次の手順で別途行います。
-
-```bash
-az vm run-command invoke -g "$RG" -n "$VM" \
-  --command-id RunShellScript \
-  --scripts "set -eu
-command -v curl
-command -v getent
-command -v ip
-ip -4 address show
-ip -4 route show
-echo '--- Blob DNS: expected $PE_IP ---'
-getent ahostsv4 '$BLOB_HOST'
-echo '--- Blob HTTPS: remote_ip must be $PE_IP ---'
+getent ahostsv4 <storage-account-name>.blob.core.windows.net
 curl --noproxy '*' -sS --connect-timeout 5 --max-time 20 \
-  -D - -o /dev/null \
-  -w '\nhttp=%{http_code} remote_ip=%{remote_ip}\n' \
-  'https://$BLOB_HOST/?comp=list'
-echo '--- NAT egress: expected $NAT_IP ---'
-EGRESS_IP=\$(curl --noproxy '*' -fsS --connect-timeout 5 --max-time 20 https://api.ipify.org)
-printf 'egress_ip=%s\n' \"\$EGRESS_IP\"
-test \"\$EGRESS_IP\" = '$NAT_IP'
-echo NAT_IP_MATCH" \
-  --query 'value[].{code:code,message:message}' -o json
+  -o /dev/null -w '%{remote_ip} %{http_code}' \
+  'https://<storage-account-name>.blob.core.windows.net/?comp=list'
 ```
 
-- `getent` の IPv4 アドレスと `remote_ip` がともに `PE_IP` なら、DNS と
-  Private Link 経由の TCP:443 / TLS 接続を確認できています。通常は未認証の
-  Blob API に対する `400` / `403` などの応答です。HTTP ステータスだけでは
-  プライベート接続を判定せず、必ず接続先 IP と組み合わせます。
-- `curl` で証明書検証を無効化する `-k` は使いません。ここでは意図的に Blob
-  側に `-f` を指定せず、HTTP エラーも表示します。`http=000`、DNS エラー、
-  timeout、TLS エラーは失敗です。
-- このシナリオは VM の identity に Blob データ ロールを割り当てません。
-  `403` は Blob の読み書き成功を意味しません。データ操作まで検証する場合は、
-  別途 Storage Blob Data Reader / Contributor と Entra ID 認証が必要です。
-- `api.ipify.org` は送信元 IP を返す外部サービスです。組織のポリシーで利用できない
-  場合は、同様の HTTPS サービスに置き換えます。`egress_ip` が `NAT_IP` と一致し、
-  `NAT_IP_MATCH` が表示されることを確認します。Bastion の Public IP ではありません。
-- Run Command 自体の成功表示だけで合格にしないでください。stderr、HTTP 結果、
-  IP の一致と最後のマーカーを確認します。出力は末尾 4 KB に制限されるため、
-  欠落した場合は DNS / HTTPS / NAT を個別に実行します。
+これらは VM に組み込まれています。ローカル実行で代用しないでください。
+最新の実行に、次の証拠が含まれることを確認します。
 
-VM の `ip route` には Azure 仮想ネットワークのゲートウェイが表示されます。
-PE、peering、NAT の経路全体はゲスト OS の route table には表示されません。
-`ping` / `traceroute` だけで PaaS や Azure の仮想ホップを判定しないでください。
-
-### 5. Bastion の接続を確認する（ローカル → Portal → VM）
-
-既定の Bastion SKU は **Basic** です。追加ソフト不要の Portal 接続を使います。
-`az network bastion ssh/tunnel` は Standard 以上と native client 設定が必要で、
-この構成の既定手順には使えません。
-
-```bash
-VM_USER="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_admin_username)"
-KEY_FILE="$(mktemp "${TMPDIR:-/tmp}/azure-hub-spoke-key.XXXXXX")"
-chmod 600 "$KEY_FILE"
-terraform -chdir="$SCENARIO_DIR" output -raw vm_ssh_private_key > "$KEY_FILE"
-printf 'SSH user: %s\nPrivate key file: %s\n' "$VM_USER" "$KEY_FILE"
+```text
+PRIVATE_BLOB_CHECK <UTC timestamp> START host=<blob-host> expected_ip=<PE_IP>
+PRIVATE_BLOB_CHECK <UTC timestamp> DNS_PASS ip=<PE_IP>
+PRIVATE_BLOB_CHECK <UTC timestamp> HTTPS_PASS remote_ip=<PE_IP> http=403 tls=verified
+PRIVATE_BLOB_CHECK <UTC timestamp> PASS scope=private_dns_tcp_tls_http
 ```
 
-1. Azure Portal で対象 VM → **接続 → Bastion** を開きます。
-2. 認証方式 **SSH 秘密キーをローカル ファイルから** を選択し、`VM_USER` と
-   `KEY_FILE` のファイルを指定します。必要な VM / NIC / Bastion の Reader 権限も
-   確認してください。
-3. 接続後、**VM 内**で `hostname; ip -4 address show` を実行し、対象 VM と
-   `VM_IP` が一致することを確認します。手順 4 の `getent` / `curl` も実行できます。
-   ローカル変数は VM に引き継がれないため、表示した実値を使用します。
-4. SSH を切断し、**ローカル**で `rm -f "$KEY_FILE"; unset KEY_FILE` を実行します。
-   秘密鍵を README、ログ、チャット、Git に貼り付けないでください。
+**合格条件:**
 
-Bastion から VM:22 への接続は workload NSG の既定の `AllowVnetInBound` により
-許可されます。VM に Public IP やインターネット向け SSH 許可ルールは不要です。
+1. DNS の解決先が、期待する PE の IPv4 アドレスだけである。
+2. `curl` の接続先も同じ IP で、証明書検証が有効である。
+3. HTTP 応答が返る。`000`、接続エラー、TLS エラーは不合格。
+4. 最新の `START` に対応する最後の `PASS` がある。過去の成功結果では判定しない。
 
-### 6. Hub-Spoke のピアリング・有効ルート・NSG を確認する（ローカル）
+HTTP code は `403` に限定しません。未認証の Blob API は `400` などを返すことも
+あります。HTTP エラーでもトランスポートの疎通は確認できますが、Blob の認証、
+読み書き成功を意味しません。VM には Managed Identity も Blob データロールも
+割り当てません。
+
+Boot log が表示されるまで数分かかる場合があります。スクリプトは 10 秒間隔で
+最大 12 回再試行し、HTTPS は 1 回につき最大 20 秒です。失敗理由を毎回記録し、
+再試行を使い切ると `FAIL` と非ゼロの service 終了コードを返します。
+ツール不足も明示的に失敗します。パッケージインストールは行いません。
+
+再検証は VM を再起動して、ログを再取得します。
 
 ```bash
-az network vnet peering list -g "$RG" --vnet-name "$HUB" \
-  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic,remote:remoteVirtualNetwork.id}' -o json
-az network vnet peering list -g "$RG" --vnet-name "$SPOKE" \
-  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic,remote:remoteVirtualNetwork.id}' -o json
+date -u +%FT%TZ
+az vm restart -g "$RG" -n "$VM"
+az vm boot-diagnostics get-boot-log -g "$RG" -n "$VM"
+```
+
+再起動後の新しい `START` が現れるまで待ち、その実行を判定します。
+再起動は VM を中断します。ログ取得の成功だけでは検証成功ではありません。
+
+### 6. 経路を確認し、検証範囲を整理する
+
+```bash
+NIC="${NIC_ID##*/}"
 az network nic show-effective-route-table -g "$RG" -n "$NIC" -o json
 az network nic list-effective-nsg -g "$RG" -n "$NIC" -o json
+az resource list -g "$RG" \
+  --query "[?type=='Microsoft.Network/publicIPAddresses' || type=='Microsoft.Network/natGateways' || type=='Microsoft.Network/bastionHosts'].{name:name,type:type}" -o json
 ```
 
-両方向で `Connected`、`FullyInSync`、`access=true`、`forwarded=false`、
-remote が相手の VNet であることを確認します。VM は起動状態で確認します。
-有効ルートの期待値は次のとおりです（アドレスは既定値の場合）。
+**期待値:** Hub 宛の Active な `VNetPeering` route、Spoke 内の route、
+PE `/32` 宛の `InterfaceEndpoint` route が存在します。NSG が DNS と PE の HTTPS
+を許可していることも確認します。最後の query はこのシナリオでは `[]` です。
+`Internet` next hop が表示されても、インターネット送信が成功する証拠にはなりません。
 
-| 宛先 | Active な next hop | 意味 |
-|---|---|---|
-| Hub `10.0.0.0/16` | `VNetPeering` | Hub へ向かう peering ルートが存在する |
-| Spoke `10.1.0.0/16` | `VnetLocal` | 同一 VNet 内の経路 |
-| PE の IP `/32` | `InterfaceEndpoint` | Private Endpoint 向けの経路 |
-| `0.0.0.0/0` | `Internet` | NAT を関連付けても next hop 名は NAT Gateway に変わらない |
-
-NAT の実際の利用は手順 4 の送信元 IP で判定します。NSG では既定の
-`AllowVnetInBound` / `AllowVnetOutBound`、`AllowInternetOutBound` と、
-それより優先度の高い拒否ルールの有無を確認します。peering により Hub の範囲も
-`VirtualNetwork` service tag に含まれますが、ルートや NSG 設定だけでは
-実パケットの到達を証明できません。
-
-#### 任意: Network Watcher で Hub 宛 next hop を確認する
-
-Network Watcher が VM のリージョンで有効な場合に実行します。このシナリオは
-Network Watcher を作成しません。権限・リージョン設定が足りない場合は診断未実施と
-記録し、接続失敗とは区別します。
-
-```bash
-HUB_PROBE_IP=10.0.0.4
-az network watcher show-next-hop -g "$RG" --vm "$VM" --nic "$NIC" \
-  --source-ip "$VM_IP" --dest-ip "$HUB_PROBE_IP" -o json
-```
-
-`HUB_PROBE_IP` は実際の Hub アドレス範囲内に変更してください。期待値は
-`nextHopType=VNetPeering` です。この IP に VM が存在しなくてもルート診断は
-可能ですが、TCP 接続成功を意味しません。Network Watcher を追加で有効化する
-場合は[公式手順](https://learn.microsoft.com/azure/network-watcher/diagnose-vm-network-routing-problem-cli)
-に従い、Terraform 管理外のリソースが増えることに注意してください。
-
-#### 任意: Hub に検証用 VM を追加した場合の実通信
-
-Hub → Spoke のデータプレーンまで確認するには、重複しない Hub subnet と、
-その中の VM / NIC / NSG を別途用意する必要があります。この手順では自動作成しません。
-Hub VM 内で、手順 1 の実値を使って次を実行します。
-
-```bash
-BLOB_HOST='<storage-account-name>.blob.core.windows.net'
-PE_IP='<private-endpoint-blob-ip>'
-curl --noproxy '*' -sS --connect-timeout 5 --max-time 20 \
-  --resolve "$BLOB_HOST:443:$PE_IP" -D - -o /dev/null \
-  -w '\nhttp=%{http_code} remote_ip=%{remote_ip}\n' \
-  "https://$BLOB_HOST/?comp=list"
-```
-
-`remote_ip=PE_IP` と HTTP 応答が得られれば、Hub VM → peering → Spoke PE →
-Storage と、その応答経路を確認できます。`--resolve` は名前解決だけを固定し、
-TLS のホスト名検証は維持します。**Hub の DNS 検証にはなりません。** Hub からも
-通常の FQDN で接続したい場合は、Private DNS zone を Hub にもリンクするか、
-DNS Resolver / forwarding を整備してから、`getent` と `--resolve` なしの
-`curl` を繰り返してください。peering は DNS zone link を自動的に共有しません。
-
-Spoke → Hub の新規 TCP 接続も確認するには、Hub VM 上の稼働サービスへ Spoke VM
-から接続します。Ubuntu VM で SSH サービスが動作している場合、**Spoke VM 内の
-Bash** で次を実行すると、追加パッケージや Hub VM の秘密鍵なしで TCP:22 と
-SSH バナーを確認できます。`timeout` は VM の標準的な coreutils を使います。
-
-```bash
-HUB_VM_IP='<hub-test-vm-private-ip>'
-timeout 5 bash -eu -c \
-  'exec 3<>"/dev/tcp/$1/22"; head -n 1 <&3' _ "$HUB_VM_IP"
-```
-
-5 秒以内に `SSH-2.0-...` が表示されれば合格です。終了コード `124` は timeout、
-connection refused は SSH が未起動か拒否されているため不合格です。これは SSH
-認証の成功ではありません。Hub VM 内からも、引数を Spoke の `VM_IP` に変えて
-同じコマンドを実行すれば、逆方向の新規接続を確認できます。
-接続先ポート、双方の NSG と OS firewall、有効ルート、結果を記録します。
-Hub 内の未使用 IP への timeout は有効な検証になりません。第二 Spoke、UDR、
-Firewall、VPN がないため、Spoke 間の推移的通信や Hub 集中 egress は対象外です。
-
-### 7. 失敗時の切り分けと記録
-
-| 症状 | 確認する箇所 |
+| 確認 | 証明する内容 |
 |---|---|
-| Blob が公開 IP に解決される | VM 内で実行したか、Spoke の DNS zone link / A レコード、カスタム DNS の転送設定 |
-| DNS は PE IP だが HTTPS が timeout | PE の Approved 状態、NIC 有効ルート / NSG、OS firewall、プロキシ設定 |
-| Blob が `403` | 接続先 IP を確認してネットワーク成功と認可失敗を分離。データ操作には Blob データ ロールが必要 |
-| NAT の IP が不一致 / インターネット不可 | workload subnet の NAT 関連付け、NAT Public IP、NSG outbound、UDR、外部サービスの制限 |
-| Bastion で SSH 不可 | Bastion の provisioningState、接続ユーザー / 秘密鍵、NSG:22、VM の sshd / OS firewall、Portal 権限 |
-| Hub route がない / peering 未同期 | 両方向の peering、相手 VNet ID、重複しないアドレス範囲、VM 起動状態 |
-| Run Command が応答しない | VM Agent と Azure 向け outbound:443、実行権限。Bastion から直接確認する |
+| 両方向の peering と Hub 宛有効ルート | Hub-Spoke のコントロールプレーン設定 |
+| VM の DNS / HTTPS `PASS` | Spoke VM → PE → Blob のプライベートなトランスポート疎通 |
+| NIC `public=null` と private subnet | VM Public IP と default outbound access がないこと |
+| Managed Boot Diagnostics のログ | Azure platform が VM 内の検証結果を収集したこと |
 
-実行日時、各検証の実行場所、送信元 / 宛先 IP とポート、DNS 結果、
-HTTP ステータス / 接続先 IP、NAT 送信元 IP、peering とルートの結果を記録します。
-「成功」「失敗」「未実施（追加の Hub VM が必要など）」を分けてください。
+Blob 検証は Spoke 内で完結し、Hub を経由しません。Hub の host 宛 TCP 通信、
+インターネット送信、認証付きの Blob 操作は検証対象外です。
 
-検証後は全 flag を指定して削除します。独自の `.tfvars` を利用した場合は、
-apply 時と同じ入力も渡してください。追加した Hub VM / DNS link などは、
-それらを管理する構成側で別途削除します。
+## トラブルシューティング
+
+| 状況 | 次に確認すること |
+|---|---|
+| `SkuNotAvailable` | 対象リージョンの SKU 制限と実際の空き容量 |
+| ログに `START` がない | VM 状態、cloud-init のシリアル出力、Boot Diagnostics 設定、ログ公開の遅延 |
+| `RETRY dns_resolution_failed` または DNS IP が違う | PE 承認、A record、Spoke VNet link、DNS 設定、NSG |
+| `RETRY https_connection_failed` | `curl` のエラー、PE IP、NSG、route、TLS 証明書検証 |
+| `FAIL missing_tool=...` | VM image 内のツール。指定の Ubuntu image を使用し、実行時のパッケージ取得に依存しない |
+| `FAIL attempts=12` | 直前の再試行理由を調べ、原因を解消した後に再起動 |
+| Boot log の取得権限エラー | 診断取得権限とローカルから診断用 Storage endpoint への接続 |
+
+`curl -k`、Storage の公開アクセス、共有キー、組織ポリシーの変更で検証を通さないで
+ください。プライベートなトランスポートの確認は、Azure RBAC や Blob データアクセス
+とは区別します。
+
+## 入力と出力
+
+| 入力 | 既定値・用途 |
+|---|---|
+| `name`, `location`, `tags` | リソース名、`japaneast`、リソースタグ |
+| `enable_hub_spoke_peering` | `false`、両方向の peering |
+| `enable_private_endpoint_example` | `false`、プライベートな Blob 構成と DNS |
+| `enable_test_vm` | `false`、起動時検証 VM。Blob の例が必要 |
+| `hub_vnet_address_space`, `spoke_vnet_address_space` | `10.0.0.0/16`、`10.1.0.0/16` |
+| `private_endpoint_subnet_address_prefixes`, `workload_subnet_address_prefixes` | `10.1.1.0/24`、`10.1.2.0/24` |
+| `allow_forwarded_traffic` | `false`、router と route table がない場合は無効のままにする |
+| `storage_account_tier`, `storage_account_replication_type` | `Standard`、`LRS` |
+| `vm_size`, `vm_admin_username` | `Standard_B2s_v2`、`azureuser` |
+| `vm_os_disk_size_gb`, `vm_os_disk_type` | `30`、`Standard_LRS` |
+
+出力は Resource Group と VNet の名前・ID、両方向の peering ID、subnet ID、
+Storage の名前・ID、PE の ID・IP、VM の ID・名前・Private IP・NIC ID です。
+無効な任意機能の出力は null で、`terraform output` に表示されない場合があります。
+
+VM、disk、Storage、Private Endpoint には課金が発生します。検証後は削除し、
+destroy plan を確認してから承認してください。
 
 ```bash
 terraform -chdir="$SCENARIO_DIR" destroy \
   -var='enable_hub_spoke_peering=true' \
   -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true' \
-  -var='enable_nat_gateway=true'
+  -var='enable_test_vm=true'
 ```
 
-## Feature flag
+## オフライン検証
 
-| 変数 | 既定値 | 追加するリソース |
-|---|---:|---|
-| `enable_hub_spoke_peering` | `false` | Hub-to-spoke と spoke-to-hub のピアリング |
-| `enable_private_endpoint_example` | `false` | Private Endpoint subnet、プライベート Blob Storage、Private Endpoint、Private DNS zone と link |
-| `enable_test_vm` | `false` | Workload subnet、NSG、プライベート Linux VM |
-| `enable_bastion` | `false` | AzureBastionSubnet、Bastion、Public IP。検証用 VM が必要 |
-| `enable_nat_gateway` | `false` | Workload subnet の NAT Gateway と Public IP。検証用 VM が必要 |
-
-この scaffolding では、特に Bastion と NAT Gateway がコストとデプロイ時間を増やします。
-短時間のトラブルシューティング以外では無効にしてください。
-
-## 主要なネットワーク入力
-
-| 変数 | 既定値 | 用途 |
-|---|---|---|
-| `hub_vnet_address_space` | `["10.0.0.0/16"]` | ハブのアドレス空間 |
-| `spoke_vnet_address_space` | `["10.1.0.0/16"]` | ハブと重複しないスポークのアドレス空間 |
-| `private_endpoint_subnet_address_prefixes` | `["10.1.1.0/24"]` | Private Endpoint subnet |
-| `workload_subnet_address_prefixes` | `["10.1.2.0/24"]` | 検証用 VM subnet |
-| `bastion_subnet_address_prefixes` | `["10.1.0.0/26"]` | Azure Bastion subnet |
-| `allow_forwarded_traffic` | `false` | 将来の router/firewall が転送する通信を許可 |
-
-ハブ、スポーク、各サブネットの範囲は重複させないでください。既存ネットワークへ
-導入する前に [variables.tf](./variables.tf) の全変数を確認してください。
-
-## 別の PaaS Private Endpoint を追加する
-
-[private_endpoint.tf](./private_endpoint.tf) が Blob の動作例です。
-Storage Account は `module.storage`、プライベート接続は
-`module.private_endpoint_blob` が管理し、両方を `enable_private_endpoint_example` で
-制御します。後者は汎用の [Private Endpoint モジュール](../../modules/azure/private_endpoint/README.ja.md)
-を呼び出します。Storage モジュール自体は Endpoint や DNS を作成しません。
-
-リソース定義をコピーせず、接続モジュールを再利用してください。
-
-1. PaaS リソースを追加し、パブリック ネットワーク アクセスを無効にする。
-2. 接続先リソース ID、Endpoint のサブネット ID、正しい `subresource_names` を
-   Private Endpoint モジュールに渡す。
-3. 新規 zone には `private_dns_zone_name` と `virtual_network_links` を指定する。
-   共有 zone には `create_private_dns_zone = false` と `private_dns_zone_ids` を指定し、
-   VNet link はモジュール外で管理する。
-4. 各クライアント VNet に link または適切な DNS 転送を用意する。
-5. nullable output と、新しい feature flag の mock plan test を追加する。
-6. 必要な Azure resource provider を [providers.tf](./providers.tf) に登録する。
-
-| PaaS | Private Link subresource | 一般的な Private DNS zone |
-|---|---|---|
-| Blob Storage | `blob` | `privatelink.blob.core.windows.net` |
-| Key Vault | `vault` | `privatelink.vaultcore.azure.net` |
-| Azure SQL logical server | `sqlServer` | `privatelink.database.windows.net` |
-| Cosmos DB for NoSQL | `Sql` | `privatelink.documents.azure.com` |
-| Azure Container Registry | `registry` | `privatelink.azurecr.io` |
-
-サービスによって複数の Endpoint または zone が必要です。実装前に、対象サービスの
-最新ドキュメントで subresource と DNS zone を確認してください。
-
-## 重要な制約
-
-- ピアリングは推移的ではありません。スポークを追加しても、ハブ経由の
-  spoke-to-spoke 通信は自動的に有効になりません。
-- この scaffolding は集中 egress、パケット検査、ハイブリッド接続、カスタム DNS
-  転送を提供しません。
-- 要件が生じた場合だけ Azure Firewall または NVA、route table、
-  VPN/ExpressRoute Gateway、Azure DNS Private Resolver を追加してください。
-
-## リソースを削除する
-
-apply 時と同じ feature flag を指定して destroy します。
+Terraform test はすべて mock provider と `command = plan` を使用します。
 
 ```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke destroy \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true'
+terraform -chdir=infra/scenarios/azure_hub_spoke init -backend=false -lockfile=readonly
+terraform -chdir=infra/scenarios/azure_hub_spoke validate
+terraform -chdir=infra/scenarios/azure_hub_spoke test
+bash infra/scenarios/azure_hub_spoke/scripts/tests/test_validation.sh
 ```
 
-## 参考資料
-
-- [Azure のハブ スポーク ネットワーク トポロジ](https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke)
-- [Azure Private Endpoint の DNS 構成](https://learn.microsoft.com/azure/private-link/private-endpoint-dns)
-- [Azure Private Link の可用性](https://learn.microsoft.com/azure/private-link/availability)
-- [Azure Bastion のドキュメント](https://learn.microsoft.com/azure/bastion/)
+構成、private subnet、Managed Boot Diagnostics、cloud-init の接続、再試行、
+DNS・接続先 IP の不一致、TLS エラー、timeout、明示的な失敗結果を確認します。
+これらは Azure へのデプロイと Boot log による確認を代替するものではありません。

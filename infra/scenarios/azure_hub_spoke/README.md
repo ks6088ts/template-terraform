@@ -1,223 +1,143 @@
 ---
-description: Build a minimal Azure hub-spoke network and add private connectivity in small steps
+description: Learn Azure hub-spoke networking and validate private Blob connectivity through VM boot diagnostics
 ---
 
 # Azure Hub-Spoke
 
-This scenario is a small, learning-oriented scaffold for the Azure
-[hub-spoke network topology](https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke).
-The default deployment creates only a resource group, one hub VNet, and one
-spoke VNet. Peering and resources that add cost or deployment time are opt-in.
+Build a minimal resource group, Hub VNet, and Spoke VNet, then add peering,
+Blob Private Endpoint, and a private validation VM in small steps. This
+scenario creates no Public IP, Bastion, NAT Gateway, firewall, or VPN gateway.
+It does not require changes to organizational policies.
 
-## What each part does
-
-- **Hub VNet**: the future shared-services and routing boundary. This scaffold
-  intentionally does not add a firewall, gateway, or DNS resolver.
-- **Spoke VNet**: the workload boundary. Optional subnets are added only when
-  their corresponding examples are enabled.
-- **Two-way VNet peering**: connects the hub and spoke. Azure peering is not
-  transitive, so both directions are required.
-- **Blob Private Endpoint example**: shows the three required pieces for private
-  PaaS access: a Private Endpoint, the service's Private DNS zone, and a VNet
-  link.
-- **Test VM, Bastion, and NAT Gateway**: optional troubleshooting resources.
-  They are not part of the minimal deployment.
+The VM runs `getent` and `curl` automatically on every boot. It writes the
+results to its serial console, which you read through Managed Boot Diagnostics.
+The checks do not need SSH, VM Run Command, external IP-check services, package
+downloads, or general VM internet egress.
 
 ## Architecture
 
-Blue elements are created by default. Orange elements with dashed borders are
-created only when the feature flag shown in the diagram is enabled.
+Blue elements exist by default; orange elements are opt-in.
 
 ```mermaid
 flowchart TB
-    subgraph RG["Azure Resource Group"]
-        direction LR
-
-        subgraph Hub["Hub VNet<br/>10.0.0.0/16"]
-            HubExtension["Shared-services extension point<br/>No resources by default"]
+    subgraph RG["Resource Group"]
+        Hub["Hub VNet<br/>10.0.0.0/16<br/>No subnets or test hosts"]
+        subgraph Spoke["Spoke VNet 10.1.0.0/16"]
+            PESubnet["snet-private-endpoints<br/>10.1.1.0/24"]
+            PE["Blob Private Endpoint"]
+            Workload["snet-workload<br/>10.1.2.0/24<br/>Default outbound access disabled"]
+            NSG["Workload NSG"]
+            VM["Ubuntu validation VM<br/>Private IP only"]
+            PESubnet --> PE
+            Workload --> VM
+            NSG --> Workload
         end
-
-        subgraph Spoke["Spoke VNet<br/>10.1.0.0/16"]
-            direction TB
-
-            subgraph PESubnet["snet-private-endpoints<br/>10.1.1.0/24"]
-                PE["Blob Private Endpoint"]
-            end
-
-            subgraph WorkloadSubnet["snet-workload<br/>10.1.2.0/24"]
-                NSG["Network Security Group"]
-                VM["Test Linux VM<br/>No public IP"]
-                NSG --> VM
-            end
-
-            subgraph BastionSubnet["AzureBastionSubnet<br/>10.1.0.0/26"]
-                Bastion["Azure Bastion"]
-            end
-        end
-
-        Storage[("Storage Account<br/>Blob<br/>Public network: Disabled")]
-        PrivateDNS["Private DNS zone<br/>privatelink.blob.core.windows.net"]
-        BastionPIP["Bastion public IP"]
-        NAT["NAT Gateway"]
-        NATPIP["NAT public IP"]
+        Storage[("Storage Account<br/>Public network and shared keys disabled")]
+        DNS["privatelink.blob.core.windows.net"]
     end
-
-    Internet["Internet"]
-
-    Hub <-. "Two-way VNet peering<br/>enable_hub_spoke_peering" .-> Spoke
-
+    Diagnostics["Azure-managed Boot Diagnostics"]
+    CLI["Local Azure CLI"]
+    Hub <-. "enable_hub_spoke_peering" .-> Spoke
+    DNS -. "VNet link" .-> Spoke
+    PE -. "DNS zone group" .-> DNS
     PE -->|"Private Link"| Storage
-    PE -. "DNS zone group" .-> PrivateDNS
-    PrivateDNS -. "VNet link" .-> Spoke
-    VM -->|"Private DNS resolution<br/>HTTPS"| PE
+    VM -->|"Private DNS and HTTPS"| PE
+    VM -->|"Serial console, collected by Azure platform"| Diagnostics
+    CLI -->|"Read boot log"| Diagnostics
 
-    BastionPIP --> Bastion
-    Bastion -->|"SSH"| VM
-
-    VM --> NAT
-    NATPIP --> NAT
-    NAT --> Internet
-
-    classDef defaultResource fill:#e8f3ff,stroke:#2563eb,stroke-width:2px,color:#111;
-    classDef optionalResource fill:#fff4e5,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5,color:#111;
-    classDef externalResource fill:#f3f4f6,stroke:#6b7280,stroke-width:1px,color:#111;
-
-    class HubExtension defaultResource;
-    class PE,NSG,VM,Bastion,Storage,PrivateDNS,BastionPIP,NAT,NATPIP optionalResource;
-    class Internet externalResource;
-
-    style Hub fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
-    style Spoke fill:#e8f3ff,stroke:#2563eb,stroke-width:2px
-    style PESubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
-    style WorkloadSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
-    style BastionSubnet fill:#fffaf0,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 5
+    classDef defaultResource fill:#e8f3ff,stroke:#2563eb,color:#111;
+    classDef optionalResource fill:#fff4e5,stroke:#d97706,stroke-dasharray:5 5,color:#111;
+    class Hub defaultResource;
+    class PESubnet,PE,Workload,NSG,VM,Storage,DNS,Diagnostics optionalResource;
 ```
 
-- `enable_private_endpoint_example` adds the Private Endpoint subnet, Storage
-  account, Private Endpoint, Private DNS zone, and VNet link together.
-- `enable_test_vm` adds the workload subnet, NSG, and a test VM without a
-  public IP.
-- `enable_bastion` adds the Bastion subnet, Bastion, and its public IP to
-  provide an SSH path to the VM.
-- `enable_nat_gateway` adds the NAT Gateway and its public IP to provide VM
-  outbound internet connectivity.
-
-Enabling the Private Endpoint does not move the Storage account into the VNet.
-The Private Endpoint inside the VNet connects to the Storage account through
-Azure Private Link.
+- **Hub** reserves space for shared services. There is no router or test host.
+- **Peering** creates both directions with forwarded traffic and gateway transit
+  disabled. Peering does not automatically link private DNS zones.
+- **Private Endpoint** connects the Spoke to Blob Storage; Storage itself is
+  not placed inside the VNet. Its Private DNS zone is linked only to Spoke.
+- **Validation VM** requires the Private Endpoint example. Cloud-init installs
+  a systemd service that checks private Blob connectivity on each boot.
+- **Boot Diagnostics** uses Azure-managed storage, separate from the private
+  Blob example. The Azure platform collects the serial output; the VM does not
+  upload it through an internet connection.
 
 ## Prerequisites
 
-- An Azure subscription
-- Azure CLI authentication or another AzureRM provider authentication method
+- Azure subscription and authenticated Azure CLI.
+- Terraform and Bash on the local workstation.
+- Permission to create the scenario resources and read VM boot diagnostics,
+  including `Microsoft.Compute/virtualMachines/retrieveBootDiagnosticsData/action`.
+- Local access to Azure Resource Manager and the diagnostics storage endpoint.
+- An available Ubuntu-compatible VM SKU in the selected region.
 
 Follow the shared [Azure authentication](../../../docs/tips/provider-authentication.md)
-and [Terraform workflow](../../../docs/tips/terraform-workflow.md) guidance.
-Use `SCENARIO=azure_hub_spoke` with the repository Makefile.
+and [Terraform workflow](../../../docs/tips/terraform-workflow.md) guides.
+The default backend is local; use the
+[Azure Blob backend guide](../../../docs/tips/azure-blob-backend.md) for shared state.
+State contains the VM module's SSH private key even though this scenario does
+not expose it as an output. Do not share state, diagnostics SAS URLs, or secrets.
 
-This scenario uses local Terraform state by default so it can be initialized
-without a pre-existing storage account. Before collaborating, add an `azurerm`
-backend as described in the
-[Azure Blob Storage backend guide](../../../docs/tips/azure-blob-backend.md).
-`-backend-config` configures an existing backend block; it does not change a
-local backend into an Azure backend by itself.
+## Deploy and verify step by step
 
-## Deploy in small steps
+Run all **local** commands in the same Bash session from the repository root.
+Stop on command errors rather than continuing with empty variables.
+Terraform does not retain command-line `-var` values: specify all enabled flags
+and any custom values on every subsequent plan/apply, or use an uncommitted
+`.tfvars` file.
 
-Run commands from the repository root.
-
-Terraform does not persist `-var` values between commands. Include every
-feature flag that must remain enabled in each later `apply`, or store the
-values in your own uncommitted `.tfvars` file.
-
-### 1. Create only the hub and spoke VNets
+### 1. Create the two VNet boundaries
 
 ```bash
+export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+SCENARIO_DIR=infra/scenarios/azure_hub_spoke
 make init SCENARIO=azure_hub_spoke
 make plan SCENARIO=azure_hub_spoke
-make deploy SCENARIO=azure_hub_spoke
-```
+terraform -chdir="$SCENARIO_DIR" apply
 
-This is the fastest and lowest-cost starting point. It does not create peering
-or any hourly billed gateway resource.
-
-Verify the resource group and the two VNet address spaces with Azure CLI.
-Keep these shell variables for the later steps:
-
-```bash
-SCENARIO_DIR=infra/scenarios/azure_hub_spoke
 RG="$(terraform -chdir="$SCENARIO_DIR" output -raw resource_group_name)"
 HUB="$(terraform -chdir="$SCENARIO_DIR" output -raw hub_vnet_name)"
 SPOKE="$(terraform -chdir="$SCENARIO_DIR" output -raw spoke_vnet_name)"
-
 az group show -n "$RG" --query properties.provisioningState -o tsv
 az network vnet show -g "$RG" -n "$HUB" \
-  --query '{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
+  --query '{addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
 az network vnet show -g "$RG" -n "$SPOKE" \
-  --query '{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
+  --query '{addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}' -o json
 az network vnet peering list -g "$RG" --vnet-name "$HUB" -o table
 az network vnet peering list -g "$RG" --vnet-name "$SPOKE" -o table
 ```
 
-The resource group must be `Succeeded`; the Hub and Spoke address spaces must
-be `10.0.0.0/16` and `10.1.0.0/16` by default. Both peering lists must be empty.
-The empty subnet lists are intentional: this step creates only the VNet
-boundaries.
+**Expected:** Resource group `Succeeded`; default address spaces
+`10.0.0.0/16` and `10.1.0.0/16`; empty subnet and peering lists.
+VNet boundaries alone do not create hosts or connect the two networks.
 
-### 2. Connect the hub and spoke
+### 2. Connect Hub and Spoke
 
 ```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
+terraform -chdir="$SCENARIO_DIR" apply \
   -var='enable_hub_spoke_peering=true'
+
+az network vnet peering list -g "$RG" --vnet-name "$HUB" \
+  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
+az network vnet peering list -g "$RG" --vnet-name "$SPOKE" \
+  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
 ```
 
-The flag always creates both peering directions. `allow_forwarded_traffic`
-stays `false` because this scaffold has no firewall or network virtual
-appliance. Enable it only after adding a routing component and route tables.
+**Expected:** One peering in each direction, both `Connected` /
+`FullyInSync`, `access=true`, `forwarded=false`, and remote IDs pointing to
+the other VNet. This verifies the control plane, not TCP connectivity to Hub:
+there is no Hub destination host.
 
-Verify each direction independently:
-
-```bash
-az network vnet peering show -g "$RG" --vnet-name "$HUB" \
-  -n peer-hub-to-spoke \
-  --query '{state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
-az network vnet peering show -g "$RG" --vnet-name "$SPOKE" \
-  -n peer-spoke-to-hub \
-  --query '{state:peeringState,sync:peeringSyncLevel,remote:remoteVirtualNetwork.id,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic}' -o json
-```
-
-Both directions must report `state=Connected`, `sync=FullyInSync`, and
-`access=true`. `forwarded=false` is correct for this scenario. This confirms
-the peering control-plane configuration; because the Hub has no subnet or test
-host, it does not yet prove data-plane connectivity.
-
-### 3. Add the Blob Private Endpoint example
+### 3. Add private Blob connectivity
 
 ```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
+terraform -chdir="$SCENARIO_DIR" apply \
   -var='enable_hub_spoke_peering=true' \
   -var='enable_private_endpoint_example=true'
-```
 
-The Storage account has public network access and shared-key authentication
-disabled. The example creates:
-
-1. `snet-private-endpoints` in the spoke.
-2. A Blob Private Endpoint in that subnet.
-3. `privatelink.blob.core.windows.net`.
-4. A Private DNS VNet link to the spoke.
-
-Link the same Private DNS zone to any additional VNet whose clients must
-resolve the private name. In a larger environment, centralize the zones and
-DNS resolution in the hub instead of creating one zone per spoke.
-
-Inspect the four pieces created by this step:
-
-```bash
 STORAGE="$(terraform -chdir="$SCENARIO_DIR" output -raw storage_account_name)"
 PE_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_id)"
 PE_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_ip)"
-
 az storage account show -g "$RG" -n "$STORAGE" \
   --query '{state:provisioningState,publicNetworkAccess:publicNetworkAccess,sharedKey:allowSharedKeyAccess}' -o json
 az network private-endpoint show --ids "$PE_ID" \
@@ -228,511 +148,194 @@ az network private-dns link vnet list -g "$RG" \
 az network private-dns record-set a show -g "$RG" \
   -z privatelink.blob.core.windows.net -n "$STORAGE" \
   --query 'aRecords[].ipv4Address' -o tsv
-curl -sS -o /dev/null -w 'public endpoint HTTP %{http_code}\n' \
-  "https://$STORAGE.blob.core.windows.net/"
+printf 'Expected private IP: %s\n' "$PE_IP"
 ```
 
-Expect Storage `Succeeded`, `publicNetworkAccess=Disabled`, and
-`sharedKey=false`; the Private Endpoint must be `Succeeded` / `Approved`; the
-DNS link must be `Completed`; and its A record must equal `PE_IP`. A local
-`curl` normally receives HTTP `403`, confirming that the public endpoint
-cannot be used. It does **not** test the Private Endpoint: private DNS and
-HTTPS must be tested from inside the linked Spoke VNet after adding the VM.
+**Expected:** Storage `Succeeded`, public network `Disabled`, shared keys
+`false`; PE `Succeeded` / `Approved` in `snet-private-endpoints`; Spoke DNS
+link `Completed`; A record equal to `PE_IP`.
+These are configuration checks. A `curl` from a workstation outside Spoke
+does not prove private connectivity.
 
-### 4. Add troubleshooting resources only when needed
+### 4. Create the private validation VM
 
-```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true'
-```
-
-VM SKU availability varies by region and subscription. This scenario defaults
-to `Standard_B2s_v2`. If VM creation returns `SkuNotAvailable`, inspect the
-location-level restrictions and override `vm_size` with an available SKU:
+Check the default SKU before provisioning:
 
 ```bash
 LOCATION="$(az group show -n "$RG" --query location -o tsv)"
 az vm list-skus --location "$LOCATION" --resource-type virtualMachines --all \
-  --query "[?name=='Standard_B2s_v2'].{name:name,locationRestrictions:restrictions[?type=='Location'].reasonCode}" \
-  -o table
+  --query "[?name=='Standard_B2s_v2'].{name:name,restrictions:restrictions}" -o json
 ```
 
-An empty `LocationRestrictions` value means the SKU is available at the
-location level. A zone-only restriction does not affect this VM because it is
-not pinned to an availability zone. If a location restriction is present,
-repeat the `apply` with an available size, for example
-`-var='vm_size=Standard_D2s_v5'`.
-
-The VM has no public IP. Add Bastion only when interactive SSH access is
-required:
-
-First, verify the VM and its network interface from the local shell:
+A `Location` restriction means the SKU is unavailable for the subscription in
+that region. This VM does not select a zone, but an empty restriction list
+still does not guarantee live capacity. For `SkuNotAvailable`, choose an
+available size with `-var='vm_size=<available-size>'` on each plan/apply.
 
 ```bash
+terraform -chdir="$SCENARIO_DIR" plan \
+  -var='enable_hub_spoke_peering=true' \
+  -var='enable_private_endpoint_example=true' \
+  -var='enable_test_vm=true'
+terraform -chdir="$SCENARIO_DIR" apply \
+  -var='enable_hub_spoke_peering=true' \
+  -var='enable_private_endpoint_example=true' \
+  -var='enable_test_vm=true'
+
 VM="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_name)"
 VM_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_private_ip)"
-NIC_ID="$(az vm show -g "$RG" -n "$VM" --query 'networkProfile.networkInterfaces[0].id' -o tsv)"
-
+NIC_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_network_interface_id)"
+WORKLOAD_SUBNET_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw workload_subnet_id)"
 az vm get-instance-view -g "$RG" -n "$VM" \
   --query '{vm:instanceView.statuses,agent:instanceView.vmAgent.statuses}' -o json
+az vm show -g "$RG" -n "$VM" --query diagnosticsProfile.bootDiagnostics -o json
 az network nic show --ids "$NIC_ID" \
   --query 'ipConfigurations[].{private:privateIPAddress,public:publicIPAddress.id}' -o json
-```
-
-Expect VM `PowerState/running`, a Ready VM Agent, `private` equal to `VM_IP`,
-and `public=null`. The null public IP is why direct SSH from the internet is
-not available.
-
-Then add Bastion:
-
-```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true'
-```
-
-```bash
-BASTION="$(terraform -chdir="$SCENARIO_DIR" output -raw bastion_name)"
-az network bastion show -g "$RG" -n "$BASTION" \
-  --query '{state:provisioningState,sku:sku.name}' -o json
-```
-
-Expect `state=Succeeded`. Open the VM in Azure Portal, select **Connect >
-Bastion**, and sign in with the Terraform output `vm_admin_username` and the
-SSH private key. Do not print or share the sensitive key unless needed for
-this login.
-
-Add NAT Gateway only when the VM needs general outbound internet access.
-Bastion and NAT Gateway require `enable_test_vm=true`. Retain every earlier
-flag:
-
-```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true' \
-  -var='enable_nat_gateway=true'
-
-NAT_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw nat_gateway_id)"
-NAT_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw nat_gateway_public_ip)"
-WORKLOAD_SUBNET_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw workload_subnet_id)"
-az network nat gateway show --ids "$NAT_ID" \
-  --query '{state:provisioningState,publicIps:publicIpAddresses[].id}' -o json
 az network vnet subnet show --ids "$WORKLOAD_SUBNET_ID" \
-  --query '{nat:natGateway.id,nsg:networkSecurityGroup.id}' -o json
+  --query '{defaultOutbound:defaultOutboundAccess,nat:natGateway.id,nsg:networkSecurityGroup.id}' -o json
 ```
 
-Expect the NAT Gateway to be `Succeeded`, and the workload subnet to show both
-NAT Gateway and NSG IDs. Print shell assignments locally and copy the three
-lines of output into the Bastion SSH session:
+**Expected:** VM `PowerState/running`, VM Agent ready, boot diagnostics
+`enabled=true` with no custom storage URI, NIC private address equal to `VM_IP`
+and `public=null`, subnet `defaultOutbound=false`, `nat=null`, and an NSG ID.
+Successful provisioning is not yet a successful connectivity check.
+
+### 5. Read the actual DNS and HTTPS test results
 
 ```bash
-printf "STORAGE='%s'\nPE_IP='%s'\nNAT_IP='%s'\n" "$STORAGE" "$PE_IP" "$NAT_IP"
+az vm boot-diagnostics get-boot-log -g "$RG" -n "$VM"
 ```
 
-Then verify the actual paths from the VM:
+Cloud-init writes the script and enables `validate-private-blob.service`.
+The service executes these guest-side checks:
 
 ```bash
-getent ahostsv4 "$STORAGE.blob.core.windows.net"
-curl -sS -o /dev/null -w 'remote=%{remote_ip} HTTP=%{http_code}\n' \
-  "https://$STORAGE.blob.core.windows.net/"
-curl -sS https://api.ipify.org; echo
-```
-
-The Blob address and `remote` IP must equal `PE_IP`. An HTTP authentication
-error still confirms private DNS, TCP, and TLS connectivity. The IP returned
-by `api.ipify.org` must equal `NAT_IP`, proving that VM internet egress uses
-the NAT Gateway.
-
-## Validate a deployment with all features enabled
-
-### 1. Deploy all features
-
-Run in Bash from the repository root. Locally, use Terraform and an authenticated
-Azure CLI; on the VM, use standard `curl`, `getent`, and `ip` commands. No `jq`,
-additional network testing packages, or Azure CLI installation on the VM is
-required. If a VM tool is missing, resolve that error before continuing.
-
-```bash
-export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-make init SCENARIO=azure_hub_spoke
-terraform -chdir=infra/scenarios/azure_hub_spoke apply \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true' \
-  -var='enable_nat_gateway=true'
-```
-
-Keep `allow_forwarded_traffic=false`. "All features" means the five `enable_*`
-flags, not enabling forwarded traffic without a firewall or router. Bastion
-and NAT Gateway incur charges throughout validation.
-
-Run subsequent **local** commands in the same Bash session. Read actual values
-from state rather than hard-coding the default addresses.
-
-```bash
-SCENARIO_DIR=infra/scenarios/azure_hub_spoke
-RG="$(terraform -chdir="$SCENARIO_DIR" output -raw resource_group_name)"
-HUB="$(terraform -chdir="$SCENARIO_DIR" output -raw hub_vnet_name)"
-SPOKE="$(terraform -chdir="$SCENARIO_DIR" output -raw spoke_vnet_name)"
-VM="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_name)"
-VM_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_private_ip)"
-BASTION="$(terraform -chdir="$SCENARIO_DIR" output -raw bastion_name)"
-STORAGE="$(terraform -chdir="$SCENARIO_DIR" output -raw storage_account_name)"
-PE_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_id)"
-PE_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw private_endpoint_blob_ip)"
-NAT_IP="$(terraform -chdir="$SCENARIO_DIR" output -raw nat_gateway_public_ip)"
-WORKLOAD_SUBNET_ID="$(terraform -chdir="$SCENARIO_DIR" output -raw workload_subnet_id)"
-NIC_ID="$(az vm show -g "$RG" -n "$VM" --query 'networkProfile.networkInterfaces[0].id' -o tsv)"
-NIC="${NIC_ID##*/}"
-BLOB_HOST="$STORAGE.blob.core.windows.net"
-printf 'VM=%s\nBlob=%s\nPE=%s\nNAT=%s\n' "$VM_IP" "$BLOB_HOST" "$PE_IP" "$NAT_IP"
-```
-
-Stop if an output command fails; check the apply with all flags and the target
-state. Do not share `terraform output -json`: it includes the sensitive VM SSH
-private key.
-
-### 2. Paths and acceptance criteria
-
-| Check | Traffic path | Acceptance criteria / scope |
-|---|---|---|
-| Bastion SSH | Browser → Bastion public IP:443 → VM:22 inside Spoke | Log in to the VM through a Portal SSH session |
-| Blob DNS / HTTPS | Spoke VM → Azure DNS → Private DNS zone; VM → PE:443 inside Spoke → Storage | DNS and the `curl` connection IP match `PE_IP`, with an HTTP response and TLS verification |
-| Internet egress | Spoke VM → workload subnet NAT Gateway → internet:443 | Source IP observed by an external service matches `NAT_IP` |
-| Hub-Spoke | Spoke VM NIC → VNet peering → Hub address space | Both peerings are `Connected` / `FullyInSync`, and the effective Hub route uses `VNetPeering` |
-| Public access restrictions | Internet → Storage public endpoint / VM | Storage public access is `Disabled`, and the VM NIC has no public IP |
-
-**Successful Blob and NAT checks do not prove transit through Hub.** Bastion,
-VM, PE, and the subnet attached to NAT are all in Spoke. No subnet or test
-destination is created in Hub, so this deployment alone cannot test TCP
-connectivity to Hub or reverse-direction traffic. Record that separately from
-the additional checks below.
-
-### 3. Check resource health and connections (local)
-
-```bash
-az vm get-instance-view -g "$RG" -n "$VM" \
-  --query '{vm:instanceView.statuses,agent:instanceView.vmAgent.statuses}' -o json
-az network bastion show -g "$RG" -n "$BASTION" \
-  --query '{state:provisioningState,sku:sku.name}' -o json
-az network nic show --ids "$NIC_ID" \
-  --query 'ipConfigurations[].{private:privateIPAddress,public:publicIPAddress.id}' -o json
-az network private-endpoint show --ids "$PE_ID" \
-  --query '{state:provisioningState,connections:privateLinkServiceConnections[].privateLinkServiceConnectionState.status}' -o json
-az storage account show -g "$RG" -n "$STORAGE" \
-  --query '{publicNetworkAccess:publicNetworkAccess,sharedKey:allowSharedKeyAccess}' -o json
-az network vnet subnet show --ids "$WORKLOAD_SUBNET_ID" \
-  --query '{nat:natGateway.id,nsg:networkSecurityGroup.id,routeTable:routeTable.id}' -o json
-az network private-dns link vnet list -g "$RG" \
-  -z privatelink.blob.core.windows.net \
-  --query '[].{vnet:virtualNetwork.id,state:virtualNetworkLinkState}' -o json
-az network private-dns record-set a show -g "$RG" \
-  -z privatelink.blob.core.windows.net -n "$STORAGE" \
-  --query 'aRecords[].ipv4Address' -o tsv
-```
-
-Expect VM `PowerState/running`, a Ready VM Agent, Bastion `Succeeded` / `Basic`
-(or your explicitly selected SKU), NIC `public=null`, PE
-`Succeeded` / `Approved`, and Storage `Disabled` / `false`. The workload subnet
-must have NAT and NSG associations and `routeTable=null`. The DNS link to
-Spoke must be `Completed`, and the A record must match `PE_IP`. There is no DNS
-link to Hub by default.
-
-### 4. Check DNS, Private Link, and NAT from the VM
-
-For validation without interactive SSH, run the following **local** command.
-Azure CLI Run Command executes the script inside the VM. It requires the VM
-Agent, outbound HTTPS to Azure, and
-`Microsoft.Compute/virtualMachines/runCommands/write` permission. Run Command
-does not use Bastion; validate Bastion separately in the next step.
-
-```bash
-az vm run-command invoke -g "$RG" -n "$VM" \
-  --command-id RunShellScript \
-  --scripts "set -eu
-command -v curl
-command -v getent
-command -v ip
-ip -4 address show
-ip -4 route show
-echo '--- Blob DNS: expected $PE_IP ---'
-getent ahostsv4 '$BLOB_HOST'
-echo '--- Blob HTTPS: remote_ip must be $PE_IP ---'
+getent ahostsv4 <storage-account-name>.blob.core.windows.net
 curl --noproxy '*' -sS --connect-timeout 5 --max-time 20 \
-  -D - -o /dev/null \
-  -w '\nhttp=%{http_code} remote_ip=%{remote_ip}\n' \
-  'https://$BLOB_HOST/?comp=list'
-echo '--- NAT egress: expected $NAT_IP ---'
-EGRESS_IP=\$(curl --noproxy '*' -fsS --connect-timeout 5 --max-time 20 https://api.ipify.org)
-printf 'egress_ip=%s\n' \"\$EGRESS_IP\"
-test \"\$EGRESS_IP\" = '$NAT_IP'
-echo NAT_IP_MATCH" \
-  --query 'value[].{code:code,message:message}' -o json
+  -o /dev/null -w '%{remote_ip} %{http_code}' \
+  'https://<storage-account-name>.blob.core.windows.net/?comp=list'
 ```
 
-- If the IPv4 address from `getent` and `remote_ip` both match `PE_IP`, DNS
-  and TCP:443 / TLS connectivity through Private Link work. An unauthenticated
-  Blob API request typically returns an error such as `400` / `403`. Do not
-  infer private connectivity from HTTP status alone; also check the connection IP.
-- Do not disable certificate verification with `-k`. The Blob request
-  intentionally omits `-f` to display HTTP errors. `http=000`, DNS errors,
-  timeouts, and TLS errors are failures.
-- This scenario does not assign a Blob data role to the VM identity.
-  `403` does not mean Blob reads or writes succeed. Data operations require
-  a separate Storage Blob Data Reader / Contributor role and Entra ID
-  authentication.
-- `api.ipify.org` is an external service that returns the source IP. Replace
-  it with an equivalent HTTPS service if organizational policy prevents its
-  use. Confirm that `egress_ip` equals `NAT_IP` and `NAT_IP_MATCH` is printed.
-  This is not the Bastion public IP.
-- Do not accept the Run Command operation's success status alone. Inspect
-  stderr, HTTP results, matching IPs, and the final marker. Output is limited
-  to the last 4 KB; if truncated, run DNS / HTTPS / NAT checks separately.
+They are embedded in the VM; do not run them locally as a substitute.
+The latest run must contain the following evidence:
 
-The VM's `ip route` shows the Azure virtual network gateway, not the complete
-PE, peering, or NAT paths. Do not use only `ping` / `traceroute` to judge PaaS
-reachability or Azure virtual hops.
-
-### 5. Check Bastion access (local → Portal → VM)
-
-The default Bastion SKU is **Basic**. Use the Portal connection, which needs
-no additional software. `az network bastion ssh/tunnel` requires Standard or
-higher and native client configuration; it is not available in this scenario's
-default configuration.
-
-```bash
-VM_USER="$(terraform -chdir="$SCENARIO_DIR" output -raw vm_admin_username)"
-KEY_FILE="$(mktemp "${TMPDIR:-/tmp}/azure-hub-spoke-key.XXXXXX")"
-chmod 600 "$KEY_FILE"
-terraform -chdir="$SCENARIO_DIR" output -raw vm_ssh_private_key > "$KEY_FILE"
-printf 'SSH user: %s\nPrivate key file: %s\n' "$VM_USER" "$KEY_FILE"
+```text
+PRIVATE_BLOB_CHECK <UTC timestamp> START host=<blob-host> expected_ip=<PE_IP>
+PRIVATE_BLOB_CHECK <UTC timestamp> DNS_PASS ip=<PE_IP>
+PRIVATE_BLOB_CHECK <UTC timestamp> HTTPS_PASS remote_ip=<PE_IP> http=403 tls=verified
+PRIVATE_BLOB_CHECK <UTC timestamp> PASS scope=private_dns_tcp_tls_http
 ```
 
-1. In Azure Portal, open the target VM → **Connect → Bastion**.
-2. Select **SSH Private Key from Local File**, using `VM_USER` and the file at
-   `KEY_FILE`. Check the required Reader permissions on the VM, NIC, and
-   Bastion as well.
-3. After connecting, run `hostname; ip -4 address show` **inside the VM**.
-   Confirm the target VM and `VM_IP`. You can also repeat the `getent` / `curl`
-   checks from step 4. Local variables are not inherited by the VM; use the
-   actual values printed earlier.
-4. Disconnect SSH, then run `rm -f "$KEY_FILE"; unset KEY_FILE` **locally**.
-   Never paste the private key into a README, logs, chat, or Git.
+**Acceptance criteria:**
 
-The workload NSG's default `AllowVnetInBound` rule permits Bastion → VM:22.
-The VM needs neither a public IP nor an internet-facing SSH allow rule.
+1. DNS resolves only to the expected PE IPv4 address.
+2. `curl` connects to that same address with certificate verification enabled.
+3. An HTTP response arrives; `000`, connection errors, and TLS errors fail.
+4. The latest `START` is followed by its final `PASS`, not a historical success.
 
-### 6. Check Hub-Spoke peerings, effective routes, and NSGs (local)
+The HTTP code need not be `403`; unauthenticated Blob requests can return
+`400` or other HTTP responses. An HTTP error confirms transport connectivity,
+not successful Blob authentication or reading/writing. The VM has no managed
+identity or Blob data-role assignment.
+
+Boot logs can take several minutes to appear. The script retries up to 12 times
+with 10-second pauses and a 20-second limit per HTTPS attempt. Each failure is
+logged; exhausted retries produce `FAIL` and a nonzero service exit code.
+Missing tools fail explicitly; no package installation is attempted.
+
+To repeat the test, restart the VM and read the log again:
 
 ```bash
-az network vnet peering list -g "$RG" --vnet-name "$HUB" \
-  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic,remote:remoteVirtualNetwork.id}' -o json
-az network vnet peering list -g "$RG" --vnet-name "$SPOKE" \
-  --query '[].{name:name,state:peeringState,sync:peeringSyncLevel,access:allowVirtualNetworkAccess,forwarded:allowForwardedTraffic,remote:remoteVirtualNetwork.id}' -o json
+date -u +%FT%TZ
+az vm restart -g "$RG" -n "$VM"
+az vm boot-diagnostics get-boot-log -g "$RG" -n "$VM"
+```
+
+Wait for a new `START` timestamp after the restart and evaluate that run.
+Restarting interrupts the VM. Log retrieval success alone is not test success.
+
+### 6. Inspect routes and record the scope of validation
+
+```bash
+NIC="${NIC_ID##*/}"
 az network nic show-effective-route-table -g "$RG" -n "$NIC" -o json
 az network nic list-effective-nsg -g "$RG" -n "$NIC" -o json
+az resource list -g "$RG" \
+  --query "[?type=='Microsoft.Network/publicIPAddresses' || type=='Microsoft.Network/natGateways' || type=='Microsoft.Network/bastionHosts'].{name:name,type:type}" -o json
 ```
 
-For both directions, expect `Connected`, `FullyInSync`, `access=true`,
-`forwarded=false`, and the other VNet as the remote. Check while the VM is
-running. Expected effective routes are below (addresses assume defaults).
+**Expected:** An active Hub route with next hop `VNetPeering`, a Spoke-local
+route, and a PE `/32` route with next hop `InterfaceEndpoint`. NSG rules must
+allow DNS and PE HTTPS traffic. The last query returns `[]` for this scenario.
+An `Internet` next hop does not prove working internet egress.
 
-| Destination | Active next hop | Meaning |
-|---|---|---|
-| Hub `10.0.0.0/16` | `VNetPeering` | A peering route toward Hub exists |
-| Spoke `10.1.0.0/16` | `VnetLocal` | Same-VNet route |
-| PE IP `/32` | `InterfaceEndpoint` | Private Endpoint route |
-| `0.0.0.0/0` | `Internet` | Attaching NAT does not rename the next hop to NAT Gateway |
-
-Verify actual NAT use with the source IP in step 4. For NSGs, inspect default
-`AllowVnetInBound` / `AllowVnetOutBound` and `AllowInternetOutBound` rules,
-and any higher-priority deny rules. Peering includes the Hub range in the
-`VirtualNetwork` service tag, but routes and NSG configuration alone do not
-prove packet delivery.
-
-#### Optional: Inspect the next hop toward Hub with Network Watcher
-
-Run if Network Watcher is enabled in the VM's region. This scenario does not
-create Network Watcher. Missing permissions or regional setup mean the
-diagnostic was not performed, not that connectivity failed.
-
-```bash
-HUB_PROBE_IP=10.0.0.4
-az network watcher show-next-hop -g "$RG" --vm "$VM" --nic "$NIC" \
-  --source-ip "$VM_IP" --dest-ip "$HUB_PROBE_IP" -o json
-```
-
-Change `HUB_PROBE_IP` to an address in your actual Hub range. Expect
-`nextHopType=VNetPeering`. Route diagnostics work even without a VM at this
-address; that does not mean TCP connectivity succeeds. If enabling Network
-Watcher separately, follow the
-[official procedure](https://learn.microsoft.com/azure/network-watcher/diagnose-vm-network-routing-problem-cli)
-and account for resources outside this Terraform configuration.
-
-#### Optional: Test actual traffic after adding a Hub VM
-
-To test the Hub → Spoke data plane, separately provision a non-overlapping Hub
-subnet and a VM / NIC / NSG in it. These steps do not create them automatically.
-Run the following inside the Hub VM, using the actual values from step 1.
-
-```bash
-BLOB_HOST='<storage-account-name>.blob.core.windows.net'
-PE_IP='<private-endpoint-blob-ip>'
-curl --noproxy '*' -sS --connect-timeout 5 --max-time 20 \
-  --resolve "$BLOB_HOST:443:$PE_IP" -D - -o /dev/null \
-  -w '\nhttp=%{http_code} remote_ip=%{remote_ip}\n' \
-  "https://$BLOB_HOST/?comp=list"
-```
-
-An HTTP response with `remote_ip=PE_IP` validates Hub VM → peering → Spoke PE →
-Storage and the response path. `--resolve` pins only name resolution and
-preserves TLS hostname verification. **This does not validate Hub DNS.** For
-normal FQDN access from Hub, also link the Private DNS zone to Hub or configure
-DNS Resolver / forwarding, then repeat `getent` and `curl` without `--resolve`.
-Peering does not automatically share DNS zone links.
-
-To also test a new Spoke → Hub TCP connection, connect from the Spoke VM to a
-running service on the Hub VM. If the Ubuntu VM runs an SSH service, execute
-the following in **Bash inside the Spoke VM** to check TCP:22 and the SSH banner
-without additional packages or the Hub VM's private key. `timeout` uses the VM's
-standard coreutils.
-
-```bash
-HUB_VM_IP='<hub-test-vm-private-ip>'
-timeout 5 bash -eu -c \
-  'exec 3<>"/dev/tcp/$1/22"; head -n 1 <&3' _ "$HUB_VM_IP"
-```
-
-Pass if `SSH-2.0-...` appears within five seconds. Exit code `124` is a timeout;
-connection refused means SSH is not running or the connection is rejected.
-Neither is a pass. This does not validate SSH authentication. Run the same
-command inside the Hub VM, replacing the argument with Spoke's `VM_IP`, to test
-a new connection in the reverse direction.
-Record the destination port, both NSGs, OS firewalls, effective routes, and
-result. A timeout to an unused Hub IP is not
-a valid test. With no second Spoke, UDR, firewall, or VPN, transitive
-spoke-to-spoke traffic and centralized Hub egress remain out of scope.
-
-### 7. Troubleshoot and record results
-
-| Symptom | Check |
+| Check | What it proves |
 |---|---|
-| Blob resolves to a public IP | Execute inside the VM; check Spoke DNS zone link / A record and custom DNS forwarding |
-| DNS returns PE IP, but HTTPS times out | PE Approved status, NIC effective routes / NSGs, OS firewall, and proxy settings |
-| Blob returns `403` | Separate network success from authorization failure using the connection IP; data operations need a Blob data role |
-| NAT IP mismatch / no internet | Workload subnet NAT association, NAT public IP, outbound NSGs, UDRs, and external service restrictions |
-| Bastion SSH fails | Bastion provisioningState, user / private key, NSG:22, VM sshd / OS firewall, and Portal permissions |
-| Missing Hub route / unsynchronized peering | Both peerings, remote VNet IDs, non-overlapping ranges, and VM running state |
-| Run Command does not respond | VM Agent, outbound:443 to Azure, and execution permission; check directly through Bastion |
+| Two connected peerings and the effective Hub route | Hub-Spoke control-plane configuration |
+| DNS / HTTPS `PASS` from the VM | Spoke VM → PE → Blob private transport connectivity |
+| NIC `public=null`, private subnet | No VM Public IP or default outbound access |
+| Managed Boot Diagnostics log | Azure platform collected guest-side test output |
 
-Record time, execution location, source / destination IPs and ports, DNS
-results, HTTP status / connection IP, NAT source IP, peerings, and routes.
-Distinguish "passed", "failed", and "not performed (requires an additional Hub
-VM, for example)".
+The Blob test stays inside Spoke and does not traverse Hub. Hub-host TCP
+traffic, internet egress, and authenticated Blob operations are not tested.
 
-After validation, destroy with every feature flag. If using your own `.tfvars`,
-also pass the same inputs used for apply. Remove separately added Hub VMs /
-DNS links through the configuration managing those resources.
+## Troubleshooting
+
+| Observation | Check next |
+|---|---|
+| `SkuNotAvailable` | SKU restrictions and live capacity in the selected region |
+| No `START` in the log | VM state, cloud-init serial output, boot diagnostics setting, and log publication delay |
+| `RETRY dns_resolution_failed` or wrong DNS IP | PE approval, A record, Spoke VNet link, DNS settings and NSG |
+| `RETRY https_connection_failed` | `curl` error, PE IP, NSG, routes and TLS certificate validation |
+| `FAIL missing_tool=...` | VM image contents; use the supplied Ubuntu image without runtime package downloads |
+| `FAIL attempts=12` | Diagnose the preceding retry messages, then restart after correcting the cause |
+| Boot-log access denied | Diagnostics retrieval permission and local connectivity to its storage endpoint |
+
+Do not use `curl -k`, public Storage access, shared keys, or policy changes to
+make the connectivity check pass. Private transport verification is distinct
+from Azure RBAC and Blob data access.
+
+## Inputs and outputs
+
+| Input | Default / purpose |
+|---|---|
+| `name`, `location`, `tags` | Resource naming, `japaneast`, resource tags |
+| `enable_hub_spoke_peering` | `false`; both peering directions |
+| `enable_private_endpoint_example` | `false`; private Blob resources and DNS |
+| `enable_test_vm` | `false`; boot validation VM, requires the Blob example |
+| `hub_vnet_address_space`, `spoke_vnet_address_space` | `10.0.0.0/16`, `10.1.0.0/16` |
+| `private_endpoint_subnet_address_prefixes`, `workload_subnet_address_prefixes` | `10.1.1.0/24`, `10.1.2.0/24` |
+| `allow_forwarded_traffic` | `false`; keep disabled without a router and route tables |
+| `storage_account_tier`, `storage_account_replication_type` | `Standard`, `LRS` |
+| `vm_size`, `vm_admin_username` | `Standard_B2s_v2`, `azureuser` |
+| `vm_os_disk_size_gb`, `vm_os_disk_type` | `30`, `Standard_LRS` |
+
+Outputs include resource-group and VNet names/IDs, both peering IDs, subnet IDs,
+Storage name/ID, PE ID/IP, and VM ID/name/private IP/NIC ID. Disabled optional
+outputs are null and may be absent from `terraform output`.
+
+The VM, disk, Storage and Private Endpoint incur charges. Remove the deployment
+when finished; inspect the destroy plan before approving it.
 
 ```bash
 terraform -chdir="$SCENARIO_DIR" destroy \
   -var='enable_hub_spoke_peering=true' \
   -var='enable_private_endpoint_example=true' \
-  -var='enable_test_vm=true' \
-  -var='enable_bastion=true' \
-  -var='enable_nat_gateway=true'
+  -var='enable_test_vm=true'
 ```
 
-## Feature flags
+## Offline validation
 
-| Variable | Default | Adds |
-|---|---:|---|
-| `enable_hub_spoke_peering` | `false` | Hub-to-spoke and spoke-to-hub peerings |
-| `enable_private_endpoint_example` | `false` | Private Endpoint subnet, private Blob Storage, Private Endpoint, Private DNS zone and link |
-| `enable_test_vm` | `false` | Workload subnet, NSG, private Linux VM |
-| `enable_bastion` | `false` | AzureBastionSubnet, Bastion, public IP; requires the test VM |
-| `enable_nat_gateway` | `false` | NAT Gateway and public IP on the workload subnet; requires the test VM |
-
-Bastion and NAT Gateway usually have the greatest cost and deployment-time
-impact in this scaffold. Keep them disabled outside short troubleshooting
-sessions.
-
-## Core network inputs
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `hub_vnet_address_space` | `["10.0.0.0/16"]` | Hub address space |
-| `spoke_vnet_address_space` | `["10.1.0.0/16"]` | Non-overlapping spoke address space |
-| `private_endpoint_subnet_address_prefixes` | `["10.1.1.0/24"]` | Private Endpoint subnet |
-| `workload_subnet_address_prefixes` | `["10.1.2.0/24"]` | Test VM subnet |
-| `bastion_subnet_address_prefixes` | `["10.1.0.0/26"]` | Azure Bastion subnet |
-| `allow_forwarded_traffic` | `false` | Peering support for traffic forwarded by a future router/firewall |
-
-The hub, spoke, and subnet ranges must not overlap. Review all variables in
-[variables.tf](./variables.tf) before using the scaffold in an existing
-network.
-
-## Add another PaaS Private Endpoint
-
-[private_endpoint.tf](./private_endpoint.tf) is the concrete Blob example.
-It calls `module.storage` for the account and `module.private_endpoint_blob`
-for private connectivity, both controlled by `enable_private_endpoint_example`.
-The latter uses the reusable [Private Endpoint module](../../modules/azure/private_endpoint/README.md);
-the Storage module manages the account, not endpoints or DNS resources.
-
-Reuse the connection module rather than copying resource definitions:
-
-1. Add the PaaS resource with public network access disabled.
-2. Call the Private Endpoint module with its resource ID, endpoint subnet ID,
-   and correct `subresource_names`.
-3. Pass `private_dns_zone_name` and `virtual_network_links` for a new zone.
-   For a shared zone, set `create_private_dns_zone = false` and pass
-   `private_dns_zone_ids`; manage its VNet links outside the module.
-4. Ensure every client VNet has a link or appropriate DNS forwarding.
-5. Add nullable outputs and a mock plan test for the new feature flag.
-6. Register any additional Azure resource provider in
-   [providers.tf](./providers.tf).
-
-| PaaS | Private Link subresource | Common Private DNS zone |
-|---|---|---|
-| Blob Storage | `blob` | `privatelink.blob.core.windows.net` |
-| Key Vault | `vault` | `privatelink.vaultcore.azure.net` |
-| Azure SQL logical server | `sqlServer` | `privatelink.database.windows.net` |
-| Cosmos DB for NoSQL | `Sql` | `privatelink.documents.azure.com` |
-| Azure Container Registry | `registry` | `privatelink.azurecr.io` |
-
-Confirm the current subresource and DNS zone in the service documentation
-before implementation; some services require multiple endpoints or zones.
-
-## Important limits
-
-- Peering is non-transitive. Adding another spoke does not make
-  spoke-to-spoke traffic work through the hub.
-- This scaffold does not provide centralized egress, packet inspection, hybrid
-  connectivity, or custom DNS forwarding.
-- Add Azure Firewall or an NVA, route tables, VPN/ExpressRoute Gateway, and
-  Azure DNS Private Resolver only when those requirements exist.
-
-## Remove the resources
-
-Use the same feature flags that were used for apply, then destroy:
+All Terraform test runs use mock providers and `command = plan`:
 
 ```bash
-terraform -chdir=infra/scenarios/azure_hub_spoke destroy \
-  -var='enable_hub_spoke_peering=true' \
-  -var='enable_private_endpoint_example=true'
+terraform -chdir=infra/scenarios/azure_hub_spoke init -backend=false -lockfile=readonly
+terraform -chdir=infra/scenarios/azure_hub_spoke validate
+terraform -chdir=infra/scenarios/azure_hub_spoke test
+bash infra/scenarios/azure_hub_spoke/scripts/tests/test_validation.sh
 ```
 
-## References
-
-- [Hub-spoke network topology in Azure](https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke)
-- [Azure Private Endpoint DNS configuration](https://learn.microsoft.com/azure/private-link/private-endpoint-dns)
-- [Azure Private Link availability](https://learn.microsoft.com/azure/private-link/availability)
-- [Azure Bastion documentation](https://learn.microsoft.com/azure/bastion/)
+Offline tests check configuration, private subnets, managed diagnostics,
+cloud-init wiring, retries, DNS mismatches, connection IP mismatches, TLS errors,
+timeouts, and explicit failure results. They do not replace Azure deployment
+and boot-log verification.

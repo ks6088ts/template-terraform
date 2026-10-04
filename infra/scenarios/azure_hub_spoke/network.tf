@@ -4,16 +4,13 @@ locals {
       name                              = "snet-private-endpoints"
       address_prefixes                  = var.private_endpoint_subnet_address_prefixes
       private_endpoint_network_policies = "Disabled"
+      default_outbound_access_enabled   = false
     }] : [],
-    var.enable_test_vm || var.enable_nat_gateway ? [{
+    var.enable_test_vm ? [{
       name                              = "snet-workload"
       address_prefixes                  = var.workload_subnet_address_prefixes
       private_endpoint_network_policies = null
-    }] : [],
-    var.enable_bastion ? [{
-      name                              = "AzureBastionSubnet"
-      address_prefixes                  = var.bastion_subnet_address_prefixes
-      private_endpoint_network_policies = null
+      default_outbound_access_enabled   = false
     }] : []
   )
 }
@@ -38,11 +35,11 @@ module "spoke_virtual_network" {
   address_space       = var.spoke_vnet_address_space
   subnets             = local.spoke_subnets
 
-  network_security_groups = var.enable_test_vm || var.enable_nat_gateway ? [{
+  network_security_groups = var.enable_test_vm ? [{
     name = "nsg-workload-${local.resource_name}"
   }] : []
 
-  nsg_subnet_associations = var.enable_test_vm || var.enable_nat_gateway ? [{
+  nsg_subnet_associations = var.enable_test_vm ? [{
     subnet_name = "snet-workload"
     nsg_name    = "nsg-workload-${local.resource_name}"
   }] : []

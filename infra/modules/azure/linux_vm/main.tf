@@ -26,6 +26,7 @@ resource "azurerm_linux_virtual_machine" "this" {
   size                            = var.size
   admin_username                  = var.admin_username
   disable_password_authentication = true
+  custom_data                     = var.custom_data
   tags                            = var.tags
 
   network_interface_ids = [
@@ -56,5 +57,10 @@ resource "azurerm_linux_virtual_machine" "this" {
     content {
       type = "SystemAssigned"
     }
+  }
+
+  dynamic "boot_diagnostics" {
+    for_each = var.boot_diagnostics_enabled ? [1] : []
+    content {}
   }
 }

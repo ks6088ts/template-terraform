@@ -16,6 +16,7 @@ resource "azurerm_subnet" "this" {
   virtual_network_name              = azurerm_virtual_network.this.name
   address_prefixes                  = each.value.address_prefixes
   private_endpoint_network_policies = lookup(each.value, "private_endpoint_network_policies", null)
+  default_outbound_access_enabled   = each.value.default_outbound_access_enabled
 }
 
 # Network Security Groups
