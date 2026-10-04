@@ -235,10 +235,27 @@ PRIVATE_BLOB_CHECK <UTC timestamp> PASS scope=private_dns_tcp_tls_http
 3. HTTP 応答が返る。`000`、接続エラー、TLS エラーは不合格。
 4. 最新の `START` に対応する最後の `PASS` がある。過去の成功結果では判定しない。
 
-HTTP code は `403` に限定しません。未認証の Blob API は `400` などを返すことも
-あります。HTTP エラーでもトランスポートの疎通は確認できますが、Blob の認証、
-読み書き成功を意味しません。VM には Managed Identity も Blob データロールも
-割り当てません。
+#### 結果の読み方
+
+| ログ | 意味・期待値 |
+|---|---|
+| `START` / `ATTEMPT` | 検証開始。`host` が対象の Blob 名、`expected_ip` が `$PE_IP` と一致する |
+| `DNS_PASS` | 名前解決が成功。`ip` が `$PE_IP` と一致する |
+| `HTTPS_PASS` | 実接続先 `remote_ip` が `$PE_IP`、`tls=verified`、HTTP 応答あり（`100` ～ `599`） |
+| 最終 `PASS` | **疎通は合格**。途中に `RETRY` があっても、最新実行の最終結果で判断する |
+| `FAIL` | **不合格**。直前のエラーを確認し、原因を修正して再検証する |
+| 開始ログなし、または `ATTEMPT` / `RETRY` で終わる | **未判定**。ログを再取得し、続く場合は VM / service 状態を確認する |
+
+**疎通成功と API 成功は別です。** 例えば正しい PE IP で
+`http=409 tls=verified` と最終 `PASS` があれば、
+「プライベート経路の DNS・TCP・TLS・HTTP 応答は成功、API はエラー」です。
+`400` / `403` / `5xx` も応答到達の証拠ですが、読み書き成功やサービス正常性は
+保証しません。`000`、timeout、DNS / TLS エラー、IP 不一致はその試行の失敗です。
+
+`409` の詳細原因はこのログだけでは分かりません。スクリプトは応答ヘッダー・本文を
+保存しないため、原因調査には VM 内で `x-ms-error-code` や本文のエラーを取得します。
+VM に Managed Identity / Blob データロールはありません。
+時刻の `Z` は UTC です。過去の `PASS` ではなく、最新の `START` 以降を判定してください。
 
 Boot log が表示されるまで数分かかる場合があります。スクリプトは 10 秒間隔で
 最大 12 回再試行し、HTTPS は 1 回につき最大 20 秒です。失敗理由を毎回記録し、
@@ -271,15 +288,18 @@ PE `/32` 宛の `InterfaceEndpoint` route が存在します。NSG が DNS と P
 を許可していることも確認します。最後の query はこのシナリオでは `[]` です。
 `Internet` next hop が表示されても、インターネット送信が成功する証拠にはなりません。
 
-| 確認 | 証明する内容 |
-|---|---|
-| 両方向の peering と Hub 宛有効ルート | Hub-Spoke のコントロールプレーン設定 |
-| VM の DNS / HTTPS `PASS` | Spoke VM → PE → Blob のプライベートなトランスポート疎通 |
-| NIC `public=null` と private subnet | VM Public IP と default outbound access がないこと |
-| Managed Boot Diagnostics のログ | Azure platform が VM 内の検証結果を収集したこと |
+| 確認 | 期待する結果 | 証明する内容 |
+|---|---|---|
+| 両方向の peering と Hub 宛有効ルート | 両方向 `Connected` / `FullyInSync`、Hub 宛 `Active` / `VNetPeering` | Hub-Spoke のコントロールプレーン設定。Hub host 宛の実通信成功ではない |
+| VM の DNS / HTTPS `PASS` | 最新実行の DNS IP と実接続先 IP が `$PE_IP`、`tls=verified`、HTTP 応答あり、最終 `PASS` | Spoke VM → PE → Blob の名前解決・TCP・TLS・HTTP 応答。API の処理成功ではない |
+| NIC と private subnet | `public=null`、`defaultOutbound=false`、`nat=null` | VM Public IP と default outbound access、NAT 関連付けがないこと |
+| Managed Boot Diagnostics のログ | 対象 VM の最新の `START` と検証結果が読める | Azure platform が VM 内の検証結果を収集したこと。取得成功だけで疎通合格ではない |
 
 Blob 検証は Spoke 内で完結し、Hub を経由しません。Hub の host 宛 TCP 通信、
 インターネット送信、認証付きの Blob 操作は検証対象外です。
+期待する通信経路は **Spoke VM → PE の Private IP → Azure Private Link →
+Blob Storage → HTTP 応答**です。Blob API の処理成功・サービス正常性も、
+トランスポートの `PASS` だけでは保証しません。
 
 ## トラブルシューティング
 
@@ -289,6 +309,7 @@ Blob 検証は Spoke 内で完結し、Hub を経由しません。Hub の host 
 | ログに `START` がない | VM 状態、cloud-init のシリアル出力、Boot Diagnostics 設定、ログ公開の遅延 |
 | `RETRY dns_resolution_failed` または DNS IP が違う | PE 承認、A record、Spoke VNet link、DNS 設定、NSG |
 | `RETRY https_connection_failed` | `curl` のエラー、PE IP、NSG、route、TLS 証明書検証 |
+| `HTTPS_PASS http=409` と最終 `PASS` | 正しい PE IP と TLS 検証を確認できれば疎通は合格。API エラーの詳細は応答ヘッダー・本文が必要で、このログだけでは原因を断定しない |
 | `FAIL missing_tool=...` | VM image 内のツール。指定の Ubuntu image を使用し、実行時のパッケージ取得に依存しない |
 | `FAIL attempts=12` | 直前の再試行理由を調べ、原因を解消した後に再起動 |
 | Boot log の取得権限エラー | 診断取得権限とローカルから診断用 Storage endpoint への接続 |
@@ -340,3 +361,11 @@ bash infra/scenarios/azure_hub_spoke/scripts/tests/test_validation.sh
 構成、private subnet、Managed Boot Diagnostics、cloud-init の接続、再試行、
 DNS・接続先 IP の不一致、TLS エラー、timeout、明示的な失敗結果を確認します。
 これらは Azure へのデプロイと Boot log による確認を代替するものではありません。
+
+## 参考資料・出典
+
+- [Azure Storage の Private Endpoint](https://learn.microsoft.com/azure/storage/common/storage-private-endpoints) — プライベート経路と DNS 解決。
+- [Azure Boot Diagnostics](https://learn.microsoft.com/azure/virtual-machines/boot-diagnostics) — シリアルログ収集と Managed Storage。
+- [Blob Storage のエラーコード](https://learn.microsoft.com/rest/api/storageservices/blob-service-error-codes) — HTTP `409` などの詳細なエラー分類。
+- [curl の TLS 証明書検証](https://curl.se/docs/sslcerts.html) — 既定の証明書検証と `--insecure` の注意点。
+- [検証スクリプト](./scripts/validate_private_blob.sh) — このシナリオの `PASS` 条件、HTTP code の判定範囲、再試行処理。

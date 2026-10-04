@@ -236,10 +236,27 @@ PRIVATE_BLOB_CHECK <UTC timestamp> PASS scope=private_dns_tcp_tls_http
 3. An HTTP response arrives; `000`, connection errors, and TLS errors fail.
 4. The latest `START` is followed by its final `PASS`, not a historical success.
 
-The HTTP code need not be `403`; unauthenticated Blob requests can return
-`400` or other HTTP responses. An HTTP error confirms transport connectivity,
-not successful Blob authentication or reading/writing. The VM has no managed
-identity or Blob data-role assignment.
+#### Interpret the result
+
+| Record | Meaning / expected value |
+|---|---|
+| `START` / `ATTEMPT` | Validation started; `host` is the target Blob name and `expected_ip` matches `$PE_IP` |
+| `DNS_PASS` | DNS succeeded; `ip` matches `$PE_IP` |
+| `HTTPS_PASS` | Actual `remote_ip` matches `$PE_IP`, `tls=verified`, and an HTTP response arrived (`100` through `599`) |
+| Final `PASS` | **Transport passed**; evaluate the latest run's final result even if earlier attempts retried |
+| `FAIL` | **Failed**; inspect preceding errors, correct the cause, and repeat |
+| No start, or ends with `ATTEMPT` / `RETRY` | **Undetermined**; retrieve again and check VM / service state if it persists |
+
+**Transport success is not API success.** For example, `http=409 tls=verified`
+at the correct PE IP with a final `PASS` means private DNS, TCP, TLS, and HTTP
+response passed, but the API returned an error. `400` / `403` / `5xx` also
+prove a response arrived, not successful read/write or healthy service operation.
+`000`, timeout, DNS / TLS errors, or IP mismatches fail that attempt.
+
+This log cannot establish the detailed cause of `409`: the script does not
+save headers or body. Investigate guest-side `x-ms-error-code` or body errors
+to determine the cause. The VM has no managed identity or Blob data role.
+`Z` denotes UTC; evaluate the latest `START` onward, not a historical `PASS`.
 
 Boot logs can take several minutes to appear. The script retries up to 12 times
 with 10-second pauses and a 20-second limit per HTTPS attempt. Each failure is
@@ -272,15 +289,18 @@ route, and a PE `/32` route with next hop `InterfaceEndpoint`. NSG rules must
 allow DNS and PE HTTPS traffic. The last query returns `[]` for this scenario.
 An `Internet` next hop does not prove working internet egress.
 
-| Check | What it proves |
-|---|---|
-| Two connected peerings and the effective Hub route | Hub-Spoke control-plane configuration |
-| DNS / HTTPS `PASS` from the VM | Spoke VM → PE → Blob private transport connectivity |
-| NIC `public=null`, private subnet | No VM Public IP or default outbound access |
-| Managed Boot Diagnostics log | Azure platform collected guest-side test output |
+| Check | Expected result | What it proves |
+|---|---|---|
+| Both peerings and the effective Hub route | Both `Connected` / `FullyInSync`, Hub route `Active` / `VNetPeering` | Hub-Spoke control-plane configuration, not successful traffic to a Hub host |
+| DNS / HTTPS `PASS` from the VM | Latest run's DNS and connection IP equal `$PE_IP`, `tls=verified`, an HTTP response, and final `PASS` | Spoke VM → PE → Blob DNS, TCP, TLS, and HTTP response, not successful API processing |
+| NIC and private subnet | `public=null`, `defaultOutbound=false`, `nat=null` | No VM Public IP, default outbound access, or NAT association |
+| Managed Boot Diagnostics log | The intended VM's latest `START` and check results are readable | Azure platform collected guest-side test output; retrieval alone is not a connectivity pass |
 
 The Blob test stays inside Spoke and does not traverse Hub. Hub-host TCP
 traffic, internet egress, and authenticated Blob operations are not tested.
+The expected path is **Spoke VM → PE private IP → Azure Private Link →
+Blob Storage → HTTP response**. A transport `PASS` also does not guarantee
+successful Blob API processing or service health.
 
 ## Troubleshooting
 
@@ -290,6 +310,7 @@ traffic, internet egress, and authenticated Blob operations are not tested.
 | No `START` in the log | VM state, cloud-init serial output, boot diagnostics setting, and log publication delay |
 | `RETRY dns_resolution_failed` or wrong DNS IP | PE approval, A record, Spoke VNet link, DNS settings and NSG |
 | `RETRY https_connection_failed` | `curl` error, PE IP, NSG, routes and TLS certificate validation |
+| `HTTPS_PASS http=409` and final `PASS` | With the correct PE IP and TLS verification, transport passed. API error details require response headers/body; this log alone cannot establish the cause |
 | `FAIL missing_tool=...` | VM image contents; use the supplied Ubuntu image without runtime package downloads |
 | `FAIL attempts=12` | Diagnose the preceding retry messages, then restart after correcting the cause |
 | Boot-log access denied | Diagnostics retrieval permission and local connectivity to its storage endpoint |
@@ -342,3 +363,11 @@ Offline tests check configuration, private subnets, managed diagnostics,
 cloud-init wiring, retries, DNS mismatches, connection IP mismatches, TLS errors,
 timeouts, and explicit failure results. They do not replace Azure deployment
 and boot-log verification.
+
+## References and sources
+
+- [Azure Storage private endpoints](https://learn.microsoft.com/azure/storage/common/storage-private-endpoints) — Private connectivity and DNS resolution.
+- [Azure boot diagnostics](https://learn.microsoft.com/azure/virtual-machines/boot-diagnostics) — Serial log collection and managed storage.
+- [Blob Storage error codes](https://learn.microsoft.com/rest/api/storageservices/blob-service-error-codes) — Detailed error classifications, including HTTP `409`.
+- [curl TLS certificate verification](https://curl.se/docs/sslcerts.html) — Default verification and cautions about `--insecure`.
+- [Validation script](./scripts/validate_private_blob.sh) — This scenario's `PASS` conditions, accepted HTTP codes, and retries.
