@@ -18,6 +18,8 @@ SCENARIO ?= hello_world
 SCENARIO_DIR ?= infra/scenarios/$(SCENARIO)
 SCENARIO_DIR_LIST ?= $(shell find infra/scenarios -maxdepth 1 -mindepth 1 -type d -print)
 TERRAFORM ?= cd $(SCENARIO_DIR) && terraform
+TERRAFORM_LOCK_FILE_LIST ?= $(shell git ls-files 'infra/**/.terraform.lock.hcl')
+TERRAFORM_ROOT_DIR_LIST ?= $(sort $(patsubst %/,%,$(dir $(TERRAFORM_LOCK_FILE_LIST))))
 
 # Infracost
 INFRACOST_ARGS ?=
@@ -61,6 +63,18 @@ clean:
 .PHONY: init
 init:
 	$(TERRAFORM) init -lockfile=readonly
+
+.PHONY: update
+update: ## update tracked Terraform provider lock files and validate each root
+	@set -e; \
+	terraform_data_root=$$(mktemp -d); \
+	trap 'find "$$terraform_data_root" -depth -delete' 0; \
+	for dir in $(TERRAFORM_ROOT_DIR_LIST); do \
+		echo "Updating Terraform providers: $$dir"; \
+		terraform_data_dir="$$terraform_data_root/$$(printf '%s' "$$dir" | tr '/' '_')"; \
+		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" init -backend=false -upgrade -input=false; \
+		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" validate; \
+	done
 
 .PHONY: lint
 lint:

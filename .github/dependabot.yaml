@@ -11,3 +11,6 @@ updates:
       - "/infra/modules/*/*"
     schedule:
       interval: "weekly"
+    groups:
+      terraform-providers:
+        group-by: "dependency-name"

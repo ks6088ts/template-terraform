@@ -109,6 +109,25 @@ make test SCENARIO="$SCENARIO"
 make fix SCENARIO="$SCENARIO"
 ```
 
+## Terraform プロバイダーの更新
+
+Dependabot は、同じ Terraform プロバイダーの更新を、設定されたすべてのシナリオと
+モジュールディレクトリを横断して 1 つの Pull Request にまとめます。
+
+追跡対象の依存関係ロックファイルをローカルで一括更新し、各 Terraform ルートを検証するには、
+次を実行します。
+
+```bash
+make update
+```
+
+このターゲットは Git で追跡している `.terraform.lock.hcl` からルートを検出し、各ルートで
+分離した一時 Terraform データディレクトリを使用して
+`terraform init -backend=false -upgrade -input=false` と `terraform validate` を実行します。
+リモートバックエンドへの接続、既存の `.terraform/` に保存されたバックエンド設定の再利用、
+ロックファイルを追跡していないモジュールでの新規作成、`versions.tf` のプロバイダー制約の変更は
+行いません。プロバイダーの選択バージョンは、既存の制約内でのみ更新します。
+
 Azure シナリオでは、`make info` によってアクティブなサブスクリプションとテナントが表示されます。
 Makefile は現在の Azure CLI セッションから `ARM_SUBSCRIPTION_ID` を取得し、Terraform コマンドに
 エクスポートします。
@@ -172,6 +191,6 @@ Azure Preflight Validation は有効にしません。
 分離された評価やリポジトリのテストにはローカルステートを使用します。共有または永続的なステートには、
 [Azure Blob Storage バックエンドガイド](azure-blob-backend.ja.md)に従ってください。
 
-プロバイダーの制約と追跡対象のロックファイルは同時に更新します。Google プロバイダー 8 には
-破壊的変更があるため、最新の 7 系（`7.46.1`）に留めています。メジャーバージョンを採用する前に、
-OIDC シナリオへの影響を個別に確認してください。
+プロバイダー制約を変更するときは、対応する追跡対象のロックファイルも同じ変更内で更新します。
+Google プロバイダー 8 には破壊的変更があるため、最新の 7 系（`7.46.1`）に留めています。
+メジャーバージョンを採用する前に、OIDC シナリオへの影響を個別に確認してください。

@@ -117,6 +117,26 @@ make test SCENARIO="$SCENARIO"
 make fix SCENARIO="$SCENARIO"
 ```
 
+## Update Terraform providers
+
+Dependabot groups an update for the same Terraform provider across all configured
+scenario and module directories into one pull request.
+
+To update every tracked dependency lock file locally and validate each Terraform
+root, run:
+
+```bash
+make update
+```
+
+This target discovers roots from the `.terraform.lock.hcl` files tracked by Git,
+then runs `terraform init -backend=false -upgrade -input=false` and
+`terraform validate` in each root with an isolated temporary Terraform data
+directory. It does not access remote backends, reuse existing `.terraform/`
+backend settings, create lock files in modules that do not already track one,
+or change provider constraints in `versions.tf`. Provider selections are
+upgraded only within the existing constraints.
+
 For Azure scenarios, `make info` displays the active subscription and tenant.
 The Makefile derives `ARM_SUBSCRIPTION_ID` from the current Azure CLI session and
 exports it to Terraform commands.
@@ -185,7 +205,7 @@ Terraform uses local state unless the root module declares another backend. Use
 local state for isolated evaluation and repository tests. For shared or durable
 state, follow the [Azure Blob Storage backend guide](azure-blob-backend.md).
 
-Provider constraints and the tracked lock files are updated together. The Google
-provider remains on the latest 7.x release (`7.46.1`) because Google provider 8
-contains breaking changes; the OIDC scenario should be reviewed separately
-before that major version is adopted.
+When changing provider constraints, update the corresponding tracked lock files
+in the same change. The Google provider remains on the latest 7.x release
+(`7.46.1`) because Google provider 8 contains breaking changes; the OIDC
+scenario should be reviewed separately before that major version is adopted.
