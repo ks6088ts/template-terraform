@@ -46,6 +46,7 @@ EOF
 
 cat >"$fixture/bin/terraform" <<'EOF'
 #!/bin/sh
+set -eu
 printf '%s\n' "$*" >>"$fixture/terraform.calls"
 printf '%s\n' "$TF_DATA_DIR" >>"$fixture/data-dir.calls"
 case "$2" in
@@ -56,9 +57,14 @@ case "$2" in
   providers)
     [ "$3" = lock ] && [ "$4" = -platform=darwin_arm64 ] && [ "$5" = -platform=linux_amd64 ]
     [ -d "$TF_DATA_DIR" ]
+    if [ "${MOCK_CASE:-success}" = lock_error ]; then
+      printf 'Provider checksum generation failed\n' >&2
+      exit 1
+    fi
+    touch "$TF_DATA_DIR/platform-lock.complete"
     ;;
   validate)
-    [ -d "$TF_DATA_DIR" ]
+    [ -f "$TF_DATA_DIR/platform-lock.complete" ]
     [ "${MOCK_CASE:-success}" != validation_error ]
     ;;
   *) exit 1 ;;
@@ -137,6 +143,20 @@ if run_update; then
 fi
 [ ! -f "$fixture/terraform.calls" ] || fail "Lock update ran after constraint update failed"
 
+MOCK_CASE=lock_error
+export MOCK_CASE
+if run_update; then
+  fail "Expected checksum generation failure"
+fi
+[ "$(grep -c ' providers lock ' "$fixture/terraform.calls")" = 1 ] \
+  || fail "Update did not stop after checksum generation failed"
+if grep -q ' validate$' "$fixture/terraform.calls"; then
+  fail "Validation ran after checksum generation failed"
+fi
+grep -q 'Provider checksum generation failed' "$fixture/stderr" \
+  || fail "Checksum generation error was not reported"
+
+rm -f "$fixture/terraform.calls"
 MOCK_CASE=validation_error
 export MOCK_CASE
 if run_update; then

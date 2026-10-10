@@ -1,7 +1,7 @@
 ---
 title: Terraform Workflow
 description: Run repository scenarios with GNU Make or the Terraform CLI
-ms.date: 2026-10-04
+ms.date: 2026-10-11
 ms.topic: how-to
 ---
 
@@ -147,9 +147,11 @@ This also updates previously pinned providers without upgrading their major.
 Providers with conflicting locked majors are rejected instead of being unified.
 
 After updating constraints, it runs
-`terraform init -backend=false -upgrade -input=false` and `terraform validate`
-in every tracked lock file root with an isolated temporary Terraform data
-directory. It does not access remote backends, reuse existing `.terraform/`
+`terraform init -backend=false -upgrade -input=false`,
+`terraform providers lock -platform=darwin_arm64 -platform=linux_amd64`, and
+`terraform validate` in every tracked lock file root with an isolated temporary
+Terraform data directory. The locking step records checksums for both macOS
+ARM64 workstations and Linux AMD64 CI runners. It does not access remote backends, reuse existing `.terraform/`
 backend settings, or create lock files in modules that do not already track one.
 Only providers present in tracked lock files are automatically updated.
 
@@ -160,6 +162,38 @@ or the scenario's tests when reviewing provider behavior changes.
 
 Run the update workflow's offline regression tests with
 `sh scripts/tests/test_update.sh`.
+
+### Repair missing platform checksums without upgrading providers
+
+If readonly initialization reports `Provider lock file not updated` and validation
+fails with `the cached package ... does not match any of the checksums recorded
+in the dependency lock file`, the lock file may lack an `h1:` checksum for the
+runner's platform. The `zh:` checksums verify downloaded archives; validation
+also needs an `h1:` checksum for the installed, unpacked package.
+
+From the repository root, refresh all tracked lock files without changing the
+selected provider versions:
+
+```bash
+(
+  set -e
+  data_root=$(mktemp -d)
+  trap 'find "$data_root" -depth -delete' EXIT
+  git ls-files 'infra/**/.terraform.lock.hcl' >"$data_root/lock-files"
+  while IFS= read -r lock_file; do
+    root=${lock_file%/.terraform.lock.hcl}
+    export TF_DATA_DIR="$data_root/$(printf '%s' "$root" | tr '/' '_')"
+    terraform -chdir="$root" init -backend=false -lockfile=readonly -input=false
+    terraform -chdir="$root" providers lock -platform=darwin_arm64 -platform=linux_amd64
+    terraform -chdir="$root" init -backend=false -lockfile=readonly -input=false
+    terraform -chdir="$root" validate
+  done <"$data_root/lock-files"
+)
+```
+
+This procedure does not use `-upgrade`, connect to a backend, or modify existing
+local state or `.terraform/` directories. Review and commit the updated lock
+files; keep CI initialization readonly rather than bypassing checksum validation.
 
 For Azure scenarios, `make info` displays the active subscription and tenant.
 The Makefile derives `ARM_SUBSCRIPTION_ID` from the current Azure CLI session and

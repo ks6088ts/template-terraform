@@ -1,7 +1,7 @@
 ---
 title: Terraform ワークフロー
 description: GNU Make または Terraform CLI を使用してリポジトリのシナリオを実行する
-ms.date: 2026-10-04
+ms.date: 2026-10-11
 ms.topic: how-to
 ---
 
@@ -138,7 +138,10 @@ Terraform Registry にプロバイダーごとに 1 回問い合わせ、その 
 ロック済み major が異なる場合は、自動統一せずエラーにします。
 
 制約更新後、追跡済みロックファイルがある各ルートで、分離した一時 Terraform データディレクトリを
-使用して `terraform init -backend=false -upgrade -input=false` と `terraform validate` を実行します。
+使用して `terraform init -backend=false -upgrade -input=false`、
+`terraform providers lock -platform=darwin_arm64 -platform=linux_amd64`、
+`terraform validate` を実行します。ロックの生成では、macOS ARM64 の開発端末と Linux AMD64 の
+CI runner の両方の checksum を記録します。
 リモートバックエンドへの接続、既存の `.terraform/` に保存されたバックエンド設定の再利用、
 ロックファイルを追跡していないモジュールでの新規作成は行いません。
 自動更新の対象は、追跡済みロックファイルに含まれるプロバイダーのみです。
@@ -148,6 +151,37 @@ Registry の取得に失敗した場合は、制約を変更する前に停止�
 provider の動作変更を確認するときは、validate だけでなく plan やシナリオのテストも必要です。
 
 更新ワークフローのオフライン回帰テストは `sh scripts/tests/test_update.sh` で実行できます。
+
+### provider を更新せずに不足した platform checksum を補完する
+
+readonly の初期化で `Provider lock file not updated` が表示され、validate が
+`the cached package ... does not match any of the checksums recorded in the dependency
+lock file` で失敗する場合、runner の platform 用 `h1:` checksum が不足している可能性があります。
+`zh:` はダウンロードしたアーカイブの checksum であり、validate ではインストール後の
+展開済み package に対応する `h1:` checksum も必要です。
+
+リポジトリルートで、provider の選択済みバージョンを変更せず、追跡済みの全 lock file を補完します。
+
+```bash
+(
+  set -e
+  data_root=$(mktemp -d)
+  trap 'find "$data_root" -depth -delete' EXIT
+  git ls-files 'infra/**/.terraform.lock.hcl' >"$data_root/lock-files"
+  while IFS= read -r lock_file; do
+    root=${lock_file%/.terraform.lock.hcl}
+    export TF_DATA_DIR="$data_root/$(printf '%s' "$root" | tr '/' '_')"
+    terraform -chdir="$root" init -backend=false -lockfile=readonly -input=false
+    terraform -chdir="$root" providers lock -platform=darwin_arm64 -platform=linux_amd64
+    terraform -chdir="$root" init -backend=false -lockfile=readonly -input=false
+    terraform -chdir="$root" validate
+  done <"$data_root/lock-files"
+)
+```
+
+この手順は `-upgrade` を使わず、backend に接続せず、既存の local state や `.terraform/`
+ディレクトリも変更しません。更新した lock file を確認してコミットしてください。
+checksum 検証を回避せず、CI の初期化は readonly のままにします。
 
 Azure シナリオでは、`make info` によってアクティブなサブスクリプションとテナントが表示されます。
 Makefile は現在の Azure CLI セッションから `ARM_SUBSCRIPTION_ID` を取得し、Terraform コマンドに
