@@ -10,8 +10,11 @@ SUBSCRIPTION_NAME ?= $(shell az account show --query name --output tsv)
 TENANT_ID ?= $(shell az account show --query tenantId --output tsv)
 
 # azurerm provider (v4+) requires the subscription ID to be specified explicitly.
-# Export it so all Terraform targets pick it up automatically.
+# Resolve it automatically only for Azure scenarios so unrelated targets do not
+# require an authenticated Azure CLI session.
+ifneq ($(filter azure_%,$(SCENARIO)),)
 export ARM_SUBSCRIPTION_ID ?= $(SUBSCRIPTION_ID)
+endif
 
 # Terraform
 SCENARIO ?= hello_world
@@ -74,6 +77,7 @@ update: ## update provider constraints and lock files within current majors, the
 		echo "Updating Terraform providers: $$dir"; \
 		terraform_data_dir="$$terraform_data_root/$$(printf '%s' "$$dir" | tr '/' '_')"; \
 		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" init -backend=false -upgrade -input=false; \
+		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" providers lock -platform=darwin_arm64 -platform=linux_amd64; \
 		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" validate; \
 	done
 

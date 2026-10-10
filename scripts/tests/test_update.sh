@@ -53,6 +53,10 @@ case "$2" in
     [ "$3" = -backend=false ] && [ "$4" = -upgrade ] && [ "$5" = -input=false ]
     mkdir -p "$TF_DATA_DIR"
     ;;
+  providers)
+    [ "$3" = lock ] && [ "$4" = -platform=darwin_arm64 ] && [ "$5" = -platform=linux_amd64 ]
+    [ -d "$TF_DATA_DIR" ]
+    ;;
   validate)
     [ -d "$TF_DATA_DIR" ]
     [ "${MOCK_CASE:-success}" != validation_error ]
@@ -109,6 +113,8 @@ grep -q '^provider --recursive --version ~> 3.9.2 hashicorp/random infra/scenari
   "$fixture/tfupdate.calls" || fail "Pinned provider was not updated"
 [ "$(grep -c ' validate$' "$fixture/terraform.calls")" = 3 ] \
   || fail "Not all tracked roots were validated"
+[ "$(grep -c ' providers lock -platform=darwin_arm64 -platform=linux_amd64$' "$fixture/terraform.calls")" = 3 ] \
+  || fail "Checksums were not recorded for all supported CI and development platforms"
 while IFS= read -r data_dir; do
   [ ! -d "$data_dir" ] || fail "Temporary Terraform data directory was not cleaned"
 done <"$fixture/data-dir.calls"
