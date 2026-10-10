@@ -17,7 +17,7 @@ export ARM_SUBSCRIPTION_ID ?= $(SUBSCRIPTION_ID)
 SCENARIO ?= hello_world
 SCENARIO_DIR ?= infra/scenarios/$(SCENARIO)
 SCENARIO_DIR_LIST ?= $(shell find infra/scenarios -maxdepth 1 -mindepth 1 -type d -print)
-TERRAFORM ?= cd $(SCENARIO_DIR) && terraform
+TERRAFORM ?= terraform -chdir="$(SCENARIO_DIR)"
 TERRAFORM_LOCK_FILE_LIST ?= $(shell git ls-files 'infra/**/.terraform.lock.hcl')
 TERRAFORM_ROOT_DIR_LIST ?= $(sort $(patsubst %/,%,$(dir $(TERRAFORM_LOCK_FILE_LIST))))
 
