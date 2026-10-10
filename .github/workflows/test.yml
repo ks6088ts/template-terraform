@@ -51,6 +51,8 @@ jobs:
       - name: Run lint and security scan
         run: |
           make tflint trivy actionlint
+      - name: Test provider update workflow without network access
+        run: sh scripts/tests/test_update.sh
 
   # Test scenarios without authentication (hello_world, etc.)
   test-misc:

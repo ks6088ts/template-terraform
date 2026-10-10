@@ -84,8 +84,9 @@ repository root:
 make install-deps-dev
 ```
 
-This command checks for `terraform`, `az`, `gh`, `tflint`, `trivy`, `infracost`,
-and `actionlint`. It reports missing tools and fails, but does not install them.
+This command checks for `terraform`, `tfupdate`, `curl`, `jq`, `az`, `gh`,
+`tflint`, `trivy`, `infracost`, and `actionlint`. It reports missing tools and
+fails, but does not install them.
 Not all of these tools are required to deploy an individual scenario.
 Follow the scenario README's prerequisites for additional scenario-specific
 requirements.
@@ -122,20 +123,43 @@ make fix SCENARIO="$SCENARIO"
 Dependabot groups an update for the same Terraform provider across all configured
 scenario and module directories into one pull request.
 
-To update every tracked dependency lock file locally and validate each Terraform
-root, run:
+To update provider constraints and every tracked dependency lock file locally,
+then validate each Terraform root, run:
 
 ```bash
 make update
 ```
 
-This target discovers roots from the `.terraform.lock.hcl` files tracked by Git,
-then runs `terraform init -backend=false -upgrade -input=false` and
-`terraform validate` in each root with an isolated temporary Terraform data
+This target requires [tfupdate](https://github.com/minamijoyo/tfupdate), `curl`,
+and `jq` in addition to Terraform and Git. Install tfupdate from its releases,
+or with Go:
+
+```bash
+go install github.com/minamijoyo/tfupdate@v0.10.2
+```
+
+The target discovers providers and their current major versions from Git-tracked
+`.terraform.lock.hcl` files. It queries Terraform Registry once per provider
+and selects the latest stable release in that major, excluding prereleases.
+Using tfupdate's HCL parser, it updates provider constraints across scenarios
+to `~> <latest>` and across reusable modules to `>= <latest>, <next-major>.0.0`.
+This also updates previously pinned providers without upgrading their major.
+Providers with conflicting locked majors are rejected instead of being unified.
+
+After updating constraints, it runs
+`terraform init -backend=false -upgrade -input=false` and `terraform validate`
+in every tracked lock file root with an isolated temporary Terraform data
 directory. It does not access remote backends, reuse existing `.terraform/`
-backend settings, create lock files in modules that do not already track one,
-or change provider constraints in `versions.tf`. Provider selections are
-upgraded only within the existing constraints.
+backend settings, or create lock files in modules that do not already track one.
+Only providers present in tracked lock files are automatically updated.
+
+Registry lookup failures stop the target before constraints are changed.
+A later update or validation failure also stops execution; already updated files
+remain available for review with `git diff`. Validation does not replace a plan
+or the scenario's tests when reviewing provider behavior changes.
+
+Run the update workflow's offline regression tests with
+`sh scripts/tests/test_update.sh`.
 
 For Azure scenarios, `make info` displays the active subscription and tenant.
 The Makefile derives `ARM_SUBSCRIPTION_ID` from the current Azure CLI session and

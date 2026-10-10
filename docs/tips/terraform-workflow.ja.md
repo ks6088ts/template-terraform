@@ -77,8 +77,8 @@ az account show --query '{subscription:id,name:name,tenant:tenantId,state:state}
 make install-deps-dev
 ```
 
-このコマンドは `terraform`、`az`、`gh`、`tflint`、`trivy`、`infracost`、
-`actionlint` の存在を確認します。不足を報告して失敗しますが、インストールは
+このコマンドは `terraform`、`tfupdate`、`curl`、`jq`、`az`、`gh`、`tflint`、
+`trivy`、`infracost`、`actionlint` の存在を確認します。不足を報告して失敗しますが、インストールは
 行いません。これらすべてが、個々のシナリオのデプロイに必要なわけではありません。
 シナリオ固有の追加条件は各 README の「前提条件」を優先してください。
 
@@ -114,19 +114,40 @@ make fix SCENARIO="$SCENARIO"
 Dependabot は、同じ Terraform プロバイダーの更新を、設定されたすべてのシナリオと
 モジュールディレクトリを横断して 1 つの Pull Request にまとめます。
 
-追跡対象の依存関係ロックファイルをローカルで一括更新し、各 Terraform ルートを検証するには、
-次を実行します。
+プロバイダー制約と追跡対象の依存関係ロックファイルをローカルで一括更新し、
+各 Terraform ルートを検証するには、次を実行します。
 
 ```bash
 make update
 ```
 
-このターゲットは Git で追跡している `.terraform.lock.hcl` からルートを検出し、各ルートで
-分離した一時 Terraform データディレクトリを使用して
-`terraform init -backend=false -upgrade -input=false` と `terraform validate` を実行します。
+このターゲットには Terraform と Git に加えて
+[tfupdate](https://github.com/minamijoyo/tfupdate)、`curl`、`jq` が必要です。
+tfupdate はリリースからインストールするか、Go を使用します。
+
+```bash
+go install github.com/minamijoyo/tfupdate@v0.10.2
+```
+
+Git で追跡している `.terraform.lock.hcl` からプロバイダーと現在の major を検出します。
+Terraform Registry にプロバイダーごとに 1 回問い合わせ、その major 内の最新安定版を選択します。
+プレリリースは除外します。tfupdate の HCL パーサーを使用し、シナリオのプロバイダー制約を
+`~> <最新バージョン>`、再利用可能なモジュールの制約を
+`>= <最新バージョン>, <次のmajor>.0.0` に更新します。
+固定バージョンのプロバイダーも major を変えずに更新します。同じプロバイダーで
+ロック済み major が異なる場合は、自動統一せずエラーにします。
+
+制約更新後、追跡済みロックファイルがある各ルートで、分離した一時 Terraform データディレクトリを
+使用して `terraform init -backend=false -upgrade -input=false` と `terraform validate` を実行します。
 リモートバックエンドへの接続、既存の `.terraform/` に保存されたバックエンド設定の再利用、
-ロックファイルを追跡していないモジュールでの新規作成、`versions.tf` のプロバイダー制約の変更は
-行いません。プロバイダーの選択バージョンは、既存の制約内でのみ更新します。
+ロックファイルを追跡していないモジュールでの新規作成は行いません。
+自動更新の対象は、追跡済みロックファイルに含まれるプロバイダーのみです。
+
+Registry の取得に失敗した場合は、制約を変更する前に停止します。その後の更新や検証で失敗した場合も
+停止しますが、更新済みのファイルは保持するため `git diff` で確認してください。
+provider の動作変更を確認するときは、validate だけでなく plan やシナリオのテストも必要です。
+
+更新ワークフローのオフライン回帰テストは `sh scripts/tests/test_update.sh` で実行できます。
 
 Azure シナリオでは、`make info` によってアクティブなサブスクリプションとテナントが表示されます。
 Makefile は現在の Azure CLI セッションから `ARM_SUBSCRIPTION_ID` を取得し、Terraform コマンドに

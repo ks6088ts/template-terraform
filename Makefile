@@ -45,7 +45,7 @@ info-azure: ## show information about Azure
 .PHONY: install-deps-dev
 install-deps-dev: ## install dependencies for development
 	@missing=0; \
-	for tool in terraform az gh tflint trivy infracost actionlint; do \
+	for tool in terraform tfupdate curl jq az gh tflint trivy infracost actionlint; do \
 		if ! command -v "$$tool" >/dev/null 2>&1; then \
 			echo "$$tool is not installed."; \
 			missing=1; \
@@ -65,7 +65,8 @@ init:
 	$(TERRAFORM) init -lockfile=readonly
 
 .PHONY: update
-update: ## update tracked Terraform provider lock files and validate each root
+update: ## update provider constraints and lock files within current majors, then validate
+	@sh scripts/update_providers.sh $(TERRAFORM_LOCK_FILE_LIST)
 	@set -e; \
 	terraform_data_root=$$(mktemp -d); \
 	trap 'find "$$terraform_data_root" -depth -delete' 0; \
