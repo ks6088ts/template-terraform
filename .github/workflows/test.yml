@@ -121,6 +121,7 @@ jobs:
           - azure_apim_playground
           - azure_container_apps
           - azure_cosmosdb_playground
+          - azure_databricks_workspace
           - azure_datastore
           - azure_functions_flex_consumption
           # FIXME: data.azuread_service_principal requires Microsoft Graph permissions that are not available under our current test setup, so skipping for now
@@ -149,6 +150,15 @@ jobs:
         run: |
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
+      - name: Run Databricks workspace module mock tests
+        if: matrix.scenario == 'azure_databricks_workspace'
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/databricks-workspace-module
+        run: |
+          terraform -chdir=infra/modules/azure/databricks_workspace init -backend=false -input=false
+          terraform -chdir=infra/modules/azure/databricks_workspace fmt -check
+          terraform -chdir=infra/modules/azure/databricks_workspace validate
+          terraform -chdir=infra/modules/azure/databricks_workspace test
       - name: Run private connectivity module tests
         if: matrix.scenario == 'azure_hub_spoke'
         run: |

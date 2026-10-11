@@ -23,6 +23,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | [azure_apim_playground](./infra/scenarios/azure_apim_playground/README.ja.md) | 実行可能な API Management core と、opt-in の resilience、AI gateway policy、Content Safety、可観測性、cost showback をデプロイします。 |
 | [azure_container_apps](./infra/scenarios/azure_container_apps/README.ja.md) | Docker Hub イメージを使用し、外部アクセス可能な Azure Container App をデプロイします。 |
 | [azure_cosmosdb_playground](./infra/scenarios/azure_cosmosdb_playground/README.ja.md) | Cosmos DB NoSQL の CRUD、TTL、変更フィード、ベクトル・全文・ハイブリッド検索、Foundry を使った RAG を体験します。 |
+| [azure_databricks_workspace](./infra/scenarios/azure_databricks_workspace/README.ja.md) | 再利用可能なモジュールで Azure Databricks Workspace を作成し、Workspace の公開エンドポイントを有効、クラスターノードの Public IP を無効にします。 |
 | [azure_datastore](./infra/scenarios/azure_datastore/README.ja.md) | Cosmos DB、Storage、Key Vault、PostgreSQL、Monitor などの Azure データストアを、テスト用のパブリックアクセスを許可してデプロイします。 |
 | [azure_messaging](./infra/scenarios/azure_messaging/README.ja.md) | Queue Storage、Service Bus、Event Grid、Event Hubs を opt-in でデプロイし、Microsoft Entra のデータプレーン アクセスで検証します。 |
 | [azure_functions_flex_consumption](./infra/scenarios/azure_functions_flex_consumption/README.ja.md) | Python Functions を Flex Consumption にデプロイし、Microsoft Entra 認証と Function Key 認証、マネージド ID による Storage アクセス、Application Insights 上の OpenTelemetry オブザーバビリティを検証します。 |
