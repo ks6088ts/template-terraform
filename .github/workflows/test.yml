@@ -272,10 +272,10 @@ jobs:
         env:
           TF_DATA_DIR: ${{ runner.temp }}/cloudflare-scenario
         run: |
-          terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false
-          terraform -chdir=infra/scenarios/cloudflare_account fmt -check
-          terraform -chdir=infra/scenarios/cloudflare_account validate
-          terraform -chdir=infra/scenarios/cloudflare_account test
+          terraform -chdir=infra/scenarios/cloudflare_playground init -backend=false -lockfile=readonly -input=false
+          terraform -chdir=infra/scenarios/cloudflare_playground fmt -check
+          terraform -chdir=infra/scenarios/cloudflare_playground validate
+          terraform -chdir=infra/scenarios/cloudflare_playground test
       - name: Run Cloudflare account module mock tests
         env:
           TF_DATA_DIR: ${{ runner.temp }}/cloudflare-module
@@ -297,7 +297,7 @@ jobs:
       fail-fast: false
       matrix:
         scenario:
-          - cloudflare_account
+          - cloudflare_playground
     env:
       TF_INPUT: "false"
     steps:

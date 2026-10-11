@@ -56,7 +56,7 @@ provider authentication, and remote state guidance.
 
 | Scenario | Overview |
 | --- | --- |
-| [cloudflare_account](./infra/scenarios/cloudflare_account/README.md) | Reads an existing Cloudflare account through a reusable module and exposes its ID and name without changing resources. |
+| [cloudflare_playground](./infra/scenarios/cloudflare_playground/README.md) | Reads an existing Cloudflare account through a reusable module and exposes its ID and name without changing resources. |
 
 ### GitHub
 

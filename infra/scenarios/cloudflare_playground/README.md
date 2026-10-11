@@ -2,7 +2,7 @@
 description: Read an existing Cloudflare account through a reusable Terraform module
 ---
 
-# Cloudflare Account
+# Cloudflare Playground
 
 Read an existing Cloudflare account by its Account ID and expose its ID and name.
 This scenario does not create, modify, or delete Cloudflare resources.
@@ -13,7 +13,7 @@ or DNS-management example. No domain or Zone ID is required.
 
 ```mermaid
 flowchart LR
-    Scenario["cloudflare_account scenario"] -->|"account_id"| Module["cloudflare/account module"]
+    Scenario["cloudflare_playground scenario"] -->|"account_id"| Module["cloudflare/account module"]
     Module -->|"cloudflare_account datasource"| API["Cloudflare API<br/>Existing Account"]
     API -->|"ID and name"| Module
     Module -->|"account_id / account_name"| Outputs["Scenario outputs"]
@@ -50,7 +50,7 @@ See the [official instructions](https://developers.cloudflare.com/fundamentals/a
 
 ### 2. Set the Account ID
 
-Create `infra/scenarios/cloudflare_account/terraform.tfvars` in your editor if it
+Create `infra/scenarios/cloudflare_playground/terraform.tfvars` in your editor if it
 does not exist. If it already exists, update only `account_id`; do not overwrite
 other local settings. Replace the placeholder below with the ID copied from the portal:
 
@@ -87,14 +87,22 @@ before initialization. Cloudflare authentication and Azure state storage
 authentication are separate; a Cloudflare API Token cannot authenticate the Azure backend.
 Keep the environment-specific `backend.tf` out of Git.
 
+When updating an existing checkout after the scenario directory rename, move any
+Git-ignored local files (`backend.tf`, variable files, `.terraform/`, local state,
+and saved plans) into `infra/scenarios/cloudflare_playground/` as well.
+Keep the existing backend configuration, including its state key, unchanged to
+continue using the same state. Terraform module and datasource addresses, inputs,
+outputs, and authentication names are unchanged; this rename does not require a
+Terraform state migration.
+
 ### 4. Run a read-only plan
 
 Run from the repository root:
 
 ```bash
-make init SCENARIO=cloudflare_account
-make lint SCENARIO=cloudflare_account
-make plan SCENARIO=cloudflare_account
+make init SCENARIO=cloudflare_playground
+make lint SCENARIO=cloudflare_playground
+make plan SCENARIO=cloudflare_playground
 ```
 
 Only Cloudflare API authentication is required unless you configure a separate
@@ -159,10 +167,10 @@ reuse local backend settings, and disable backend initialization:
   trap 'find "$test_data" -depth -delete' EXIT
 
   export TF_DATA_DIR="$test_data/scenario"
-  terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false
-  terraform -chdir=infra/scenarios/cloudflare_account fmt -check
-  terraform -chdir=infra/scenarios/cloudflare_account validate
-  terraform -chdir=infra/scenarios/cloudflare_account test
+  terraform -chdir=infra/scenarios/cloudflare_playground init -backend=false -lockfile=readonly -input=false
+  terraform -chdir=infra/scenarios/cloudflare_playground fmt -check
+  terraform -chdir=infra/scenarios/cloudflare_playground validate
+  terraform -chdir=infra/scenarios/cloudflare_playground test
 
   export TF_DATA_DIR="$test_data/module"
   terraform -chdir=infra/modules/cloudflare/account init -backend=false -input=false

@@ -45,7 +45,7 @@ Successful authentication does not prove deployment permissions. At minimum:
 
 - Provisioning scenarios require permission to create, read, update, and delete
   their resources at the target scope. Read-only scenarios such as
-  [Cloudflare Account](../../infra/scenarios/cloudflare_account/README.md)
+  [Cloudflare Playground](../../infra/scenarios/cloudflare_playground/README.md)
   require only the documented read permissions, not resource write permissions.
   Creating an Azure Resource Group also requires permission to create that group.
 - Required Azure resource providers must be registered, or you must have

@@ -43,7 +43,7 @@ az account show --query '{subscription:id,name:name,tenant:tenantId,state:state}
 認証成功だけではデプロイ権限を確認できません。少なくとも次の条件が必要です。
 
 - リソースを作成するシナリオでは、対象スコープで、そのリソースを作成・参照・更新・削除できること。
-  [Cloudflare Account](../../infra/scenarios/cloudflare_account/README.ja.md) などの
+  [Cloudflare Playground](../../infra/scenarios/cloudflare_playground/README.ja.md) などの
   読み取り専用シナリオでは、文書に記載された読み取り権限だけが必要で、リソースの書き込み権限は不要です。
   Azure で Resource Group 自体を作る場合は、その作成権限も必要です。
 - シナリオが使用する Azure リソースプロバイダーが登録済み、またはその登録権限が

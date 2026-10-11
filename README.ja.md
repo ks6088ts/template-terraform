@@ -56,7 +56,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 
 | シナリオ | 概要 |
 | --- | --- |
-| [cloudflare_account](./infra/scenarios/cloudflare_account/README.ja.md) | 再利用可能なモジュールを通じて既存の Cloudflare Account を参照し、リソースを変更せずに ID と名前を公開します。 |
+| [cloudflare_playground](./infra/scenarios/cloudflare_playground/README.ja.md) | 再利用可能なモジュールを通じて既存の Cloudflare Account を参照し、リソースを変更せずに ID と名前を公開します。 |
 
 ### GitHub
 

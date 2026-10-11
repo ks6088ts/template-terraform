@@ -2,7 +2,7 @@
 description: 再利用可能な Terraform モジュールを通じて既存の Cloudflare Account を参照する
 ---
 
-# Cloudflare Account
+# Cloudflare Playground
 
 Account ID を指定して既存の Cloudflare Account を参照し、ID と名前を公開します。
 このシナリオは Cloudflare リソースの作成・変更・削除を行いません。
@@ -13,7 +13,7 @@ Account ID を指定して既存の Cloudflare Account を参照し、ID と名�
 
 ```mermaid
 flowchart LR
-    Scenario["cloudflare_account シナリオ"] -->|"account_id"| Module["cloudflare/account モジュール"]
+    Scenario["cloudflare_playground シナリオ"] -->|"account_id"| Module["cloudflare/account モジュール"]
     Module -->|"cloudflare_account datasource"| API["Cloudflare API<br/>既存 Account"]
     API -->|"ID と名前"| Module
     Module -->|"account_id / account_name"| Outputs["シナリオの出力"]
@@ -49,7 +49,7 @@ datasource の ID が要求した ID と一致しない場合、モジュール�
 
 ### 2. Account ID を設定する
 
-`infra/scenarios/cloudflare_account/terraform.tfvars` がなければエディターで作成します。
+`infra/scenarios/cloudflare_playground/terraform.tfvars` がなければエディターで作成します。
 すでにある場合は、他のローカル設定を上書きせず `account_id` だけを更新してください。
 次のプレースホルダーをポータルからコピーした ID に置き換えます。
 
@@ -86,14 +86,21 @@ Cloudflare の認証と Azure の state 保存先の認証は別であり、
 Cloudflare API Token では Azure backend に認証できません。
 環境固有の `backend.tf` は Git 管理外にしてください。
 
+シナリオのディレクトリ名変更後に既存のチェックアウトを更新する場合は、
+Git 管理外のローカルファイル（`backend.tf`、変数ファイル、`.terraform/`、
+ローカル state、保存済み plan）も `infra/scenarios/cloudflare_playground/` へ移動します。
+同じ state を引き続き使用するため、state の key を含む既存の backend 設定は変更しないでください。
+Terraform のモジュール・datasource のアドレス、入力、出力、認証用の名前は変更していないため、
+この改名に伴う Terraform state の移行は不要です。
+
 ### 4. 読み取り専用の plan を実行する
 
 リポジトリのルートで実行します。
 
 ```bash
-make init SCENARIO=cloudflare_account
-make lint SCENARIO=cloudflare_account
-make plan SCENARIO=cloudflare_account
+make init SCENARIO=cloudflare_playground
+make lint SCENARIO=cloudflare_playground
+make plan SCENARIO=cloudflare_playground
 ```
 
 別のリモート backend を設定しない限り、認証は Cloudflare API 用だけで十分です。
@@ -155,10 +162,10 @@ apply していない plan の新しい出力は表示しません。
   trap 'find "$test_data" -depth -delete' EXIT
 
   export TF_DATA_DIR="$test_data/scenario"
-  terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false
-  terraform -chdir=infra/scenarios/cloudflare_account fmt -check
-  terraform -chdir=infra/scenarios/cloudflare_account validate
-  terraform -chdir=infra/scenarios/cloudflare_account test
+  terraform -chdir=infra/scenarios/cloudflare_playground init -backend=false -lockfile=readonly -input=false
+  terraform -chdir=infra/scenarios/cloudflare_playground fmt -check
+  terraform -chdir=infra/scenarios/cloudflare_playground validate
+  terraform -chdir=infra/scenarios/cloudflare_playground test
 
   export TF_DATA_DIR="$test_data/module"
   terraform -chdir=infra/modules/cloudflare/account init -backend=false -input=false
