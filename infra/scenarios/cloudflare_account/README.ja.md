@@ -6,6 +6,8 @@ description: 再利用可能な Terraform モジュールを通じて既存の C
 
 Account ID を指定して既存の Cloudflare Account を参照し、ID と名前を公開します。
 このシナリオは Cloudflare リソースの作成・変更・削除を行いません。
+認証と Account 参照の例であり、Account の新規作成や DNS 管理の例ではありません。
+ドメインや Zone ID は不要です。
 
 ## アーキテクチャ
 
@@ -17,13 +19,16 @@ flowchart LR
     Module -->|"account_id / account_name"| Outputs["シナリオの出力"]
 ```
 
-datasource は [account モジュール](../../modules/cloudflare/account/)に実装します。
+datasource は [account モジュール](../../modules/cloudflare/account/)に定義されています。
 モジュールの必須入力は `account_id`、出力は `id` と `name` です。
 プロバイダー設定とシナリオでの出力名はシナリオ側で管理します。
+datasource の ID が要求した ID と一致しない場合、モジュールは plan を失敗させます。
 
 ## 前提条件
 
 - [Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)の前提条件を満たします。
+- Terraform 1.11 以降を使用します。`terraform init` は同梱されたテストも解析するため、
+  `override_during = plan` の構文が利用できるこのバージョンが必要です。
 - 既存の Account ID を取得します。小文字の 16 進数 32 文字である必要があります。
 - 対象 Account の `Account Settings: Read` に限定した API Token を使用して、
   [Cloudflare プロバイダー認証](../../../docs/tips/provider-authentication.ja.md#cloudflare)を設定します。
@@ -91,12 +96,17 @@ make lint SCENARIO=cloudflare_account
 make plan SCENARIO=cloudflare_account
 ```
 
+別のリモート backend を設定しない限り、認証は Cloudflare API 用だけで十分です。
+ローカル state を使用する場合、Azure CLI や Azure の権限は不要です。
+
 plan は実際の Cloudflare API を参照し、Cloudflare リソースを変更せずに Account の出力を表示します。
 認証や参照に失敗した場合は plan が失敗し、空の出力には置き換えません。
 `account_id` がコピーした ID と一致し、`account_name` が対象 Account の名前であることを確認します。
 Cloudflare リソースの作成・変更・削除が計画されていないことも確認してください。
 この確認に apply は不要です。`make output` は state に保存済みの出力を読むため、
 apply していない plan の新しい出力は表示しません。
+公開する出力が ID と名前だけでも、保存した plan や state には Account の設定や
+連絡先など、datasource の追加属性が含まれる場合があります。これらの成果物は機密情報として扱ってください。
 共通の操作は [Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md)を参照してください。
 
 ### トラブルシューティング
@@ -106,6 +116,7 @@ apply していない plan の新しい出力は表示しません。
 | Account ID の形式検証に失敗する | 空白を含まない小文字の 16 進数 32 文字を指定します。Zone ID やサンプル値を使用しないでください。 |
 | plan が別の Account ID を使用する | `terraform.tfvars` や他の変数ファイルの `account_id` を確認します。これらは `TF_VAR_account_id` よりも優先されます。 |
 | Token 未設定、または認証に失敗する | 同じターミナルで `CLOUDFLARE_API_TOKEN` をエクスポートします。調査のために値を表示しないでください。 |
+| プロバイダーが認証オプションの競合を報告する | API Token 認証の前に、旧来の `CLOUDFLARE_API_KEY`、`CLOUDFLARE_EMAIL`、`CLOUDFLARE_API_USER_SERVICE_KEY` を解除します。 |
 | Cloudflare の権限・参照エラーが発生する | Account ID、Token の有効期限、`Account Settings: Read`、Token の対象 Account と指定 Account の一致を確認します。 |
 | Azure Storage に対する初期化が失敗する | backend ガイドに従ってローカルの `backend.tf`、Azure CLI 認証、Blob のデータプレーン権限を確認します。Cloudflare 認証とは別です。 |
 | mock テストは成功するが実際の plan は失敗する | mock テストは実際の Account ID、Token、権限、Cloudflare への接続を検証しません。設定後に実 API の plan を実行します。 |
@@ -128,8 +139,10 @@ apply していない plan の新しい出力は表示しません。
 モジュールとシナリオのテストは mock Cloudflare provider と `command = plan` を使用します。
 資格情報は不要で、Cloudflare API の呼び出しや apply は行いません。
 プロバイダーのインストールにはネットワーク接続が必要です。
-Terraform のテスト用バージョンは
-[Terraform ワークフロー](../../../docs/tips/terraform-workflow.ja.md#前提条件)の説明を参照してください。
+テストには Terraform 1.11 以降が必要です。[CI](../../../.github/workflows/test.yml)と
+同じバージョンの使用を推奨します。
+再利用モジュールを依存先として使う場合の Terraform 1.6 互換性は維持しますが、
+同梱テストを含むモジュールを直接初期化する場合も Terraform 1.11 が必要です。
 
 リポジトリのルートで実行します。テスト用の Account ID はテスト内で設定されます。
 シナリオのテストでは、新しい一時 Terraform データディレクトリを使用して
@@ -137,38 +150,57 @@ Terraform のテスト用バージョンは
 
 ```bash
 (
-  export TF_DATA_DIR="$(mktemp -d)"
-  trap 'find "$TF_DATA_DIR" -depth -delete' EXIT
-  terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false &&
-    terraform -chdir=infra/scenarios/cloudflare_account validate &&
-    terraform -chdir=infra/scenarios/cloudflare_account test
-)
+  set -e
+  test_data=$(mktemp -d)
+  trap 'find "$test_data" -depth -delete' EXIT
 
-terraform -chdir=infra/modules/cloudflare/account init -backend=false
-terraform -chdir=infra/modules/cloudflare/account validate
-terraform -chdir=infra/modules/cloudflare/account test
+  export TF_DATA_DIR="$test_data/scenario"
+  terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false
+  terraform -chdir=infra/scenarios/cloudflare_account fmt -check
+  terraform -chdir=infra/scenarios/cloudflare_account validate
+  terraform -chdir=infra/scenarios/cloudflare_account test
+
+  export TF_DATA_DIR="$test_data/module"
+  terraform -chdir=infra/modules/cloudflare/account init -backend=false -input=false
+  terraform -chdir=infra/modules/cloudflare/account fmt -check
+  terraform -chdir=infra/modules/cloudflare/account validate
+  terraform -chdir=infra/modules/cloudflare/account test
+)
 ```
 
-ID・名前の出力、別 Account の選択、空文字・短すぎる ID・長すぎる ID・
-16 進数以外の ID の拒否を検証します。
+このサブシェルは最初の失敗で停止し、自身が作成した一時 Terraform データディレクトリだけを削除します。
+モジュールの初期化では、ローカルの `.terraform.lock.hcl` が作成される場合があります。
+モジュールの provider 制約は広いため、シナリオの lock ファイルより新しい 5.x が選択される場合があります。
+ID・名前の出力、別 Account の選択、datasource の ID 不一致の拒否、
+空文字・短すぎる ID・長すぎる ID・16 進数以外・大文字・前後の空白を含む ID の拒否を検証します。
+形式検証や mock では、同じ形式の Zone ID と Account ID を区別できません。
+実 API の plan で対象 Account を確認してください。
 
 ## CI
 
-[test.yml](../../../.github/workflows/test.yml) の `test-cloudflare` job は
-既存のプロバイダー別 job を踏襲し、GitHub Environment `dev` を使用します。
-実行前に次の Environment Secrets を設定してください。
+[test.yml](../../../.github/workflows/test.yml) の Cloudflare job は、
+mock の検証と実 API へのアクセスを分離しています。
+
+- `test-cloudflare-mock`: `-backend=false` で初期化し、書式チェック、validate、
+  シナリオとモジュールの mock テストを実行します。Cloudflare Secrets や
+  GitHub Environment `dev` の承認は不要です。
+- `test-cloudflare`: mock job の成功後に GitHub Environment `dev` を使用し、
+  `make init lint plan` で実 API を参照します。資格情報は資格情報チェックと plan の
+  step にだけ渡します。apply / destroy は行いません。
+
+実 API の job の実行前に、次の Environment Secrets を設定してください。
 
 | Secret | 用途 |
 |--------|------|
 | `CLOUDFLARE_API_TOKEN` | 対象 Account の `Account Settings: Read` 権限を持つ API Token |
 | `CLOUDFLARE_ACCOUNT_ID` | `TF_VAR_account_id` に渡す Account ID |
 
-どちらかの Secret が未設定の場合、job は明示的に失敗します。
-共通の `make _ci-test-base`（init、lint、mock テスト、実 API の plan）に続き、
-モジュールの validate と mock テストを実行します。apply / destroy は行いません。
+どちらかの Secret が未設定の場合、実 API の job は明示的に失敗し、黙ってスキップしません。
+mock job はこれらの資格情報に依存しません。
 Cloudflare の認証には OIDC ではなく API Token を使用します。
 
 ## 参考資料
 
-- [Cloudflare Account datasource](https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/data-sources/account)
+- [Cloudflare Account datasource (v5.27.0)](https://registry.terraform.io/providers/cloudflare/cloudflare/5.27.0/docs/data-sources/account)
 - [Cloudflare API Tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+- [Terraform 1.11 リリースノート（`override_during`）](https://github.com/hashicorp/terraform/blob/v1.11.0/CHANGELOG.md)

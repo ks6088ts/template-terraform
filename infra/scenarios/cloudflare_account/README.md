@@ -6,6 +6,8 @@ description: Read an existing Cloudflare account through a reusable Terraform mo
 
 Read an existing Cloudflare account by its Account ID and expose its ID and name.
 This scenario does not create, modify, or delete Cloudflare resources.
+It is an authentication and account-lookup example, not an account-provisioning
+or DNS-management example. No domain or Zone ID is required.
 
 ## Architecture
 
@@ -20,10 +22,13 @@ flowchart LR
 The [account module](../../modules/cloudflare/account/) owns the datasource.
 Its required input is `account_id`, and its outputs are `id` and `name`.
 Provider configuration and output naming belong to the scenario.
+The module fails the plan if the datasource ID does not match its requested ID.
 
 ## Prerequisites
 
 - Complete the prerequisites in the [Terraform workflow](../../../docs/tips/terraform-workflow.md).
+- Use Terraform 1.11 or later. `terraform init` also parses the included tests,
+  whose `override_during = plan` syntax requires that version.
 - Obtain an existing Account ID: exactly 32 lowercase hexadecimal characters.
 - Configure [Cloudflare provider authentication](../../../docs/tips/provider-authentication.md#cloudflare)
   with an API Token limited to the target account and `Account Settings: Read`.
@@ -92,6 +97,9 @@ make lint SCENARIO=cloudflare_account
 make plan SCENARIO=cloudflare_account
 ```
 
+Only Cloudflare API authentication is required unless you configure a separate
+remote backend. Azure CLI and Azure permissions are not required for local state.
+
 The plan reads the real Cloudflare API and shows the account outputs without
 changing Cloudflare resources. Authentication or lookup failures fail the plan;
 they are not replaced with empty outputs.
@@ -100,6 +108,9 @@ the intended account's name. No Cloudflare resource creation, update, or deletio
 should be planned.
 Apply is not required for this check. `make output` reads outputs already saved
 in state; it does not show new outputs from an unapplied plan.
+Saved plans and state can contain additional datasource attributes, such as account
+settings and contact details, even though only ID and name are exposed as outputs.
+Treat these artifacts as confidential.
 See the [Terraform workflow](../../../docs/tips/terraform-workflow.md) for shared operations.
 
 ### Troubleshooting
@@ -109,6 +120,7 @@ See the [Terraform workflow](../../../docs/tips/terraform-workflow.md) for share
 | Account ID validation fails | Use exactly 32 lowercase hexadecimal characters, without spaces; do not use a Zone ID or an example value. |
 | The plan uses a different Account ID | Check `account_id` in `terraform.tfvars` and other variable files; these override `TF_VAR_account_id`. |
 | Token missing or authentication fails | Export `CLOUDFLARE_API_TOKEN` in the same terminal. Do not print its value to diagnose the issue. |
+| Provider reports conflicting authentication options | Unset legacy `CLOUDFLARE_API_KEY`, `CLOUDFLARE_EMAIL`, and `CLOUDFLARE_API_USER_SERVICE_KEY` before using API Token authentication. |
 | Cloudflare reports an authorization or lookup error | Check the Account ID, token expiry, `Account Settings: Read`, and that the token's account scope matches the requested account. |
 | Initialization fails against Azure Storage | Check the local `backend.tf`, Azure CLI authentication, and Blob data-plane permissions using the backend guide. This is separate from Cloudflare authentication. |
 | Mock tests pass but the real plan fails | Mock tests do not verify a real Account ID, token, permissions, or Cloudflare connectivity. Run the real API plan after configuring them. |
@@ -131,8 +143,10 @@ See the [Terraform workflow](../../../docs/tips/terraform-workflow.md) for share
 The module and scenario tests use a mock Cloudflare provider and `command = plan`.
 They do not require credentials, call the Cloudflare API, or run apply.
 Provider installation still requires network access.
-Use the Terraform test version guidance in the
-[Terraform workflow](../../../docs/tips/terraform-workflow.md#prerequisites).
+The tests require Terraform 1.11 or later; prefer the version used in
+[CI](../../../.github/workflows/test.yml).
+The reusable module retains Terraform 1.6 compatibility when used as a dependency,
+but initializing it directly with its included tests also requires Terraform 1.11.
 
 Run from the repository root; the tests supply their own Account IDs.
 For the scenario, use a fresh temporary Terraform data directory so tests do not
@@ -140,38 +154,59 @@ reuse local backend settings, and disable backend initialization:
 
 ```bash
 (
-  export TF_DATA_DIR="$(mktemp -d)"
-  trap 'find "$TF_DATA_DIR" -depth -delete' EXIT
-  terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false &&
-    terraform -chdir=infra/scenarios/cloudflare_account validate &&
-    terraform -chdir=infra/scenarios/cloudflare_account test
-)
+  set -e
+  test_data=$(mktemp -d)
+  trap 'find "$test_data" -depth -delete' EXIT
 
-terraform -chdir=infra/modules/cloudflare/account init -backend=false
-terraform -chdir=infra/modules/cloudflare/account validate
-terraform -chdir=infra/modules/cloudflare/account test
+  export TF_DATA_DIR="$test_data/scenario"
+  terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false
+  terraform -chdir=infra/scenarios/cloudflare_account fmt -check
+  terraform -chdir=infra/scenarios/cloudflare_account validate
+  terraform -chdir=infra/scenarios/cloudflare_account test
+
+  export TF_DATA_DIR="$test_data/module"
+  terraform -chdir=infra/modules/cloudflare/account init -backend=false -input=false
+  terraform -chdir=infra/modules/cloudflare/account fmt -check
+  terraform -chdir=infra/modules/cloudflare/account validate
+  terraform -chdir=infra/modules/cloudflare/account test
+)
 ```
 
-Tests cover ID/name outputs, selection of another account, and rejection of
-empty, short, long, and non-hexadecimal Account IDs.
+The subshell stops on the first failure and cleans up only its temporary Terraform
+data directory. Module initialization may create a local `.terraform.lock.hcl`;
+the module's broader provider constraint can select a newer 5.x release than the
+scenario's lock file.
+Tests cover ID/name outputs, selection of another account, rejection of a
+mismatched datasource ID, and rejection of empty, short, long, non-hexadecimal,
+uppercase, and whitespace-padded Account IDs.
+Neither format validation nor mocks can distinguish a Zone ID from an Account ID
+with the same format; the real API plan checks the selected account.
 
 ## CI
 
-The `test-cloudflare` job in [test.yml](../../../.github/workflows/test.yml)
-follows the existing provider-specific jobs and uses GitHub Environment `dev`.
-Configure these environment Secrets before running it:
+The Cloudflare jobs in [test.yml](../../../.github/workflows/test.yml) separate
+mock validation from real API access:
+
+- `test-cloudflare-mock`: initializes with `-backend=false`, checks formatting,
+  validates, and runs the scenario and module mock tests. No Cloudflare Secrets or
+  GitHub Environment `dev` approval are needed.
+- `test-cloudflare`: runs after the mock job, uses GitHub Environment `dev`, and
+  runs `make init lint plan` against the real API. Credentials are exposed only to
+  the credential-check and plan step. It does not run apply or destroy.
+
+Configure these environment Secrets before running the real API job:
 
 | Secret | Purpose |
 |--------|---------|
 | `CLOUDFLARE_API_TOKEN` | API Token with `Account Settings: Read` for the target account |
 | `CLOUDFLARE_ACCOUNT_ID` | Account ID passed as `TF_VAR_account_id` |
 
-The job fails explicitly if either Secret is missing. It runs the common
-`make _ci-test-base` pipeline (init, lint, mock tests, and a real API plan),
-followed by the module's validate and mock tests. It does not run apply or destroy.
+The real API job fails explicitly if either Secret is missing; it is not silently
+skipped. The mock job remains independent of those credentials.
 Cloudflare uses API Token authentication here, not OIDC.
 
 ## References
 
-- [Cloudflare Account datasource](https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/data-sources/account)
+- [Cloudflare Account datasource (v5.27.0)](https://registry.terraform.io/providers/cloudflare/cloudflare/5.27.0/docs/data-sources/account)
 - [Cloudflare API Tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+- [Terraform 1.11 release notes (`override_during`)](https://github.com/hashicorp/terraform/blob/v1.11.0/CHANGELOG.md)

@@ -80,6 +80,7 @@ For a user API Token in the portal:
 3. Set **Permissions** to **Account → Account Settings → Read**.
 4. Under **Account Resources**, select **Include → Specific account** and the
    account whose ID you will pass to Terraform.
+   Set a suitable expiry under **TTL** and plan to rotate the token before it expires.
 5. Select **Continue to summary**, check the scope, and select **Create Token**.
 6. Save the token in a secure secret store. The secret is displayed only once;
    do not paste it into chat, commit it, or place it in a variable file.
@@ -92,12 +93,20 @@ printf '\n'
 export CLOUDFLARE_API_TOKEN
 ```
 
+These `read` options are Bash-specific. If your terminal uses zsh (the macOS
+default), start `bash` first and run both this snippet and Terraform in that Bash
+session. Do not enable shell tracing (`set -x`) while handling the token.
+Unset legacy `CLOUDFLARE_API_KEY`, `CLOUDFLARE_EMAIL`, and
+`CLOUDFLARE_API_USER_SERVICE_KEY` variables if they are set: the provider does not
+allow them alongside API Token authentication.
+
 Run Terraform in that same terminal; exporting a token there does not set it
 in an already-running VS Code task or another terminal session.
-Authentication does not select the Terraform input Account ID. Set
-`TF_VAR_account_id` as described in the scenario README.
+Authentication does not select the Terraform input Account ID. Set `account_id`
+in a variable file or through `TF_VAR_account_id` as described in the scenario README.
 For GitHub Actions, store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
 in the `dev` environment Secrets; the workflow passes the latter as `TF_VAR_account_id`.
+The separate mock-test job needs neither these Secrets nor environment approval.
 Do not write the token into Terraform variables, provider configuration, or files.
 
 ## GitHub

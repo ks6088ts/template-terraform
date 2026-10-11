@@ -92,3 +92,23 @@ run "reject_non_hexadecimal_account_id" {
 
   expect_failures = [var.account_id]
 }
+
+run "reject_uppercase_account_id" {
+  command = plan
+
+  variables {
+    account_id = "023E105F4ECEF8AD9CA31A8372D0C353"
+  }
+
+  expect_failures = [var.account_id]
+}
+
+run "reject_account_id_with_whitespace" {
+  command = plan
+
+  variables {
+    account_id = " 023e105f4ecef8ad9ca31a8372d0c353 "
+  }
+
+  expect_failures = [var.account_id]
+}
