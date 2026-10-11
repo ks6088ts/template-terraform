@@ -1,0 +1,19 @@
+{
+  "dashboards": [
+    {
+      "dashboard_id": "sales-dashboard",
+      "display_name": "Sales Overview",
+      "create_time": "2026-10-01T09:00:00Z",
+      "serialized_dashboard": "{\"pages\":[]}"
+    },
+    {
+      "dashboard_id": "operations-dashboard",
+      "display_name": "Operations Overview",
+      "create_time": "2026-10-02T09:00:00Z"
+    },
+    {
+      "dashboard_id": "undated-dashboard",
+      "display_name": "Undated Dashboard"
+    }
+  ]
+}

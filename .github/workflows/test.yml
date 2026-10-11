@@ -217,6 +217,41 @@ jobs:
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
+  # Validate Databricks reads without credentials or a real workspace.
+  test-databricks-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    permissions:
+      contents: read
+    env:
+      TF_INPUT: "false"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run Databricks scenario mock tests
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/databricks-scenario
+        run: |
+          terraform -chdir=infra/scenarios/databricks_dashboards init -backend=false -lockfile=readonly -input=false
+          terraform -chdir=infra/scenarios/databricks_dashboards fmt -check -recursive
+          terraform -chdir=infra/scenarios/databricks_dashboards validate
+          terraform -chdir=infra/scenarios/databricks_dashboards test
+      - name: Run Databricks dashboards module mock tests
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/databricks-module
+        run: |
+          terraform -chdir=infra/modules/databricks/dashboards init -backend=false -input=false
+          terraform -chdir=infra/modules/databricks/dashboards fmt -check -recursive
+          terraform -chdir=infra/modules/databricks/dashboards validate
+          terraform -chdir=infra/modules/databricks/dashboards test
+      - name: Run Databricks local API fixture tests
+        run: sh infra/modules/databricks/dashboards/tests/test_fixture_api.sh
+
   # Validate Cloudflare scenarios without credentials or API calls.
   test-cloudflare-mock:
     runs-on: ubuntu-latest

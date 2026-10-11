@@ -119,6 +119,10 @@ terraform -chdir=infra/scenarios/azure_databricks_workspace output -raw databric
 計算リソースの作成や実行は、このシナリオの対象外の別操作です。
 削除は共通の Terraform ワークフローに従い、同じ変数値を指定してください。
 
+デプロイ後に AI/BI ダッシュボードのメタデータを参照する場合は、`workspace_url` を
+別の [Databricks dashboards シナリオ](../databricks_dashboards/README.ja.md)に渡してください。
+Azure CLI 認証と Databricks provider を使用し、この Workspace やリソースは変更しません。
+
 ## テストと CI
 
 Mock plan テストでは `override_during = plan` を使用するため、
