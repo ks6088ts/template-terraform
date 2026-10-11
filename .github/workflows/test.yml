@@ -217,6 +217,41 @@ jobs:
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
+  # Validate Databricks reads without credentials or a real workspace.
+  test-databricks-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    permissions:
+      contents: read
+    env:
+      TF_INPUT: "false"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run Databricks scenario mock tests
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/databricks-scenario
+        run: |
+          terraform -chdir=infra/scenarios/databricks_playground init -backend=false -lockfile=readonly -input=false
+          terraform -chdir=infra/scenarios/databricks_playground fmt -check -recursive
+          terraform -chdir=infra/scenarios/databricks_playground validate
+          terraform -chdir=infra/scenarios/databricks_playground test
+      - name: Run Databricks dashboards module mock tests
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/databricks-module
+        run: |
+          terraform -chdir=infra/modules/databricks/dashboards init -backend=false -input=false
+          terraform -chdir=infra/modules/databricks/dashboards fmt -check -recursive
+          terraform -chdir=infra/modules/databricks/dashboards validate
+          terraform -chdir=infra/modules/databricks/dashboards test
+      - name: Run Databricks local API fixture tests
+        run: sh infra/modules/databricks/dashboards/tests/test_fixture_api.sh
+
   # Validate Cloudflare scenarios without credentials or API calls.
   test-cloudflare-mock:
     runs-on: ubuntu-latest
@@ -237,10 +272,10 @@ jobs:
         env:
           TF_DATA_DIR: ${{ runner.temp }}/cloudflare-scenario
         run: |
-          terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false
-          terraform -chdir=infra/scenarios/cloudflare_account fmt -check
-          terraform -chdir=infra/scenarios/cloudflare_account validate
-          terraform -chdir=infra/scenarios/cloudflare_account test
+          terraform -chdir=infra/scenarios/cloudflare_playground init -backend=false -lockfile=readonly -input=false
+          terraform -chdir=infra/scenarios/cloudflare_playground fmt -check
+          terraform -chdir=infra/scenarios/cloudflare_playground validate
+          terraform -chdir=infra/scenarios/cloudflare_playground test
       - name: Run Cloudflare account module mock tests
         env:
           TF_DATA_DIR: ${{ runner.temp }}/cloudflare-module
@@ -262,7 +297,7 @@ jobs:
       fail-fast: false
       matrix:
         scenario:
-          - cloudflare_account
+          - cloudflare_playground
     env:
       TF_INPUT: "false"
     steps:

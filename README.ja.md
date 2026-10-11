@@ -46,11 +46,17 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | --- | --- |
 | [google_github_oidc](./infra/scenarios/google_github_oidc/README.ja.md) | GitHub Actions から Google Cloud に OIDC で接続するための Workload Identity Federation を作成し、必要な権限を割り当てます。 |
 
+### Databricks
+
+| シナリオ | 概要 |
+| --- | --- |
+| [databricks_playground](./infra/scenarios/databricks_playground/README.ja.md) | Azure CLI 認証で既存の Azure Databricks Workspace に接続し、再利用可能な Databricks provider モジュールで AI/BI ダッシュボードのメタデータを参照します。 |
+
 ### Cloudflare
 
 | シナリオ | 概要 |
 | --- | --- |
-| [cloudflare_account](./infra/scenarios/cloudflare_account/README.ja.md) | 再利用可能なモジュールを通じて既存の Cloudflare Account を参照し、リソースを変更せずに ID と名前を公開します。 |
+| [cloudflare_playground](./infra/scenarios/cloudflare_playground/README.ja.md) | 再利用可能なモジュールを通じて既存の Cloudflare Account を参照し、リソースを変更せずに ID と名前を公開します。 |
 
 ### GitHub
 

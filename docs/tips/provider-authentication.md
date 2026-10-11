@@ -1,6 +1,6 @@
 ---
 title: Provider Authentication
-description: Authenticate Terraform providers for Azure, AWS, Google Cloud, Cloudflare, and GitHub scenarios
+description: Authenticate Terraform providers for Azure, AWS, Google Cloud, Databricks, Cloudflare, and GitHub scenarios
 ms.date: 2026-10-11
 ms.topic: how-to
 ---
@@ -64,6 +64,31 @@ in the scenario README.
 
 The Google SDK also recognizes `GOOGLE_APPLICATION_CREDENTIALS` when a credential
 file is required. Do not commit credential files.
+
+## Databricks
+
+For Azure Databricks workspace scenarios, complete the [Azure CLI login](#azure)
+with an identity in the workspace's tenant. The scenario configures the Databricks
+provider with a workspace-level HTTPS `host` and `auth_type = "azure-cli"`.
+No PAT, client secret, or Databricks CLI is required.
+
+The identity must have access to the Databricks workspace and permission to view
+the objects being read. Azure resource-management RBAC alone does not grant
+Databricks data-plane access. Do not set `DATABRICKS_ACCOUNT_ID` for these
+workspace-level operations; account-console settings are not workspace settings.
+Do not place tokens or credentials in Terraform files.
+
+Authentication does not select the Terraform input workspace. Follow the
+[Databricks playground scenario](../../infra/scenarios/databricks_playground/README.md)
+to pass the existing workspace's scheme-free `workspace_url` through
+`TF_VAR_workspace_url`. Its provider adds `https://`; do not pass the
+`databricks_host` output as this input. The `databricks_*` Makefile targets do not
+derive `ARM_SUBSCRIPTION_ID`, and this Databricks-only read does not require it.
+A separately configured Azure Blob backend still needs its own authentication.
+
+CI mock and local API fixture tests require no Azure credentials or real
+Databricks workspace. Real-workspace authentication and connectivity are
+validated only by a manual plan.
 
 ## Cloudflare
 

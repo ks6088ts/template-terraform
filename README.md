@@ -46,11 +46,17 @@ provider authentication, and remote state guidance.
 | --- | --- |
 | [google_github_oidc](./infra/scenarios/google_github_oidc/README.md) | Creates Workload Identity Federation and permissions for connecting GitHub Actions to Google Cloud through OIDC. |
 
+### Databricks
+
+| Scenario | Overview |
+| --- | --- |
+| [databricks_playground](./infra/scenarios/databricks_playground/README.md) | Connects to an existing Azure Databricks workspace with Azure CLI authentication and reads AI/BI dashboard metadata through a reusable Databricks provider module. |
+
 ### Cloudflare
 
 | Scenario | Overview |
 | --- | --- |
-| [cloudflare_account](./infra/scenarios/cloudflare_account/README.md) | Reads an existing Cloudflare account through a reusable module and exposes its ID and name without changing resources. |
+| [cloudflare_playground](./infra/scenarios/cloudflare_playground/README.md) | Reads an existing Cloudflare account through a reusable module and exposes its ID and name without changing resources. |
 
 ### GitHub
 

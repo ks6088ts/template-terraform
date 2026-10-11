@@ -1,6 +1,6 @@
 ---
 title: プロバイダー認証
-description: Azure、AWS、Google Cloud、Cloudflare、GitHub の各シナリオで Terraform プロバイダーを認証する
+description: Azure、AWS、Google Cloud、Databricks、Cloudflare、GitHub の各シナリオで Terraform プロバイダーを認証する
 ms.date: 2026-10-11
 ms.topic: how-to
 ---
@@ -63,6 +63,30 @@ gcloud auth application-default set-quota-project <project-id>
 
 資格情報ファイルが必要な場合、Google SDK は `GOOGLE_APPLICATION_CREDENTIALS` も認識します。
 資格情報ファイルをコミットしないでください。
+
+## Databricks
+
+Azure Databricks Workspace のシナリオでは、Workspace のテナントに属する主体で
+[Azure CLI にログイン](#azure)します。シナリオは Databricks provider に
+Workspace レベルの HTTPS `host` と `auth_type = "azure-cli"` を設定します。
+PAT、クライアントシークレット、Databricks CLI は不要です。
+
+実行主体には Databricks Workspace の利用権限と、参照するオブジェクトの閲覧権限が必要です。
+Azure リソース管理の RBAC だけでは、Databricks のデータプレーンにアクセスできません。
+Workspace レベルの操作では `DATABRICKS_ACCOUNT_ID` を設定しないでください。
+Account Console の設定と Workspace の設定は異なります。
+トークンや資格情報を Terraform ファイルに記述しないでください。
+
+認証だけでは Terraform の入力 Workspace は選択されません。
+[Databricks playground シナリオ](../../infra/scenarios/databricks_playground/README.ja.md)に従って、
+既存 Workspace のスキームなし `workspace_url` を `TF_VAR_workspace_url` で渡します。
+Provider が `https://` を付加するため、この入力に `databricks_host` 出力を渡さないでください。
+`databricks_*` の Makefile ターゲットは `ARM_SUBSCRIPTION_ID` を取得しません。
+Databricks provider だけで行うこの参照には不要ですが、別途設定した
+Azure Blob backend には独自の認証が必要です。
+
+CI の mock テストとローカル API fixture テストに Azure の認証情報や実 Databricks Workspace は不要です。
+実 Workspace の認証と疎通は、手動の plan でのみ検証します。
 
 ## Cloudflare
 
