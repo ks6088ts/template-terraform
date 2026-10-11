@@ -45,6 +45,12 @@ provider authentication, and remote state guidance.
 | --- | --- |
 | [google_github_oidc](./infra/scenarios/google_github_oidc/README.md) | Creates Workload Identity Federation and permissions for connecting GitHub Actions to Google Cloud through OIDC. |
 
+### Cloudflare
+
+| Scenario | Overview |
+| --- | --- |
+| [cloudflare_account](./infra/scenarios/cloudflare_account/README.md) | Reads an existing Cloudflare account through a reusable module and exposes its ID and name without changing resources. |
+
 ### GitHub
 
 | Scenario | Overview |

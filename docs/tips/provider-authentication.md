@@ -1,7 +1,7 @@
 ---
 title: Provider Authentication
-description: Authenticate Terraform providers for Azure, AWS, Google Cloud, and GitHub scenarios
-ms.date: 2026-08-13
+description: Authenticate Terraform providers for Azure, AWS, Google Cloud, Cloudflare, and GitHub scenarios
+ms.date: 2026-10-11
 ms.topic: how-to
 ---
 
@@ -64,6 +64,41 @@ in the scenario README.
 
 The Google SDK also recognizes `GOOGLE_APPLICATION_CREDENTIALS` when a credential
 file is required. Do not commit credential files.
+
+## Cloudflare
+
+The Cloudflare provider reads `CLOUDFLARE_API_TOKEN`. Create an
+[API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+limited to the intended account and the permissions needed by the scenario.
+The Account lookup scenario needs only `Account Settings: Read`.
+Use an API Token instead of a legacy Global API Key.
+
+For a user API Token in the portal:
+
+1. Open [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens/).
+2. Select **Create Token**, then create a custom token.
+3. Set **Permissions** to **Account → Account Settings → Read**.
+4. Under **Account Resources**, select **Include → Specific account** and the
+   account whose ID you will pass to Terraform.
+5. Select **Continue to summary**, check the scope, and select **Create Token**.
+6. Save the token in a secure secret store. The secret is displayed only once;
+   do not paste it into chat, commit it, or place it in a variable file.
+
+In Bash, enter the token without echoing it or including its value in shell history:
+
+```bash
+read -r -s -p "Cloudflare API token: " CLOUDFLARE_API_TOKEN
+printf '\n'
+export CLOUDFLARE_API_TOKEN
+```
+
+Run Terraform in that same terminal; exporting a token there does not set it
+in an already-running VS Code task or another terminal session.
+Authentication does not select the Terraform input Account ID. Set
+`TF_VAR_account_id` as described in the scenario README.
+For GitHub Actions, store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+in the `dev` environment Secrets; the workflow passes the latter as `TF_VAR_account_id`.
+Do not write the token into Terraform variables, provider configuration, or files.
 
 ## GitHub
 
