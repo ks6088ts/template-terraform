@@ -10,14 +10,19 @@ SUBSCRIPTION_NAME ?= $(shell az account show --query name --output tsv)
 TENANT_ID ?= $(shell az account show --query tenantId --output tsv)
 
 # azurerm provider (v4+) requires the subscription ID to be specified explicitly.
-# Export it so all Terraform targets pick it up automatically.
+# Resolve it automatically only for Azure scenarios so unrelated targets do not
+# require an authenticated Azure CLI session.
+ifneq ($(filter azure_%,$(SCENARIO)),)
 export ARM_SUBSCRIPTION_ID ?= $(SUBSCRIPTION_ID)
+endif
 
 # Terraform
 SCENARIO ?= hello_world
 SCENARIO_DIR ?= infra/scenarios/$(SCENARIO)
 SCENARIO_DIR_LIST ?= $(shell find infra/scenarios -maxdepth 1 -mindepth 1 -type d -print)
-TERRAFORM ?= cd $(SCENARIO_DIR) && terraform
+TERRAFORM ?= terraform -chdir="$(SCENARIO_DIR)"
+TERRAFORM_LOCK_FILE_LIST ?= $(shell git ls-files 'infra/**/.terraform.lock.hcl')
+TERRAFORM_ROOT_DIR_LIST ?= $(sort $(patsubst %/,%,$(dir $(TERRAFORM_LOCK_FILE_LIST))))
 
 # Infracost
 INFRACOST_ARGS ?=
@@ -43,7 +48,7 @@ info-azure: ## show information about Azure
 .PHONY: install-deps-dev
 install-deps-dev: ## install dependencies for development
 	@missing=0; \
-	for tool in terraform az gh tflint trivy infracost actionlint; do \
+	for tool in terraform tfupdate curl jq az gh tflint trivy infracost actionlint; do \
 		if ! command -v "$$tool" >/dev/null 2>&1; then \
 			echo "$$tool is not installed."; \
 			missing=1; \
@@ -61,6 +66,20 @@ clean:
 .PHONY: init
 init:
 	$(TERRAFORM) init -lockfile=readonly
+
+.PHONY: update
+update: ## update provider constraints and lock files within current majors, then validate
+	@sh scripts/update_providers.sh $(TERRAFORM_LOCK_FILE_LIST)
+	@set -e; \
+	terraform_data_root=$$(mktemp -d); \
+	trap 'find "$$terraform_data_root" -depth -delete' 0; \
+	for dir in $(TERRAFORM_ROOT_DIR_LIST); do \
+		echo "Updating Terraform providers: $$dir"; \
+		terraform_data_dir="$$terraform_data_root/$$(printf '%s' "$$dir" | tr '/' '_')"; \
+		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" init -backend=false -upgrade -input=false; \
+		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" providers lock -platform=darwin_arm64 -platform=linux_amd64; \
+		TF_DATA_DIR="$$terraform_data_dir" terraform -chdir="$$dir" validate; \
+	done
 
 .PHONY: lint
 lint:

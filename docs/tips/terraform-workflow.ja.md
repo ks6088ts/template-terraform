@@ -1,7 +1,7 @@
 ---
 title: Terraform ワークフロー
 description: GNU Make または Terraform CLI を使用してリポジトリのシナリオを実行する
-ms.date: 2026-10-04
+ms.date: 2026-10-11
 ms.topic: how-to
 ---
 
@@ -77,8 +77,8 @@ az account show --query '{subscription:id,name:name,tenant:tenantId,state:state}
 make install-deps-dev
 ```
 
-このコマンドは `terraform`、`az`、`gh`、`tflint`、`trivy`、`infracost`、
-`actionlint` の存在を確認します。不足を報告して失敗しますが、インストールは
+このコマンドは `terraform`、`tfupdate`、`curl`、`jq`、`az`、`gh`、`tflint`、
+`trivy`、`infracost`、`actionlint` の存在を確認します。不足を報告して失敗しますが、インストールは
 行いません。これらすべてが、個々のシナリオのデプロイに必要なわけではありません。
 シナリオ固有の追加条件は各 README の「前提条件」を優先してください。
 
@@ -108,6 +108,80 @@ make lint SCENARIO="$SCENARIO"
 make test SCENARIO="$SCENARIO"
 make fix SCENARIO="$SCENARIO"
 ```
+
+## Terraform プロバイダーの更新
+
+Dependabot は、同じ Terraform プロバイダーの更新を、設定されたすべてのシナリオと
+モジュールディレクトリを横断して 1 つの Pull Request にまとめます。
+
+プロバイダー制約と追跡対象の依存関係ロックファイルをローカルで一括更新し、
+各 Terraform ルートを検証するには、次を実行します。
+
+```bash
+make update
+```
+
+このターゲットには Terraform と Git に加えて
+[tfupdate](https://github.com/minamijoyo/tfupdate)、`curl`、`jq` が必要です。
+tfupdate はリリースからインストールするか、Go を使用します。
+
+```bash
+go install github.com/minamijoyo/tfupdate@v0.10.2
+```
+
+Git で追跡している `.terraform.lock.hcl` からプロバイダーと現在の major を検出します。
+Terraform Registry にプロバイダーごとに 1 回問い合わせ、その major 内の最新安定版を選択します。
+プレリリースは除外します。tfupdate の HCL パーサーを使用し、シナリオのプロバイダー制約を
+`~> <最新バージョン>`、再利用可能なモジュールの制約を
+`>= <最新バージョン>, <次のmajor>.0.0` に更新します。
+固定バージョンのプロバイダーも major を変えずに更新します。同じプロバイダーで
+ロック済み major が異なる場合は、自動統一せずエラーにします。
+
+制約更新後、追跡済みロックファイルがある各ルートで、分離した一時 Terraform データディレクトリを
+使用して `terraform init -backend=false -upgrade -input=false`、
+`terraform providers lock -platform=darwin_arm64 -platform=linux_amd64`、
+`terraform validate` を実行します。ロックの生成では、macOS ARM64 の開発端末と Linux AMD64 の
+CI runner の両方の checksum を記録します。
+リモートバックエンドへの接続、既存の `.terraform/` に保存されたバックエンド設定の再利用、
+ロックファイルを追跡していないモジュールでの新規作成は行いません。
+自動更新の対象は、追跡済みロックファイルに含まれるプロバイダーのみです。
+
+Registry の取得に失敗した場合は、制約を変更する前に停止します。その後の更新や検証で失敗した場合も
+停止しますが、更新済みのファイルは保持するため `git diff` で確認してください。
+provider の動作変更を確認するときは、validate だけでなく plan やシナリオのテストも必要です。
+
+更新ワークフローのオフライン回帰テストは `sh scripts/tests/test_update.sh` で実行できます。
+
+### provider を更新せずに不足した platform checksum を補完する
+
+readonly の初期化で `Provider lock file not updated` が表示され、validate が
+`the cached package ... does not match any of the checksums recorded in the dependency
+lock file` で失敗する場合、runner の platform 用 `h1:` checksum が不足している可能性があります。
+`zh:` はダウンロードしたアーカイブの checksum であり、validate ではインストール後の
+展開済み package に対応する `h1:` checksum も必要です。
+
+リポジトリルートで、provider の選択済みバージョンを変更せず、追跡済みの全 lock file を補完します。
+
+```bash
+(
+  set -e
+  data_root=$(mktemp -d)
+  trap 'find "$data_root" -depth -delete' EXIT
+  git ls-files 'infra/**/.terraform.lock.hcl' >"$data_root/lock-files"
+  while IFS= read -r lock_file; do
+    root=${lock_file%/.terraform.lock.hcl}
+    export TF_DATA_DIR="$data_root/$(printf '%s' "$root" | tr '/' '_')"
+    terraform -chdir="$root" init -backend=false -lockfile=readonly -input=false
+    terraform -chdir="$root" providers lock -platform=darwin_arm64 -platform=linux_amd64
+    terraform -chdir="$root" init -backend=false -lockfile=readonly -input=false
+    terraform -chdir="$root" validate
+  done <"$data_root/lock-files"
+)
+```
+
+この手順は `-upgrade` を使わず、backend に接続せず、既存の local state や `.terraform/`
+ディレクトリも変更しません。更新した lock file を確認してコミットしてください。
+checksum 検証を回避せず、CI の初期化は readonly のままにします。
 
 Azure シナリオでは、`make info` によってアクティブなサブスクリプションとテナントが表示されます。
 Makefile は現在の Azure CLI セッションから `ARM_SUBSCRIPTION_ID` を取得し、Terraform コマンドに
@@ -172,6 +246,6 @@ Azure Preflight Validation は有効にしません。
 分離された評価やリポジトリのテストにはローカルステートを使用します。共有または永続的なステートには、
 [Azure Blob Storage バックエンドガイド](azure-blob-backend.ja.md)に従ってください。
 
-プロバイダーの制約と追跡対象のロックファイルは同時に更新します。Google プロバイダー 8 には
-破壊的変更があるため、最新の 7 系（`7.46.1`）に留めています。メジャーバージョンを採用する前に、
-OIDC シナリオへの影響を個別に確認してください。
+プロバイダー制約を変更するときは、対応する追跡対象のロックファイルも同じ変更内で更新します。
+Google プロバイダー 8 には破壊的変更があるため、最新の 7 系（`7.46.1`）に留めています。
+メジャーバージョンを採用する前に、OIDC シナリオへの影響を個別に確認してください。
