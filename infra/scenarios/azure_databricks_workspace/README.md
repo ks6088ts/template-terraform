@@ -122,7 +122,7 @@ Creating or running compute is a separate operation outside this scenario.
 For cleanup, follow the shared Terraform workflow and use the same variable values.
 
 To read AI/BI dashboard metadata after deployment, pass `workspace_url` to the
-separate [Databricks dashboards scenario](../databricks_dashboards/README.md).
+separate [Databricks playground scenario](../databricks_playground/README.md).
 It uses Azure CLI authentication and the Databricks provider without changing
 this workspace or its resources.
 

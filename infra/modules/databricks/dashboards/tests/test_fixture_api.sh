@@ -55,11 +55,11 @@ unset DATABRICKS_ACCOUNT_ID DATABRICKS_WORKSPACE_ID DATABRICKS_AZURE_RESOURCE_ID
 curl --fail --silent --show-error --max-time 5 --noproxy '*' \
   "$DATABRICKS_HOST/api/2.0/lakeview/dashboards" >"$work_dir/response.json"
 
-for root in infra/modules/databricks/dashboards infra/scenarios/databricks_dashboards; do
+for root in infra/modules/databricks/dashboards infra/scenarios/databricks_playground; do
   TF_DATA_DIR="$work_dir/$(printf '%s' "$root" | tr '/' '_')"
   export TF_DATA_DIR
   printf 'Testing %s against the loopback-only Databricks API fixture\n' "$root"
-  if [ "$root" = infra/scenarios/databricks_dashboards ]; then
+  if [ "$root" = infra/scenarios/databricks_playground ]; then
     terraform -chdir="$repo_root/$root" init -backend=false -lockfile=readonly -input=false
   else
     terraform -chdir="$repo_root/$root" init -backend=false -input=false

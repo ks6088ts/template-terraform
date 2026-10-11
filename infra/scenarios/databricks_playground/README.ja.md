@@ -2,7 +2,7 @@
 description: 再利用可能な Databricks provider モジュールで既存の Azure Databricks Workspace の AI/BI ダッシュボードメタデータを参照する
 ---
 
-# Databricks Dashboards シナリオ
+# Databricks Playground シナリオ
 
 `databricks/databricks` provider と Azure CLI 認証で、既存の Azure Databricks
 Workspace に接続します。再利用可能な
@@ -86,8 +86,8 @@ Workspace 作成シナリオは apply 済みで、その state にアクセス�
 set -e
 TF_VAR_workspace_url="$(terraform -chdir=infra/scenarios/azure_databricks_workspace output -raw workspace_url)"
 export TF_VAR_workspace_url
-make init SCENARIO=databricks_dashboards
-make lint plan SCENARIO=databricks_dashboards
+make init SCENARIO=databricks_playground
+make lint plan SCENARIO=databricks_playground
 ```
 
 代入と `export` を分けることで、出力取得の失敗が `export` に隠されることを防ぎます。
@@ -97,7 +97,7 @@ make lint plan SCENARIO=databricks_dashboards
 表示名で絞り込む例です。
 
 ```shell
-terraform -chdir=infra/scenarios/databricks_dashboards plan \
+terraform -chdir=infra/scenarios/databricks_playground plan \
   -var='dashboard_name_contains=sales'
 ```
 
@@ -106,10 +106,10 @@ plan の出力に表示される一覧を確認します。plan は API を参�
 state に保存する場合は、同じ入力で明示的に apply します。
 
 ```shell
-terraform -chdir=infra/scenarios/databricks_dashboards apply \
+terraform -chdir=infra/scenarios/databricks_playground apply \
   -var='dashboard_name_contains=sales'
-terraform -chdir=infra/scenarios/databricks_dashboards output -json dashboards
-terraform -chdir=infra/scenarios/databricks_dashboards output -raw dashboard_count
+terraform -chdir=infra/scenarios/databricks_playground output -json dashboards
+terraform -chdir=infra/scenarios/databricks_playground output -raw dashboard_count
 ```
 
 この構成に管理対象リソースはありません。apply は参照結果と出力を state に記録し、
@@ -124,10 +124,10 @@ Native mock plan テストには Terraform **1.9 以上**が必要です。
 不正なホスト名の拒否を確認します。
 
 ```shell
-terraform -chdir=infra/scenarios/databricks_dashboards init -backend=false -lockfile=readonly -input=false
-terraform -chdir=infra/scenarios/databricks_dashboards fmt -check -recursive
-terraform -chdir=infra/scenarios/databricks_dashboards validate
-terraform -chdir=infra/scenarios/databricks_dashboards test
+terraform -chdir=infra/scenarios/databricks_playground init -backend=false -lockfile=readonly -input=false
+terraform -chdir=infra/scenarios/databricks_playground fmt -check -recursive
+terraform -chdir=infra/scenarios/databricks_playground validate
+terraform -chdir=infra/scenarios/databricks_playground test
 
 terraform -chdir=infra/modules/databricks/dashboards init -backend=false -input=false
 terraform -chdir=infra/modules/databricks/dashboards fmt -check -recursive

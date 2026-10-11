@@ -79,7 +79,7 @@ workspace-level operations; account-console settings are not workspace settings.
 Do not place tokens or credentials in Terraform files.
 
 Authentication does not select the Terraform input workspace. Follow the
-[Databricks dashboards scenario](../../infra/scenarios/databricks_dashboards/README.md)
+[Databricks playground scenario](../../infra/scenarios/databricks_playground/README.md)
 to pass the existing workspace's scheme-free `workspace_url` through
 `TF_VAR_workspace_url`. Its provider adds `https://`; do not pass the
 `databricks_host` output as this input. The `databricks_*` Makefile targets do not

@@ -237,10 +237,10 @@ jobs:
         env:
           TF_DATA_DIR: ${{ runner.temp }}/databricks-scenario
         run: |
-          terraform -chdir=infra/scenarios/databricks_dashboards init -backend=false -lockfile=readonly -input=false
-          terraform -chdir=infra/scenarios/databricks_dashboards fmt -check -recursive
-          terraform -chdir=infra/scenarios/databricks_dashboards validate
-          terraform -chdir=infra/scenarios/databricks_dashboards test
+          terraform -chdir=infra/scenarios/databricks_playground init -backend=false -lockfile=readonly -input=false
+          terraform -chdir=infra/scenarios/databricks_playground fmt -check -recursive
+          terraform -chdir=infra/scenarios/databricks_playground validate
+          terraform -chdir=infra/scenarios/databricks_playground test
       - name: Run Databricks dashboards module mock tests
         env:
           TF_DATA_DIR: ${{ runner.temp }}/databricks-module

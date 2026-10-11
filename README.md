@@ -50,7 +50,7 @@ provider authentication, and remote state guidance.
 
 | Scenario | Overview |
 | --- | --- |
-| [databricks_dashboards](./infra/scenarios/databricks_dashboards/README.md) | Connects to an existing Azure Databricks workspace with Azure CLI authentication and reads AI/BI dashboard metadata through a reusable Databricks provider module. |
+| [databricks_playground](./infra/scenarios/databricks_playground/README.md) | Connects to an existing Azure Databricks workspace with Azure CLI authentication and reads AI/BI dashboard metadata through a reusable Databricks provider module. |
 
 ### Cloudflare
 

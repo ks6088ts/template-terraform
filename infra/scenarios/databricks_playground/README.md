@@ -2,7 +2,7 @@
 description: Read AI/BI dashboard metadata from an existing Azure Databricks workspace with a reusable Databricks provider module
 ---
 
-# Databricks Dashboards Scenario
+# Databricks Playground Scenario
 
 Connect to an existing Azure Databricks workspace using the `databricks/databricks`
 provider and Azure CLI authentication. The reusable
@@ -88,8 +88,8 @@ its state must be accessible:
 set -e
 TF_VAR_workspace_url="$(terraform -chdir=infra/scenarios/azure_databricks_workspace output -raw workspace_url)"
 export TF_VAR_workspace_url
-make init SCENARIO=databricks_dashboards
-make lint plan SCENARIO=databricks_dashboards
+make init SCENARIO=databricks_playground
+make lint plan SCENARIO=databricks_playground
 ```
 
 The separate assignment ensures a failed output lookup is not hidden by `export`.
@@ -99,7 +99,7 @@ scheme-free hostname. No Terraform state is copied between scenarios.
 To filter by display name:
 
 ```shell
-terraform -chdir=infra/scenarios/databricks_dashboards plan \
+terraform -chdir=infra/scenarios/databricks_playground plan \
   -var='dashboard_name_contains=sales'
 ```
 
@@ -108,10 +108,10 @@ outputs for `terraform output`. To persist the preceding filtered result to
 this scenario's state, explicitly apply with the same inputs:
 
 ```shell
-terraform -chdir=infra/scenarios/databricks_dashboards apply \
+terraform -chdir=infra/scenarios/databricks_playground apply \
   -var='dashboard_name_contains=sales'
-terraform -chdir=infra/scenarios/databricks_dashboards output -json dashboards
-terraform -chdir=infra/scenarios/databricks_dashboards output -raw dashboard_count
+terraform -chdir=infra/scenarios/databricks_playground output -json dashboards
+terraform -chdir=infra/scenarios/databricks_playground output -raw dashboard_count
 ```
 
 This configuration has no managed resources: apply records the read results and
@@ -126,10 +126,10 @@ authentication and cover empty results, filter argument forwarding, exact HTTPS
 host construction, and invalid hostname rejection:
 
 ```shell
-terraform -chdir=infra/scenarios/databricks_dashboards init -backend=false -lockfile=readonly -input=false
-terraform -chdir=infra/scenarios/databricks_dashboards fmt -check -recursive
-terraform -chdir=infra/scenarios/databricks_dashboards validate
-terraform -chdir=infra/scenarios/databricks_dashboards test
+terraform -chdir=infra/scenarios/databricks_playground init -backend=false -lockfile=readonly -input=false
+terraform -chdir=infra/scenarios/databricks_playground fmt -check -recursive
+terraform -chdir=infra/scenarios/databricks_playground validate
+terraform -chdir=infra/scenarios/databricks_playground test
 
 terraform -chdir=infra/modules/databricks/dashboards init -backend=false -input=false
 terraform -chdir=infra/modules/databricks/dashboards fmt -check -recursive

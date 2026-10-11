@@ -78,7 +78,7 @@ Account Console の設定と Workspace の設定は異なります。
 トークンや資格情報を Terraform ファイルに記述しないでください。
 
 認証だけでは Terraform の入力 Workspace は選択されません。
-[Databricks dashboards シナリオ](../../infra/scenarios/databricks_dashboards/README.ja.md)に従って、
+[Databricks playground シナリオ](../../infra/scenarios/databricks_playground/README.ja.md)に従って、
 既存 Workspace のスキームなし `workspace_url` を `TF_VAR_workspace_url` で渡します。
 Provider が `https://` を付加するため、この入力に `databricks_host` 出力を渡さないでください。
 `databricks_*` の Makefile ターゲットは `ARM_SUBSCRIPTION_ID` を取得しません。
