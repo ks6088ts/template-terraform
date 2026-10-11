@@ -1,7 +1,7 @@
 ---
 title: プロバイダー認証
-description: Azure、AWS、Google Cloud、GitHub の各シナリオで Terraform プロバイダーを認証する
-ms.date: 2026-08-13
+description: Azure、AWS、Google Cloud、Cloudflare、GitHub の各シナリオで Terraform プロバイダーを認証する
+ms.date: 2026-10-11
 ms.topic: how-to
 ---
 
@@ -63,6 +63,50 @@ gcloud auth application-default set-quota-project <project-id>
 
 資格情報ファイルが必要な場合、Google SDK は `GOOGLE_APPLICATION_CREDENTIALS` も認識します。
 資格情報ファイルをコミットしないでください。
+
+## Cloudflare
+
+Cloudflare プロバイダーは `CLOUDFLARE_API_TOKEN` を読み取ります。
+対象 Account とシナリオに必要な権限に限定した
+[API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)を作成してください。
+Account の参照シナリオで必要な権限は `Account Settings: Read` のみです。
+旧来の Global API Key ではなく API Token を使用してください。
+
+ポータルでユーザー API Token を作成する手順:
+
+1. [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens/) を開きます。
+2. **Create Token** を選択し、カスタムトークンを作成します。
+3. **Permissions** を **Account → Account Settings → Read** に設定します。
+4. **Account Resources** で **Include → Specific account** を選択し、
+   Terraform に ID を渡す対象 Account を指定します。
+   **TTL** で適切な有効期限を設定し、期限前にトークンを更新する運用を決めます。
+5. **Continue to summary** で対象範囲を確認し、**Create Token** を選択します。
+6. トークンを安全なシークレットストアに保存します。秘密値は一度しか表示されません。
+   チャットへの貼り付け、コミット、変数ファイルへの記入は行わないでください。
+
+Bash では、トークンの値を画面やシェル履歴に残さずに入力できます。
+
+```bash
+read -r -s -p "Cloudflare API token: " CLOUDFLARE_API_TOKEN
+printf '\n'
+export CLOUDFLARE_API_TOKEN
+```
+
+この `read` のオプションは Bash 用です。ターミナルが zsh（macOS の既定）の場合は、
+先に `bash` を起動し、このコマンドと Terraform の両方をその Bash セッションで実行してください。
+トークンを扱う際はシェルのトレース（`set -x`）を有効にしないでください。
+旧来の `CLOUDFLARE_API_KEY`、`CLOUDFLARE_EMAIL`、
+`CLOUDFLARE_API_USER_SERVICE_KEY` が設定されている場合は解除します。
+プロバイダーは API Token 認証との併用を許可しません。
+
+Terraform は同じターミナルで実行してください。そこでエクスポートしても、
+起動済みの VS Code タスクや別のターミナルセッションには反映されません。
+認証では Terraform 入力の Account ID は選択されません。シナリオの README に従って、
+変数ファイルの `account_id` または `TF_VAR_account_id` を設定してください。
+GitHub Actions では、`dev` の Environment Secrets に `CLOUDFLARE_API_TOKEN` と
+`CLOUDFLARE_ACCOUNT_ID` を保存します。後者はワークフローで `TF_VAR_account_id` に渡されます。
+独立した mock テスト job には、これらの Secrets や Environment の承認は不要です。
+トークンを Terraform 変数、プロバイダー設定、ファイルに書き込まないでください。
 
 ## GitHub
 

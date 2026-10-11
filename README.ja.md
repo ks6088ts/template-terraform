@@ -45,6 +45,12 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | --- | --- |
 | [google_github_oidc](./infra/scenarios/google_github_oidc/README.ja.md) | GitHub Actions から Google Cloud に OIDC で接続するための Workload Identity Federation を作成し、必要な権限を割り当てます。 |
 
+### Cloudflare
+
+| シナリオ | 概要 |
+| --- | --- |
+| [cloudflare_account](./infra/scenarios/cloudflare_account/README.ja.md) | 再利用可能なモジュールを通じて既存の Cloudflare Account を参照し、リソースを変更せずに ID と名前を公開します。 |
+
 ### GitHub
 
 | シナリオ | 概要 |

@@ -207,6 +207,79 @@ jobs:
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
+  # Validate Cloudflare scenarios without credentials or API calls.
+  test-cloudflare-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    permissions:
+      contents: read
+    env:
+      TF_INPUT: "false"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run Cloudflare scenario mock tests
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/cloudflare-scenario
+        run: |
+          terraform -chdir=infra/scenarios/cloudflare_account init -backend=false -lockfile=readonly -input=false
+          terraform -chdir=infra/scenarios/cloudflare_account fmt -check
+          terraform -chdir=infra/scenarios/cloudflare_account validate
+          terraform -chdir=infra/scenarios/cloudflare_account test
+      - name: Run Cloudflare account module mock tests
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/cloudflare-module
+        run: |
+          terraform -chdir=infra/modules/cloudflare/account init -backend=false -input=false
+          terraform -chdir=infra/modules/cloudflare/account fmt -check
+          terraform -chdir=infra/modules/cloudflare/account validate
+          terraform -chdir=infra/modules/cloudflare/account test
+
+  # Read the real Cloudflare API; credentials remain mandatory.
+  test-cloudflare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test-cloudflare-mock
+    environment: dev
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - cloudflare_account
+    env:
+      TF_INPUT: "false"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run Cloudflare read-only plan (${{ matrix.scenario }})
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Set CLOUDFLARE_API_TOKEN in the dev environment secrets."
+            exit 1
+          fi
+          if [ -z "$TF_VAR_account_id" ]; then
+            echo "::error::Set CLOUDFLARE_ACCOUNT_ID in the dev environment secrets."
+            exit 1
+          fi
+          echo "Test: ${{ matrix.scenario }}"
+          make init lint plan SCENARIO=${{ matrix.scenario }}
+
   # Test GitHub scenarios (github_*)
   test-github:
     runs-on: ubuntu-latest

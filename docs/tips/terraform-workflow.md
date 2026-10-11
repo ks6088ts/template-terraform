@@ -43,9 +43,11 @@ az account show --query '{subscription:id,name:name,tenant:tenantId,state:state}
 
 Successful authentication does not prove deployment permissions. At minimum:
 
-- You must be able to create, read, update, and delete the scenario resources
-  at the target scope. Creating an Azure Resource Group also requires permission
-  to create that group.
+- Provisioning scenarios require permission to create, read, update, and delete
+  their resources at the target scope. Read-only scenarios such as
+  [Cloudflare Account](../../infra/scenarios/cloudflare_account/README.md)
+  require only the documented read permissions, not resource write permissions.
+  Creating an Azure Resource Group also requires permission to create that group.
 - Required Azure resource providers must be registered, or you must have
   permission to register them. Check the scenario's `providers.tf` for namespaces.
 - Scenarios involving role assignments, Entra ID operations, or diagnostic
