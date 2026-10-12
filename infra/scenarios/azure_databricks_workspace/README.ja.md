@@ -43,21 +43,103 @@ Resource Provider の登録にはサブスクリプション レベルの登録�
 flowchart TB
     Operator["Terraform operator<br/>Azure CLI or OIDC"]
     User["Authenticated workspace user"]
+    Control["Azure Databricks control plane<br/>UI, REST APIs, orchestration, metadata"]
+    Serverless["Serverless compute plane<br/>Databricks-managed network"]
 
     subgraph ResourceGroup["Terraform-managed Resource Group"]
         Workspace["Azure Databricks Workspace<br/>Premium by default<br/>Public workspace endpoint"]
     end
 
     subgraph ManagedResourceGroup["Databricks-managed Resource Group"]
-        Network["Managed network<br/>No public IPs on cluster nodes"]
-        Storage["Managed storage"]
+        subgraph ManagedVNet["workers-vnet 10.139.0.0/16"]
+            PublicSubnet["public-subnet<br/>10.139.0.0/18"]
+            PrivateSubnet["private-subnet<br/>10.139.64.0/18"]
+            Classic["Classic compute<br/>created only when requested"]
+        end
+        NSG["workers-sg"]
+        NAT["NAT Gateway<br/>static outbound public IP"]
+        Storage["Managed StorageV2<br/>Standard_GRS"]
+        Identity["Managed identities<br/>Unity Catalog access connector"]
+        Events["Event Grid system topic"]
     end
 
     Operator -->|AzureRM| Workspace
-    User -->|HTTPS| Workspace
-    Workspace -->|Created and managed by Databricks| Network
-    Workspace -->|Created and managed by Databricks| Storage
+    User -->|HTTPS over public endpoint| Control
+    Workspace -. Azure representation .-> Control
+    Control -->|Outbound-initiated SCC tunnel| Classic
+    PublicSubnet --- Classic
+    PrivateSubnet --- Classic
+    NSG --- PublicSubnet
+    NSG --- PrivateSubnet
+    PublicSubnet --> NAT
+    PrivateSubnet --> NAT
+    NAT --> Internet((Internet and Azure services))
+    Classic --> Storage
+    Identity --> Storage
+    Storage --> Events
+    Control --> Serverless
 ```
+
+## Tips: デプロイ済み Workspace の読み解き方
+
+以下は **2026 年 10 月 12 日**時点で Azure Resource Graph から確認した
+`rg-azuredatabricks-qukyi868` と `rg-azuredatabricks-qukyi868-managed` の
+スナップショットです。Terraform ファイルは再現可能な意図を示し、この節は実環境の状態を示します。
+Managed Resource Group は Databricks が所有するため、サービスの更新やワークロードの起動・停止に伴って
+内容が変わる可能性があります。内部リソースを直接変更または削除しないでください。
+
+### リソースの責任分界と現在のインベントリ
+
+| Resource Group | リソース | 確認した設定と役割 |
+| --- | --- | --- |
+| `rg-azuredatabricks-qukyi868` | `dbw-azuredatabricks-qukyi868` (`Microsoft.Databricks/workspaces`) | Japan East、Premium、プロビジョニング成功。Workspace の公開アクセスは有効で、`enableNoPublicIp=true`。カスタム VNet や顧客管理サブネット ID は未設定。 |
+| `rg-azuredatabricks-qukyi868-managed` | `workers-vnet` | Databricks 管理の `10.139.0.0/16` VNet。`public-subnet` と `private-subnet` を含む。顧客管理 VNet injection ではなく Managed VNet。 |
+| 同上 | `workers-sg` | 両サブネットで共有する NSG。明示的に確認できたルールは `VirtualNetwork` 内の Databricks worker 間通信を許可するもの。Azure の既定 NSG ルールも適用される。 |
+| 同上 | `nat-gateway`、`nat-gw-public-ip` | StandardV2 NAT Gateway と静的 StandardV2 Public IP。両サブネットが共有する送信経路で、NAT アイドルタイムアウトは 20 分。 |
+| 同上 | `dbstorageoksynho4zipme` | Standard_GRS StorageV2。HTTPS のみ、最小 TLS 1.2、Blob 公開アクセス無効、Microsoft 管理キー暗号化。ネットワーク ACL の既定動作は `Allow` で、共有キーアクセスは有効。 |
+| 同上 | `dbmanagedidentity` | Databricks が作成したユーザー割り当て Managed Identity。サービス管理インフラとして扱う。 |
+| 同上 | `unity-catalog-access-connector` | システム割り当て Managed Identity を持つ Access Connector。Azure ID の境界は提供するが、存在するだけで Catalog、Storage Credential、External Location の設定完了を意味しない。ARM Workspace の `defaultCatalog` は未設定。 |
+| 同上 | Storage 名を含む Event Grid System Topic | ソースが管理 Storage Account の System Topic。この Terraform が定義したワークロードパイプラインではなく、サービス管理の補助インフラ。 |
+
+確認時点では、VM、NIC、Managed Disk、Private Endpoint、Route Table、
+カスタマー マネージド キーのリソースはどちらの Resource Group にもありませんでした。
+したがって、起動中の Classic Cluster や Workspace への閉域受信経路は確認できません。
+Serverless Compute は Databricks 管理の Serverless Compute Plane で実行されるため、
+これらの Resource Group に VM として現れないのが通常です。
+
+### ワークロードパターン
+
+Workspace はプラットフォームの境界であり、この Terraform シナリオは Databricks の
+Compute やデータオブジェクトを作成しません。代表的な後続ワークロードは次のとおりです。
+
+| ワークロード | 適した Compute と処理 | このデプロイが現在提供するもの |
+| --- | --- | --- |
+| 対話型データエンジニアリング、探索、ML Notebook | 利用可能なら Serverless Notebook Compute、または Classic の Standard/Dedicated Compute。Classic VM は必要な間だけ Managed VNet に作成される。 | Workspace と Managed Network の基盤のみ。起動中の Classic Compute は未確認。 |
+| 定期 ETL/ELT、Lakeflow Jobs | Serverless Jobs または一時的な Classic Job Compute。Raw データを読み、変換して Curated Delta Table へ書き込む。 | Job や Pipeline はこのシナリオでは作成しない。 |
+| SQL 分析、Dashboard、JDBC/ODBC、BI | リージョンとアカウント機能が対応する場合は Serverless SQL Warehouse を推奨。Classic SQL Warehouse も選択肢。 | Warehouse は未作成。Azure Resource Graph では Serverless Compute Plane のインスタンスを棚卸しできない。 |
+| メダリオン Lakehouse | Bronze の取り込み、Silver の検証・標準化、Gold の提供層。Unity Catalog の Managed/External Table と Volume を優先する。 | 別の playground で 3 Schema と Notebook を追加できるが、この Workspace シナリオは Catalog や本番 Data Lake を設定しない。 |
+
+管理 Storage Account はサービスインフラです。Databricks は本番データ用途の DBFS root を非推奨とし、
+データ種別に応じて Unity Catalog Volume、External Location、Workspace Files を推奨しています。
+管理 Storage Account を汎用 Data Lake として使わず、本番データには顧客管理 ADLS Gen2 と
+最小権限の Access Connector ロール割り当てを使用してください。
+
+### ネットワークとセキュリティ上の意味
+
+- **ユーザー受信:** Workspace UI と API は公開 HTTPS Endpoint から到達可能ですが、
+  Databricks の認証と認可が必要です。この構成には Front-end Private Endpoint がありません。
+- **Classic Compute:** Secure Cluster Connectivity (`no_public_ip`) により Cluster Node に Public IP を
+  付与せず、Control Plane への接続を送信方向から開始します。`public-subnet` という名前は、
+  その Node が Public IP を持つという意味ではありません。
+- **送信:** 2 つの `/18` Subnet は同じ NAT Gateway を使用します。安定した送信元アドレスは得られますが、
+  宛先のフィルタリング機能ではありません。検査、許可リスト、Private Data Source 接続が必要な場合は、
+  顧客管理 VNet、UDR、Azure Firewall/NVA、または Databricks Network Connectivity Configuration を検討します。
+- **データアクセス:** 管理 Storage Account は現在、ネットワークアクセスを既定で許可し、
+  共有キー認証も有効です。本番 Dataset では Managed Identity、Unity Catalog ガバナンス、
+  必要に応じた Private Endpoint、独立した Storage Lifecycle と RBAC 境界を優先します。
+- **可用性とコスト:** Standard_GRS は管理 Storage をリージョン間で保護しますが、Compute の可用性は
+  選択したモードと設定に依存します。NAT Gateway、Public IP、Storage、Serverless 利用量、
+  後から作成する Classic Compute は、シナリオ自体が Cluster を作らなくても課金対象になり得ます。
 
 ## 入力
 
@@ -159,6 +241,14 @@ Azure Policy、リージョンでの可用性、デプロイ権限は実環境�
 ## 参考資料
 
 - [Terraform を使用してワークスペースをデプロイする](https://learn.microsoft.com/ja-jp/azure/databricks/dev-tools/terraform/azure-workspace)
+- [Azure Databricks の上位アーキテクチャ](https://learn.microsoft.com/ja-jp/azure/databricks/getting-started/high-level-architecture)
+- [Azure Databricks のネットワーク](https://learn.microsoft.com/ja-jp/azure/databricks/security/network/)
+- [Secure Cluster Connectivity](https://learn.microsoft.com/ja-jp/azure/databricks/security/network/classic/secure-cluster-connectivity)
+- [顧客管理 VNet injection](https://learn.microsoft.com/ja-jp/azure/databricks/security/network/classic/vnet-inject)
+- [Azure Databricks の Compute 種別](https://learn.microsoft.com/ja-jp/azure/databricks/compute/)
+- [SQL Warehouse](https://learn.microsoft.com/ja-jp/azure/databricks/compute/sql-warehouse/)
+- [Unity Catalog Storage での Azure Managed Identity](https://learn.microsoft.com/ja-jp/azure/databricks/connect/unity-catalog/cloud-storage/azure-managed-identities)
+- [DBFS root の場所と現在の推奨事項](https://learn.microsoft.com/ja-jp/azure/databricks/dbfs/root-locations)
 - [AzureRM azurerm_databricks_workspace](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/databricks_workspace)
 
 Learn の例とは異なり、リポジトリの AzureRM 5.x・random 3.x の制約に合わせ、
