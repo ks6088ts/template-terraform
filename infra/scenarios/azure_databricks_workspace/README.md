@@ -121,10 +121,14 @@ Open the returned HTTPS URL and authenticate to inspect the workspace.
 Creating or running compute is a separate operation outside this scenario.
 For cleanup, follow the shared Terraform workflow and use the same variable values.
 
-To read AI/BI dashboard metadata after deployment, pass `workspace_url` to the
+To read AI/BI dashboard metadata or add a mock-data medallion hands-on, pass `workspace_url` to the
 separate [Databricks playground scenario](../databricks_playground/README.md).
-It uses Azure CLI authentication and the Databricks provider without changing
-this workspace or its resources.
+It uses Azure CLI authentication and the Databricks provider. An optional existing
+Unity Catalog catalog enables three dedicated schemas and a SQL Notebook using
+Serverless compute. That scenario manages the hands-on objects in a separate state,
+not the Azure Workspace. Unity Catalog, managed-table storage, and Serverless
+availability must satisfy its prerequisites; this Azure configuration does not
+configure them.
 
 ## Tests and CI
 

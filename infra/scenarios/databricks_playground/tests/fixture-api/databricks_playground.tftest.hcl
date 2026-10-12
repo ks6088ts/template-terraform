@@ -5,7 +5,8 @@ provider "databricks" {
 }
 
 variables {
-  workspace_url = "adb-1234567890123456.7.azuredatabricks.net"
+  workspace_url          = "adb-1234567890123456.7.azuredatabricks.net"
+  medallion_catalog_name = null
 }
 
 run "expose_dashboard_metadata" {
@@ -24,6 +25,9 @@ run "expose_dashboard_metadata" {
       output.dashboards[0].dashboard_id == "sales-dashboard",
       output.dashboards[1].dashboard_id == "operations-dashboard",
       output.dashboards[2].dashboard_id == "undated-dashboard",
+      output.medallion == null,
+      length(module.medallion_schema) == 0,
+      length(module.medallion_notebook) == 0,
     ])
     error_message = "The scenario must expose the module metadata and count without changing the workspace URL."
   }

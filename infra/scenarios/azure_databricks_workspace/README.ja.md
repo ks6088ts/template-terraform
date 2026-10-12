@@ -119,9 +119,13 @@ terraform -chdir=infra/scenarios/azure_databricks_workspace output -raw databric
 計算リソースの作成や実行は、このシナリオの対象外の別操作です。
 削除は共通の Terraform ワークフローに従い、同じ変数値を指定してください。
 
-デプロイ後に AI/BI ダッシュボードのメタデータを参照する場合は、`workspace_url` を
+デプロイ後に AI/BI ダッシュボードの参照やモックデータによるメダリオンハンズオンを追加する場合は、`workspace_url` を
 別の [Databricks playground シナリオ](../databricks_playground/README.ja.md)に渡してください。
-Azure CLI 認証と Databricks provider を使用し、この Workspace やリソースは変更しません。
+Azure CLI 認証と Databricks provider を使用します。任意で既存の Unity Catalog カタログ名を指定すると、
+Serverless compute を使う専用スキーマ 3 個と SQL Notebook を追加します。
+ハンズオンのオブジェクトは別 state で管理し、この Azure Workspace 自体は管理しません。
+Unity Catalog、管理テーブル用ストレージ、Serverless の利用可否はリンク先の前提条件を満たす必要があり、
+この Azure 構成ではそれらを設定しません。
 
 ## テストと CI
 

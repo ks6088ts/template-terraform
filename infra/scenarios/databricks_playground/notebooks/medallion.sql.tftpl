@@ -1,0 +1,161 @@
+-- Databricks notebook source
+-- MAGIC %md
+-- MAGIC # Medallion architecture with mock orders
+-- MAGIC Use **Serverless** compute and **Run all**. No packages or external data are needed.
+-- MAGIC Terraform creates the three schemas and this notebook; this notebook creates their Delta managed tables.
+-- MAGIC **Disposable data:** every run replaces only the three dedicated tables below.
+-- MAGIC Terraform destroy deletes the dedicated schemas and **all** their contents, not the parent catalog.
+-- MAGIC Do not store unrelated data in these schemas.
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC ## 1. Bronze: preserve raw input
+-- MAGIC Ten fixed events include one duplicate order and five invalid events.
+-- MAGIC Keep raw strings and a unique ingestion sequence so cleaning and deduplication are explicit.
+
+-- COMMAND ----------
+
+CREATE OR REPLACE TABLE ${bronze_table} USING DELTA AS
+SELECT * FROM VALUES
+  (1,  'order-001', '2026-01-01', 'North', '2',  '100.00'),
+  (2,  'order-001', '2026-01-01', 'North', '2',  '100.00'),
+  (3,  'order-002', '2026-01-01', 'North', '1',  '50.00'),
+  (4,  'order-003', '2026-01-01', 'South', '3',  '20.00'),
+  (5,  'order-004', '2026-01-02', 'South', '1',  '80.00'),
+  (6,  '',          '2026-01-02', 'North', '1',  '10.00'),
+  (7,  'order-005', 'not-a-date', 'North', '1',  '10.00'),
+  (8,  'order-006', '2026-01-02', 'South', '-1', '10.00'),
+  (9,  'order-007', '2026-01-02', 'South', '1',  'not-a-price'),
+  (10, 'order-008', '2026-01-02', NULL,    '1',  '10.00')
+AS raw(ingestion_seq, order_id, order_date_raw, region, quantity_raw, unit_price_raw);
+
+-- COMMAND ----------
+
+SELECT * FROM ${bronze_table} ORDER BY ingestion_seq;
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC ## 2. Silver: validate, type, and deduplicate
+-- MAGIC `try_cast` identifies malformed values without aborting on the intentionally bad input.
+-- MAGIC Remove invalid events, then keep the latest valid event for each order by ingestion sequence.
+-- MAGIC Five invalid events and one duplicate are removed, leaving four orders.
+-- MAGIC Use DECIMAL for money rather than floating-point arithmetic.
+
+-- COMMAND ----------
+
+CREATE OR REPLACE TABLE ${silver_table} USING DELTA AS
+WITH typed AS (
+  SELECT
+    ingestion_seq,
+    trim(order_id) AS order_id,
+    try_cast(order_date_raw AS DATE) AS order_date,
+    trim(region) AS region,
+    try_cast(quantity_raw AS INT) AS quantity,
+    try_cast(unit_price_raw AS DECIMAL(18, 2)) AS unit_price
+  FROM ${bronze_table}
+), valid AS (
+  SELECT *
+  FROM typed
+  WHERE order_id IS NOT NULL AND order_id <> ''
+    AND order_date IS NOT NULL
+    AND region IS NOT NULL AND region <> ''
+    AND quantity > 0
+    AND unit_price >= 0
+), ranked AS (
+  SELECT *, row_number() OVER (
+    PARTITION BY order_id ORDER BY ingestion_seq DESC
+  ) AS event_rank
+  FROM valid
+)
+SELECT
+  order_id, order_date, region, quantity, unit_price,
+  CAST(quantity * unit_price AS DECIMAL(18, 2)) AS order_amount
+FROM ranked
+WHERE event_rank = 1;
+
+-- COMMAND ----------
+
+SELECT * FROM ${silver_table} ORDER BY order_id;
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC ## 3. Gold: aggregate daily sales by region
+-- MAGIC The four clean orders produce three daily/region groups, totaling 390.00.
+
+-- COMMAND ----------
+
+CREATE OR REPLACE TABLE ${gold_table} USING DELTA AS
+SELECT
+  order_date,
+  region,
+  count(*) AS order_count,
+  sum(quantity) AS total_quantity,
+  CAST(sum(order_amount) AS DECIMAL(18, 2)) AS total_amount
+FROM ${silver_table}
+GROUP BY order_date, region;
+
+-- COMMAND ----------
+
+SELECT * FROM ${gold_table} ORDER BY order_date, region;
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC ## 4. Verify the complete result
+-- MAGIC Expected counts: Bronze **10**, Silver **4**, Gold **3**. Total sales: **390.00**.
+-- MAGIC Every assertion raises an error on a mismatch; NULL assertion results without an error mean success.
+-- MAGIC The final check compares every Gold column in both directions, not just row counts.
+-- MAGIC Run all again: the data and the checks should remain identical.
+
+-- COMMAND ----------
+
+SELECT assert_true(count(*) = 10, 'Bronze must contain exactly 10 raw events')
+FROM ${bronze_table};
+
+-- COMMAND ----------
+
+SELECT
+  assert_true(count(*) = 4, 'Silver must contain exactly 4 clean orders'),
+  assert_true(count(DISTINCT order_id) = 4, 'Silver order IDs must be unique'),
+  assert_true(count_if(
+    order_id IS NULL OR order_id = ''
+    OR order_date IS NULL OR region IS NULL OR region = ''
+    OR quantity IS NULL OR quantity <= 0
+    OR unit_price IS NULL OR unit_price < 0
+    OR order_amount IS NULL OR order_amount <> quantity * unit_price
+  ) = 0, 'Silver must not contain invalid orders')
+FROM ${silver_table};
+
+-- COMMAND ----------
+
+SELECT
+  assert_true(count(*) = 3, 'Gold must contain exactly 3 daily sales groups'),
+  assert_true(sum(total_amount) = CAST(390.00 AS DECIMAL(18, 2)), 'Gold sales must total 390.00')
+FROM ${gold_table};
+
+-- COMMAND ----------
+
+WITH expected AS (
+  SELECT * FROM VALUES
+    (DATE '2026-01-01', 'North', CAST(2 AS BIGINT), CAST(3 AS BIGINT), CAST(250.00 AS DECIMAL(18, 2))),
+    (DATE '2026-01-01', 'South', CAST(1 AS BIGINT), CAST(3 AS BIGINT), CAST(60.00 AS DECIMAL(18, 2))),
+    (DATE '2026-01-02', 'South', CAST(1 AS BIGINT), CAST(1 AS BIGINT), CAST(80.00 AS DECIMAL(18, 2)))
+  AS result(order_date, region, order_count, total_quantity, total_amount)
+), unexpected AS (
+  SELECT * FROM ${gold_table}
+  EXCEPT ALL
+  SELECT * FROM expected
+), missing AS (
+  SELECT * FROM expected
+  EXCEPT ALL
+  SELECT * FROM ${gold_table}
+), differences AS (
+  SELECT * FROM unexpected
+  UNION ALL
+  SELECT * FROM missing
+)
+SELECT assert_true(count(*) = 0, 'Gold rows must exactly match the expected dates, regions, counts, quantities, and sales')
+FROM differences;

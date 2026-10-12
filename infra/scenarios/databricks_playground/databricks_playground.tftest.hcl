@@ -3,7 +3,8 @@ mock_provider "databricks" {
 }
 
 variables {
-  workspace_url = "adb-1234567890123456.7.azuredatabricks.net"
+  workspace_url          = "adb-1234567890123456.7.azuredatabricks.net"
+  medallion_catalog_name = null
 }
 
 run "read_workspace_dashboards" {
@@ -16,8 +17,11 @@ run "read_workspace_dashboards" {
       output.dashboard_count == module.dashboards.dashboard_count,
       output.dashboard_count == 0,
       jsonencode(output.dashboards) == jsonencode(module.dashboards.dashboards),
+      output.medallion == null,
+      length(module.medallion_schema) == 0,
+      length(module.medallion_notebook) == 0,
     ])
-    error_message = "The scenario must construct the exact HTTPS host and expose the unfiltered module outputs."
+    error_message = "The scenario must construct the exact HTTPS host, expose the dashboard outputs, and create no medallion resources by default."
   }
 
   assert {
