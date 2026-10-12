@@ -217,7 +217,7 @@ jobs:
           echo "Test: ${{ matrix.scenario }}"
           make _ci-test-base SCENARIO=${{ matrix.scenario }}
 
-  # Validate Databricks reads without credentials or a real workspace.
+  # Validate Databricks modules and scenarios without credentials or a real workspace.
   test-databricks-mock:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -249,6 +249,15 @@ jobs:
           terraform -chdir=infra/modules/databricks/dashboards fmt -check -recursive
           terraform -chdir=infra/modules/databricks/dashboards validate
           terraform -chdir=infra/modules/databricks/dashboards test
+      - name: Run Databricks schema and notebook module mock tests
+        run: |
+          for module in schema notebook; do
+            export TF_DATA_DIR="${{ runner.temp }}/databricks-$module-module"
+            terraform -chdir="infra/modules/databricks/$module" init -backend=false -input=false
+            terraform -chdir="infra/modules/databricks/$module" fmt -check
+            terraform -chdir="infra/modules/databricks/$module" validate
+            terraform -chdir="infra/modules/databricks/$module" test
+          done
       - name: Run Databricks local API fixture tests
         run: sh infra/modules/databricks/dashboards/tests/test_fixture_api.sh
 

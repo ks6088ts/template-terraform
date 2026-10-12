@@ -71,7 +71,8 @@ Azure Databricks Workspace のシナリオでは、Workspace のテナントに�
 Workspace レベルの HTTPS `host` と `auth_type = "azure-cli"` を設定します。
 PAT、クライアントシークレット、Databricks CLI は不要です。
 
-実行主体には Databricks Workspace の利用権限と、参照するオブジェクトの閲覧権限が必要です。
+実行主体には Databricks Workspace の利用権限と、シナリオのオブジェクトの参照・作成権限が必要です。
+任意の Notebook・Unity Catalog スキーマの作成権限は、各シナリオの前提条件を参照してください。
 Azure リソース管理の RBAC だけでは、Databricks のデータプレーンにアクセスできません。
 Workspace レベルの操作では `DATABRICKS_ACCOUNT_ID` を設定しないでください。
 Account Console の設定と Workspace の設定は異なります。
@@ -82,11 +83,11 @@ Account Console の設定と Workspace の設定は異なります。
 既存 Workspace のスキームなし `workspace_url` を `TF_VAR_workspace_url` で渡します。
 Provider が `https://` を付加するため、この入力に `databricks_host` 出力を渡さないでください。
 `databricks_*` の Makefile ターゲットは `ARM_SUBSCRIPTION_ID` を取得しません。
-Databricks provider だけで行うこの参照には不要ですが、別途設定した
+Databricks provider だけで行うこれらの操作には不要ですが、別途設定した
 Azure Blob backend には独自の認証が必要です。
 
 CI の mock テストとローカル API fixture テストに Azure の認証情報や実 Databricks Workspace は不要です。
-実 Workspace の認証と疎通は、手動の plan でのみ検証します。
+実 Workspace の認証と疎通には手動の plan、Notebook の実行にはシナリオの Databricks UI 上の確認が必要です。
 
 ## Cloudflare
 

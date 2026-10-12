@@ -50,7 +50,7 @@ Terraform 用の GitHub テンプレートリポジトリです。
 
 | シナリオ | 概要 |
 | --- | --- |
-| [databricks_playground](./infra/scenarios/databricks_playground/README.ja.md) | Azure CLI 認証で既存の Azure Databricks Workspace に接続し、再利用可能な Databricks provider モジュールで AI/BI ダッシュボードのメタデータを参照します。 |
+| [databricks_playground](./infra/scenarios/databricks_playground/README.ja.md) | 既存の Azure Databricks Workspace で AI/BI ダッシュボードを参照し、任意でモックデータによる Bronze/Silver/Gold Notebook ハンズオンを配置します。再利用可能なモジュール、Unity Catalog、Serverless compute を使用します。 |
 
 ### Cloudflare
 

@@ -72,8 +72,9 @@ with an identity in the workspace's tenant. The scenario configures the Databric
 provider with a workspace-level HTTPS `host` and `auth_type = "azure-cli"`.
 No PAT, client secret, or Databricks CLI is required.
 
-The identity must have access to the Databricks workspace and permission to view
-the objects being read. Azure resource-management RBAC alone does not grant
+The identity must have access to the Databricks workspace and permission to read
+or create the scenario's objects. See the scenario prerequisites for optional
+Notebook and Unity Catalog schema creation privileges. Azure resource-management RBAC alone does not grant
 Databricks data-plane access. Do not set `DATABRICKS_ACCOUNT_ID` for these
 workspace-level operations; account-console settings are not workspace settings.
 Do not place tokens or credentials in Terraform files.
@@ -83,12 +84,12 @@ Authentication does not select the Terraform input workspace. Follow the
 to pass the existing workspace's scheme-free `workspace_url` through
 `TF_VAR_workspace_url`. Its provider adds `https://`; do not pass the
 `databricks_host` output as this input. The `databricks_*` Makefile targets do not
-derive `ARM_SUBSCRIPTION_ID`, and this Databricks-only read does not require it.
+derive `ARM_SUBSCRIPTION_ID`, and these Databricks-provider operations do not require it.
 A separately configured Azure Blob backend still needs its own authentication.
 
 CI mock and local API fixture tests require no Azure credentials or real
-Databricks workspace. Real-workspace authentication and connectivity are
-validated only by a manual plan.
+Databricks workspace. Real-workspace authentication and connectivity require a
+manual plan; Notebook execution requires the scenario's Databricks UI checks.
 
 ## Cloudflare
 
