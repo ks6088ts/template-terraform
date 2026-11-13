@@ -39,7 +39,7 @@ jobs:
         with:
           tflint_version: ${{ env.TFLINT_VERSION }}
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+        uses: aquasecurity/setup-trivy@a0e5e8d8f5936915ac0292775f38a64d6fabe7a7
         with:
           version: ${{ env.TRIVY_VERSION }}
       - name: Install actionlint
