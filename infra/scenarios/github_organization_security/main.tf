@@ -1,6 +1,10 @@
+locals {
+  manage_organization = var.organization != null
+}
+
 module "organization_security_defaults" {
   source = "../../modules/github/organization_security_defaults"
-  count  = var.enable_security_defaults ? 1 : 0
+  count  = local.manage_organization && var.enable_security_defaults ? 1 : 0
 
   billing_email = var.billing_email
 
@@ -21,7 +25,7 @@ module "organization_security_defaults" {
 
 module "organization_actions_policy" {
   source = "../../modules/github/organization_actions_policy"
-  count  = var.enable_actions_policy ? 1 : 0
+  count  = local.manage_organization && var.enable_actions_policy ? 1 : 0
 
   organization_slug                = var.organization
   default_workflow_permissions     = var.actions_policy.default_workflow_permissions
@@ -36,7 +40,7 @@ module "organization_actions_policy" {
 
 module "organization_security_manager" {
   source = "../../modules/github/organization_security_manager"
-  count  = var.security_manager_team == null ? 0 : 1
+  count  = local.manage_organization && var.security_manager_team != null ? 1 : 0
 
   team_slug        = var.security_manager_team.slug
   create_team      = var.security_manager_team.create
@@ -45,7 +49,7 @@ module "organization_security_manager" {
 
 module "organization_ruleset" {
   source = "../../modules/github/organization_ruleset"
-  count  = var.enable_organization_ruleset ? 1 : 0
+  count  = local.manage_organization && var.enable_organization_ruleset ? 1 : 0
 
   name                    = var.organization_ruleset.name
   enforcement             = var.organization_ruleset.enforcement

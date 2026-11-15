@@ -76,7 +76,7 @@ Verify the result with ghqr:
 
 | Name | Type | Description | Default |
 |------|------|-------------|---------|
-| `enterprise_slug` | `string` | Lowercase enterprise slug | (required) |
+| `enterprise_slug` | `string` | Lowercase enterprise slug; `null` manages nothing | `null` |
 | `advanced_security_enabled_for_new_repositories` | `bool` | ent-ghas-001; needs GHAS licenses | `true` |
 | `secret_scanning_enabled_for_new_repositories` | `bool` | ent-ghas-002 | `true` |
 | `secret_scanning_push_protection_enabled_for_new_repositories` | `bool` | ent-ghas-003 | `true` |
@@ -87,8 +87,8 @@ Verify the result with ghqr:
 
 | Name | Description |
 |------|-------------|
-| `enterprise_slug` | Slug of the managed enterprise |
-| `security_defaults` | Applied security defaults for new repositories |
+| `enterprise_slug` | Slug of the managed enterprise, or `null` |
+| `security_defaults` | Applied security defaults for new repositories, or `null` |
 
 ## Offline tests
 

@@ -1,9 +1,10 @@
 variable "enterprise_slug" {
-  description = "Slug of the GitHub Enterprise Cloud enterprise"
+  description = "Slug of the GitHub Enterprise Cloud enterprise. null manages nothing."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9-]*$", var.enterprise_slug))
+    condition     = var.enterprise_slug == null || can(regex("^[a-z0-9][a-z0-9-]*$", var.enterprise_slug))
     error_message = "enterprise_slug must be a lowercase enterprise slug."
   }
 }

@@ -45,3 +45,19 @@ run "reject_invalid_enterprise_slug" {
 
   expect_failures = [var.enterprise_slug]
 }
+
+run "no_enterprise_manages_nothing" {
+  command = plan
+
+  variables {
+    enterprise_slug = null
+  }
+
+  assert {
+    condition = alltrue([
+      output.enterprise_slug == null,
+      output.security_defaults == null,
+    ])
+    error_message = "Without enterprise_slug the scenario must not manage any enterprise."
+  }
+}

@@ -110,7 +110,7 @@ in rule insights before switching to `active`.
 
 | Name | Type | Description | Default |
 |------|------|-------------|---------|
-| `organization` | `string` | Organization login | (required) |
+| `organization` | `string` | Organization login; `null` manages nothing | `null` |
 | `billing_email` | `string` | Billing email; required when `enable_security_defaults` is true | `null` |
 | `enable_security_defaults` | `bool` | Manage organization settings and new repository defaults | `true` |
 | `security_defaults` | `object` | Overrides for `organization_security_defaults`; omitted values use the module defaults | `{}` |
@@ -124,7 +124,7 @@ in rule insights before switching to `active`.
 
 | Name | Description |
 |------|-------------|
-| `organization` | Organization login |
+| `organization` | Organization login, or `null` |
 | `security_defaults` | Applied organization security settings, or `null` |
 | `actions_default_workflow_permissions` | Default `GITHUB_TOKEN` permission, or `null` |
 | `actions_allowed_actions` | Allowed actions policy, or `null` |

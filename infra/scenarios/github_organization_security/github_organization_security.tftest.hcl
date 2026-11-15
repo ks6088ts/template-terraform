@@ -161,3 +161,24 @@ run "reject_admin_base_permission" {
 
   expect_failures = [var.security_defaults]
 }
+
+run "no_organization_manages_nothing" {
+  command = plan
+
+  variables {
+    organization                = null
+    billing_email               = null
+    security_manager_team       = { slug = "security-managers" }
+    enable_organization_ruleset = true
+  }
+
+  assert {
+    condition = alltrue([
+      output.security_defaults == null,
+      output.actions_allowed_actions == null,
+      output.security_manager_team_slug == null,
+      output.organization_ruleset_name == null,
+    ])
+    error_message = "Without organization the scenario must not manage any organization setting."
+  }
+}

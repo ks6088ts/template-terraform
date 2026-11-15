@@ -75,7 +75,7 @@ ghqr で結果を確認します。
 
 | 名前 | 型 | 説明 | 既定値 |
 |------|------|------|--------|
-| `enterprise_slug` | `string` | 小文字の Enterprise slug | (必須) |
+| `enterprise_slug` | `string` | 小文字の Enterprise slug。`null` の場合は何も管理しない | `null` |
 | `advanced_security_enabled_for_new_repositories` | `bool` | ent-ghas-001。GHAS ライセンスが必要 | `true` |
 | `secret_scanning_enabled_for_new_repositories` | `bool` | ent-ghas-002 | `true` |
 | `secret_scanning_push_protection_enabled_for_new_repositories` | `bool` | ent-ghas-003 | `true` |
@@ -86,8 +86,8 @@ ghqr で結果を確認します。
 
 | 名前 | 説明 |
 |------|------|
-| `enterprise_slug` | 管理対象の Enterprise slug |
-| `security_defaults` | 適用した新規リポジトリのセキュリティ既定値 |
+| `enterprise_slug` | 管理対象の Enterprise slug、または `null` |
+| `security_defaults` | 適用した新規リポジトリのセキュリティ既定値、または `null` |
 
 ## オフラインテスト
 

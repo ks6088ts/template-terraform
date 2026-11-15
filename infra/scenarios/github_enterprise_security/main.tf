@@ -1,5 +1,6 @@
 module "enterprise_security_defaults" {
   source = "../../modules/github/enterprise_security_defaults"
+  count  = var.enterprise_slug == null ? 0 : 1
 
   enterprise_slug                                              = var.enterprise_slug
   advanced_security_enabled_for_new_repositories               = var.advanced_security_enabled_for_new_repositories

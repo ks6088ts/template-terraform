@@ -108,7 +108,7 @@ Organization Ruleset は `enforcement = "evaluate"` で開始し、rule insights
 
 | 名前 | 型 | 説明 | 既定値 |
 |------|------|------|--------|
-| `organization` | `string` | Organization のログイン名 | (必須) |
+| `organization` | `string` | Organization のログイン名。`null` の場合は何も管理しない | `null` |
 | `billing_email` | `string` | 請求先メールアドレス。`enable_security_defaults` が true の場合は必須 | `null` |
 | `enable_security_defaults` | `bool` | Organization の設定と新規リポジトリの既定値を管理するか | `true` |
 | `security_defaults` | `object` | `organization_security_defaults` の上書き。省略した値はモジュールの既定値 | `{}` |
@@ -122,7 +122,7 @@ Organization Ruleset は `enforcement = "evaluate"` で開始し、rule insights
 
 | 名前 | 説明 |
 |------|------|
-| `organization` | Organization のログイン名 |
+| `organization` | Organization のログイン名、または `null` |
 | `security_defaults` | 適用した Organization のセキュリティ設定、または `null` |
 | `actions_default_workflow_permissions` | `GITHUB_TOKEN` の既定の権限、または `null` |
 | `actions_allowed_actions` | 許可する Action のポリシー、または `null` |

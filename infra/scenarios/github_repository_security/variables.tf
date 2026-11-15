@@ -1,6 +1,7 @@
 variable "github_owner" {
   description = "GitHub owner (user or organization) of the repositories"
   type        = string
+  default     = "ks6088ts"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9-]*$", var.github_owner))

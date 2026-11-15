@@ -1,9 +1,10 @@
 variable "organization" {
-  description = "Login (slug) of the GitHub organization"
+  description = "Login (slug) of the GitHub organization. null manages nothing."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9-]*$", var.organization))
+    condition     = var.organization == null || can(regex("^[A-Za-z0-9][A-Za-z0-9-]*$", var.organization))
     error_message = "organization must be a GitHub organization login."
   }
 }

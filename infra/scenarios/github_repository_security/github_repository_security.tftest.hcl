@@ -106,3 +106,16 @@ run "reject_invalid_repository_name" {
 
   expect_failures = [var.repositories]
 }
+
+run "default_inputs_manage_nothing" {
+  command = plan
+
+  variables {
+    repositories = {}
+  }
+
+  assert {
+    condition     = output.repositories == {}
+    error_message = "The default inputs must not manage any repository."
+  }
+}

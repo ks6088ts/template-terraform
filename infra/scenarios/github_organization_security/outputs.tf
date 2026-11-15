@@ -1,5 +1,5 @@
 output "organization" {
-  description = "Login of the managed organization"
+  description = "Login of the managed organization, or null"
   value       = var.organization
 }
 

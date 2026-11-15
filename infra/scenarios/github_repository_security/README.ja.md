@@ -129,7 +129,7 @@ ghqr で結果を確認します。
 
 | 名前 | 型 | 説明 | 既定値 |
 |------|------|------|--------|
-| `github_owner` | `string` | リポジトリを所有する GitHub ユーザーまたは Organization | (必須) |
+| `github_owner` | `string` | リポジトリを所有する GitHub ユーザーまたは Organization | `"ks6088ts"` |
 | `repositories` | `map(object)` | リポジトリ名をキーとするマップ。属性は下表を参照 | `{}` |
 
 `repositories` の主な属性（省略した値はモジュールの既定値を使用）:

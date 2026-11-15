@@ -133,7 +133,7 @@ Verify the result with ghqr:
 
 | Name | Type | Description | Default |
 |------|------|-------------|---------|
-| `github_owner` | `string` | GitHub user or organization that owns the repositories | (required) |
+| `github_owner` | `string` | GitHub user or organization that owns the repositories | `"ks6088ts"` |
 | `repositories` | `map(object)` | Repositories keyed by name; see the attributes below | `{}` |
 
 Main `repositories` attributes (omitted values use the module defaults):
