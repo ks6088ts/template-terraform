@@ -63,6 +63,9 @@ provider authentication, and remote state guidance.
 | Scenario | Overview |
 | --- | --- |
 | [github_secrets](./infra/scenarios/github_secrets/README.md) | Creates and manages GitHub repository environment secrets for use in GitHub Actions workflows. |
+| [github_enterprise_security](./infra/scenarios/github_enterprise_security/README.md) | Applies the ghqr enterprise recommendations: GHAS, secret scanning, and push protection defaults for new repositories. |
+| [github_organization_security](./infra/scenarios/github_organization_security/README.md) | Applies the ghqr organization recommendations: security defaults, base permission, Actions policy, security manager team, and an optional organization ruleset. |
+| [github_repository_security](./infra/scenarios/github_repository_security/README.md) | Applies the ghqr repository recommendations to many repositories: rulesets, Dependabot, Actions policy, team access, and security files such as SECURITY.md and CodeQL. |
 
 ### Other
 

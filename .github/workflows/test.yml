@@ -334,6 +334,48 @@ jobs:
           echo "Test: ${{ matrix.scenario }}"
           make init lint plan SCENARIO=${{ matrix.scenario }}
 
+  # Validate GitHub security scenarios and modules without credentials or API calls.
+  test-github-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    permissions:
+      contents: read
+    env:
+      TF_INPUT: "false"
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - github_enterprise_security
+          - github_organization_security
+          - github_repository_security
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Run GitHub scenario mock tests (${{ matrix.scenario }})
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/${{ matrix.scenario }}
+        run: |
+          terraform -chdir="infra/scenarios/${{ matrix.scenario }}" init -backend=false -lockfile=readonly -input=false
+          terraform -chdir="infra/scenarios/${{ matrix.scenario }}" fmt -check -recursive
+          terraform -chdir="infra/scenarios/${{ matrix.scenario }}" validate
+          terraform -chdir="infra/scenarios/${{ matrix.scenario }}" test
+      - name: Run GitHub ruleset and repository module mock tests
+        if: matrix.scenario == 'github_repository_security'
+        run: |
+          for module in repository repository_ruleset; do
+            export TF_DATA_DIR="${{ runner.temp }}/github-$module-module"
+            terraform -chdir="infra/modules/github/$module" init -backend=false -input=false
+            terraform -chdir="infra/modules/github/$module" fmt -check
+            terraform -chdir="infra/modules/github/$module" validate
+            terraform -chdir="infra/modules/github/$module" test
+          done
+
   # Test GitHub scenarios (github_*)
   test-github:
     runs-on: ubuntu-latest
