@@ -70,29 +70,81 @@ repo-sec-002、repo-sec-003（未解決の Dependabot アラート）と repo-me
 
 `infra/scenarios/github_repository_security/terraform.tfvars` を作成します。
 このファイルは Git 管理外です。
+次の例は、このシナリオで設定できる中で最も厳しい構成を Public リポジトリに適用します。
 
 ```hcl
 github_owner = "your-org-or-user"
 
+# 単独メンテナーの場合、2 件の承認とコードオーナーのレビューを満たせず、PR をマージできません。
+# 運用に合わせて ruleset_rules や ruleset_bypass_actors を緩めてください。
 repositories = {
   "secure-sample" = {
-    description = "Sample repository hardened with the ghqr baseline"
-    visibility  = "public"
-    codeql_languages = ["actions", "python"]
-    dependabot_ecosystems = [
-      { package_ecosystem = "pip", directory = "/" },
-    ]
-    ruleset_rules = {
-      # 承認が 2 件未満の場合、ghqr repo-bp-003 が報告されます。
-      required_approving_review_count = 1
-      required_status_checks          = [{ context = "Analyze (python)" }]
-    }
-  }
+    create_repository = true
+    description       = "Public repository hardened with the strictest ghqr baseline"
+    visibility        = "public"
+    topics            = ["security", "terraform"]
+    has_issues        = true
+    has_discussions   = true
 
-  "existing-repo" = {
-    create_repository = false
-    overwrite_files   = false
-    team_permissions  = { "platform" = "maintain" }
+    # Public リポジトリでは advanced_security と code_security を指定できない（常に有効）。
+    # Non-provider patterns と AI 検出には GitHub Secret Protection が必要なため指定しない。
+    manage_security_and_analysis = true
+    security_and_analysis = {
+      secret_scanning                 = "enabled"
+      secret_scanning_push_protection = "enabled"
+    }
+
+    # Dependabot アラートとセキュリティ更新、github-actions の定期更新
+    dependabot_enabled = true
+    dependabot_file    = true
+    # リポジトリで使うエコシステムを追加する（例: { package_ecosystem = "pip", directory = "/" }）
+    dependabot_ecosystems = []
+
+    # CodeQL（security-extended クエリ）。コードを追加したら言語を追加する（例: "python"）。
+    codeql_workflow  = true
+    codeql_languages = ["actions"]
+
+    # 既定ブランチの Ruleset。バイパスは許可しない。
+    ruleset_enabled       = true
+    ruleset_bypass_actors = []
+    ruleset_rules = {
+      required_approving_review_count   = 2
+      dismiss_stale_reviews_on_push     = true
+      require_code_owner_review         = true
+      require_last_push_approval        = true
+      required_review_thread_resolution = true
+      # 署名付きコミット必須の場合、GitHub の rebase merge は使えないため squash のみ許可する。
+      allowed_merge_methods = ["squash"]
+      # codeql_languages を増やしたら "Analyze (<language>)" も追加する。
+      required_status_checks               = [{ context = "Analyze (actions)" }]
+      strict_required_status_checks_policy = true
+      required_code_scanning = [{
+        tool                      = "CodeQL"
+        alerts_threshold          = "all"
+        security_alerts_threshold = "all"
+      }]
+      non_fast_forward        = true
+      deletion                = true
+      required_signatures     = true
+      required_linear_history = true
+    }
+
+    # 読み取り専用の GITHUB_TOKEN、GitHub 製と検証済み作成者の Action のみ許可
+    actions_policy_enabled = true
+    manage_allowed_actions = true
+    actions_patterns       = []
+
+    # Team は Organization 専用。Deploy Key は作成しない。
+    team_permissions = {}
+    deploy_keys      = {}
+
+    # SECURITY.md（連絡先が null の場合は非公開の脆弱性報告へのリンク）と CODEOWNERS
+    security_policy_file = true
+    security_contact     = null
+    codeowners_file      = true
+    codeowners           = ["@your-org-or-user"]
+
+    overwrite_files = false
   }
 }
 ```
@@ -124,6 +176,55 @@ ghqr で結果を確認します。
 - `repository_actions_policy` はリポジトリで許可する Action のポリシーを管理します。Organization の
   ポリシーですでに制限している場合は `manage_allowed_actions = false` を設定してください。
 - 作成したリポジトリを destroy すると、削除せずにアーカイブします。
+
+## トラブルシューティング
+
+### `.github/workflows/codeql.yml` のコミットで `404 Not Found` になる
+
+```text
+Error: PUT https://api.github.com/repos/<owner>/<repo>/contents/.github/workflows/codeql.yml: 404 Not Found []
+```
+
+`.github/workflows/` 配下のファイルを作成・更新するには `workflow` スコープが必要です。
+トークンにこのスコープがない場合、GitHub は `403` ではなく `404` を返します。スコープを追加して
+トークンを設定し直し、`make deploy` を再実行してください。Ruleset はファイルの後に作成するため、
+再実行でデプロイが完了します。
+
+```bash
+gh auth refresh -h github.com -s workflow
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+### `422 Secret scanning is not available for this repository` になる
+
+```text
+Error: PATCH https://api.github.com/repos/<owner>/<repo>: 422 Secret scanning is not available for this repository. []
+```
+
+`visibility` の既定値は `private` で、Private リポジトリでシークレットスキャンを使うには
+GitHub Secret Protection のライセンスが必要です。`repositories` の各エントリ間で設定は共有されないため、
+Public にするリポジトリごとに `visibility = "public"` を設定してください。Private のまま使う場合は
+`manage_security_and_analysis = false` と `codeql_workflow = false` を設定してください。
+
+### Terraform 外で削除したリポジトリの読み取りで `404 Not Found` になる
+
+```text
+Error: repository doesn't exist anymore, please remove the resource from your configuration: GET https://api.github.com/repos/<owner>/<repo>: 404 Not Found []
+Error: GET https://api.github.com/repos/<owner>/<repo>/actions/permissions: 404 Not Found []
+```
+
+GitHub から取得できないリポジトリを state が参照しています。トークンがリポジトリにアクセスできない場合も
+GitHub は `404` を返すため、まず `gh repo view <owner>/<repo>` で確認してください。
+リポジトリが削除済みであれば、state をバックアップしてから、そのリポジトリのリソースを state から除去し、
+`make plan` で再作成内容を確認してください。
+
+```bash
+dir=infra/scenarios/github_repository_security
+terraform -chdir="$dir" state pull > github_repository_security.tfstate.bak
+terraform -chdir="$dir" state list | grep -F '["<repo>"]' | while IFS= read -r address; do
+  terraform -chdir="$dir" state rm "$address"
+done
+```
 
 ## 変数
 
