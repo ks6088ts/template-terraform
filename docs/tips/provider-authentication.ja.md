@@ -146,6 +146,12 @@ export GITHUB_TOKEN=$(gh auth token)
 
 シナリオで管理するリソースに合ったリポジトリおよび Organization の権限を持つトークンを使用してください。
 
+`GITHUB_TOKEN` は必ず設定してください。トークンがない場合、プロバイダーは GitHub API に匿名でアクセスします。
+匿名アクセスのレート制限は IP アドレス単位で共有され、上限は低めです。上限を超えるとプロバイダーは
+制限がリセットされるまで待機するため、`terraform plan` が最大 1 時間止まったように見えます。
+[CI](../../.github/workflows/test.yml) の `test-github` job は `dev` Environment の Secret `GH_PAT` を使い、
+未設定の場合はワークフローの組み込みトークンを使います。
+
 ## 自動化
 
 CI/CD では、ワークロード ID フェデレーションなどの有効期間が短い資格情報メカニズムを

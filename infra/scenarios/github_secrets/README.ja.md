@@ -91,3 +91,19 @@ actions_environment_secrets = [
 ]
 EOF
 ```
+
+## オフラインテスト
+
+シナリオのテストは mock GitHub provider と `command = plan` を使用します。
+資格情報は不要で、GitHub API を呼び出しません。
+
+```bash
+export TF_DATA_DIR=$(mktemp -d)
+terraform -chdir=infra/scenarios/github_secrets init -backend=false -lockfile=readonly -input=false
+terraform -chdir=infra/scenarios/github_secrets validate
+terraform -chdir=infra/scenarios/github_secrets test
+```
+
+[CI](../../../.github/workflows/test.yml) の `test-github-mock` job は同じ確認を実行します。
+実 API を使う `test-github` job はその成功後に実行され、Secret `GH_PAT` を使って plan します。
+`GH_PAT` が未設定の場合はワークフローの組み込みトークンを使います。

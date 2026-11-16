@@ -63,6 +63,9 @@ Terraform 用の GitHub テンプレートリポジトリです。
 | シナリオ | 概要 |
 | --- | --- |
 | [github_secrets](./infra/scenarios/github_secrets/README.ja.md) | GitHub Actions ワークフローで使用する GitHub リポジトリの環境シークレットを作成、管理します。 |
+| [github_enterprise_security](./infra/scenarios/github_enterprise_security/README.ja.md) | ghqr の Enterprise 推奨事項として、新規リポジトリの GHAS、シークレットスキャン、プッシュ保護の既定値を適用します。 |
+| [github_organization_security](./infra/scenarios/github_organization_security/README.ja.md) | ghqr の Organization 推奨事項として、セキュリティ既定値、基本権限、Actions ポリシー、セキュリティマネージャー Team、任意の Organization Ruleset を適用します。 |
+| [github_repository_security](./infra/scenarios/github_repository_security/README.ja.md) | ghqr のリポジトリ推奨事項として、Ruleset、Dependabot、Actions ポリシー、Team のアクセス、SECURITY.md や CodeQL などのセキュリティファイルを複数リポジトリに適用します。 |
 
 ### その他
 

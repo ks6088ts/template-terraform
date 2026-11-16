@@ -1,0 +1,21 @@
+# Security Policy
+
+## Supported Versions
+
+Security fixes are applied to the latest version on the default branch of
+`${repository}`.
+
+## Reporting a Vulnerability
+
+Please do not report security vulnerabilities through public issues, discussions,
+or pull requests.
+
+%{ if security_contact != null ~}
+Report vulnerabilities privately to ${security_contact}.
+%{ else ~}
+Report vulnerabilities privately through
+[GitHub private vulnerability reporting](https://github.com/${repository}/security/advisories/new).
+%{ endif ~}
+
+Include the affected version, reproduction steps, and the potential impact.
+You will receive an acknowledgement as soon as possible.
