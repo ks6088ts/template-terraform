@@ -350,6 +350,7 @@ jobs:
           - github_enterprise_security
           - github_organization_security
           - github_repository_security
+          - github_secrets
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -380,15 +381,20 @@ jobs:
   test-github:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: lint
+    needs: test-github-mock
     environment: dev
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         scenario:
           - github_secrets
     env:
-      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      # Without a token the provider calls the API anonymously and, once the shared
+      # runner IP hits the rate limit, sleeps until the limit resets.
+      GITHUB_TOKEN: ${{ secrets.GH_PAT || github.token }}
+      TF_INPUT: "false"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

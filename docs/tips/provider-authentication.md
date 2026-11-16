@@ -149,6 +149,13 @@ export GITHUB_TOKEN=$(gh auth token)
 Use a token whose repository and organization permissions match the resources
 managed by the scenario.
 
+Always set `GITHUB_TOKEN`. Without a token, the provider calls the GitHub API
+anonymously. Anonymous requests share a low rate limit per IP address, and once
+it is exceeded the provider sleeps until the limit resets, so `terraform plan`
+can appear to hang for up to an hour. The `test-github` job in
+[CI](../../.github/workflows/test.yml) uses the `GH_PAT` Secret of the `dev`
+environment and falls back to the workflow's built-in token when it is not set.
+
 ## Automation
 
 Prefer workload identity federation or another short-lived credential mechanism

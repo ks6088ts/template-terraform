@@ -91,3 +91,19 @@ actions_environment_secrets = [
 ]
 EOF
 ```
+
+## Offline tests
+
+The scenario test uses a mock GitHub provider and `command = plan`.
+It needs no credentials and makes no GitHub API calls.
+
+```bash
+export TF_DATA_DIR=$(mktemp -d)
+terraform -chdir=infra/scenarios/github_secrets init -backend=false -lockfile=readonly -input=false
+terraform -chdir=infra/scenarios/github_secrets validate
+terraform -chdir=infra/scenarios/github_secrets test
+```
+
+The `test-github-mock` job in [CI](../../../.github/workflows/test.yml) runs the same
+checks. The live `test-github` job runs only after it passes and plans against the real
+GitHub API with the `GH_PAT` Secret, falling back to the workflow's built-in token.
