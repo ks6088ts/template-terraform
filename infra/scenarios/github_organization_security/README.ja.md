@@ -79,7 +79,7 @@ security_manager_team = {
   create = true
 }
 
-enable_organization_ruleset = true
+enable_organization_ruleset = false
 organization_ruleset = {
   enforcement   = "evaluate"
   bypass_actors = [{ actor_id = 1, actor_type = "OrganizationAdmin", bypass_mode = "always" }]
@@ -101,8 +101,62 @@ ghqr で結果を確認します。
 ./ghqr scan -o your-org
 ```
 
-Organization Ruleset は `enforcement = "evaluate"` で開始し、rule insights で影響を確認してから
-`active` に切り替えてください。
+この例ではプランの制約を避けるため、Organization Ruleset を無効にしています。
+GitHub Team で有効にする場合は、`enable_organization_ruleset = true` と
+`enforcement = "active"` を設定してください。Enterprise では `enforcement = "evaluate"` で開始し、
+rule insights で影響を確認してから `active` に切り替えられます。
+
+## トラブルシューティング
+
+### `GET /orgs/{org}/organization-roles` が `404 Not Found` になる
+
+`security_manager_team` を指定すると、セキュリティマネージャーモジュールはこの API から
+`security_manager` ロールを取得します。GitHub は Organization が存在しない場合だけでなく、
+アクセス権が不足している場合にも 404 を返すことがあります。
+
+ロールを割り当てるには、認証したアカウントが Organization オーナーである必要があります。
+classic PAT または GitHub CLI の OAuth トークンを使う場合、
+[Organization Roles API](https://docs.github.com/en/rest/orgs/organization-roles#get-all-organization-roles-for-an-organization)
+には `admin:org` が必要です。アカウントがオーナーでも、`read:org` だけでは不足します。
+
+GitHub CLI の保存済みログインを使う場合は、リポジトリのルートで次を実行してください。
+`your-org` は対象の Organization のログイン名に置き換えます。トークンの環境変数による
+保存済みログインの上書きを解除し、更新したトークンを Terraform に渡し直します。
+
+```bash
+unset GH_TOKEN GITHUB_TOKEN
+gh auth refresh --hostname github.com --scopes admin:org
+export GITHUB_TOKEN="$(gh auth token --hostname github.com)"
+
+GH_TOKEN="$GITHUB_TOKEN" gh api orgs/your-org/organization-roles --jq '.roles[].name'
+make plan SCENARIO=github_organization_security
+```
+
+別途発行した classic PAT を使う場合は、そのトークンに `admin:org` を追加し、
+`GITHUB_TOKEN` を更新してください。トークンを Terraform ファイルに書き込まないでください。
+引き続き API が 404 を返す場合は、Organization のログイン名と認証したアカウントの
+オーナー権限を確認し、必要ならトークンの SAML SSO 承認も行ってください。
+
+### `POST /orgs/{org}/rulesets` が `403 Upgrade to GitHub Team` になる
+
+このエラーはトークンのスコープ不足ではなく、プランの制約を示します。
+Organization Ruleset には GitHub Team または Enterprise が必要で、
+`evaluate` には Enterprise が必要です。
+
+GitHub Free では、既存の
+`infra/scenarios/github_organization_security/terraform.tfvars` に次を設定し、
+Ruleset の作成をスキップしてください。
+
+```hcl
+enable_organization_ruleset = false
+```
+
+変数の既定値と上記の例はすでに `false` ですが、README を更新しても、既存の
+`terraform.tfvars` に設定した `true` は自動で変更されません。
+リポジトリのルートで `make plan SCENARIO=github_organization_security` を実行し、
+Organization Ruleset が作成されないことを確認してから再デプロイしてください。
+すでに state で管理している Ruleset がある場合、無効化すると削除が計画されるため、
+apply 前に plan を確認してください。
 
 ## 変数
 

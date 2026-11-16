@@ -81,7 +81,7 @@ security_manager_team = {
   create = true
 }
 
-enable_organization_ruleset = true
+enable_organization_ruleset = false
 organization_ruleset = {
   enforcement   = "evaluate"
   bypass_actors = [{ actor_id = 1, actor_type = "OrganizationAdmin", bypass_mode = "always" }]
@@ -103,8 +103,63 @@ Verify the result with ghqr:
 ./ghqr scan -o your-org
 ```
 
-Start the organization ruleset with `enforcement = "evaluate"` to review its impact
-in rule insights before switching to `active`.
+Organization rulesets are disabled in this example to avoid plan restrictions.
+To enable them on GitHub Team, set `enable_organization_ruleset = true` and
+`enforcement = "active"`. On Enterprise, you can start with `enforcement = "evaluate"`
+to review the impact in rule insights before switching to `active`.
+
+## Troubleshooting
+
+### `GET /orgs/{org}/organization-roles` returns `404 Not Found`
+
+When `security_manager_team` is set, the security manager module calls this API
+to look up the `security_manager` role. GitHub can return 404 for insufficient
+access, not just for a nonexistent organization.
+
+The authenticated account must be an organization owner to assign the role.
+For a classic PAT or a GitHub CLI OAuth token, the
+[organization roles API](https://docs.github.com/en/rest/orgs/organization-roles#get-all-organization-roles-for-an-organization)
+requires `admin:org`; `read:org` is insufficient even when the account is an owner.
+
+For a stored GitHub CLI login, run the following from the repository root,
+replacing `your-org` with your organization login. Clear token environment
+variables so they do not override the stored login, then export the refreshed
+token again for Terraform.
+
+```bash
+unset GH_TOKEN GITHUB_TOKEN
+gh auth refresh --hostname github.com --scopes admin:org
+export GITHUB_TOKEN="$(gh auth token --hostname github.com)"
+
+GH_TOKEN="$GITHUB_TOKEN" gh api orgs/your-org/organization-roles --jq '.roles[].name'
+make plan SCENARIO=github_organization_security
+```
+
+If you use a separately issued classic PAT instead, add `admin:org` to that token
+and update `GITHUB_TOKEN`. Do not write the token to Terraform files.
+If the API still returns 404, verify the organization login and the authenticated
+account's owner access, and authorize the token for SAML SSO if required.
+
+### `POST /orgs/{org}/rulesets` returns `403 Upgrade to GitHub Team`
+
+This error indicates a plan restriction, not a missing token scope.
+Organization rulesets require GitHub Team or Enterprise, and `evaluate`
+enforcement requires Enterprise.
+
+On GitHub Free, set the following in your existing
+`infra/scenarios/github_organization_security/terraform.tfvars` to skip ruleset
+creation:
+
+```hcl
+enable_organization_ruleset = false
+```
+
+The variable default and the example above are already `false`, but updating
+this README does not change an existing `terraform.tfvars` that sets it to `true`.
+Run `make plan SCENARIO=github_organization_security` from the repository root
+and confirm that no organization ruleset will be created before deploying again.
+If a ruleset is already managed in state, disabling it plans its removal; review
+the plan before applying.
 
 ## Variables
 
